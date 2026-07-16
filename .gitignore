@@ -1,1 +1,16 @@
 .idea
+
+# Python (archived Flask prototype)
+.venv/
+__pycache__/
+*.pyc
+
+# Godot
+godot/.godot/
+godot/export/
+godot/build/
+godot/dist/
+*.pck
+*.wasm
+*.x86_64
+*.exe
