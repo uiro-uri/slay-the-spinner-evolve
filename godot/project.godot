@@ -11,12 +11,24 @@ config_version=5
 [application]
 
 config/name="Slay the Spinner"
-config/features=PackedStringArray("4.3", "GL Compatibility")
+run/main_scene="res://scenes/main/Main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
-[locale]
+[autoload]
 
-locale_filter_mode=0
+GameState="*res://autoloads/GameState.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://translations/strings.en.translation", "res://translations/strings.ja.translation")
 
 [rendering]
 
