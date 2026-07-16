@@ -26,6 +26,12 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[gui]
+
+; Godot標準フォントは日本語グリフを持たず豆腐(□)になるため、
+; 日英を1書体で賄えるNoto Sans JP(SIL OFL 1.1)を既定にする。
+theme/custom_font="res://assets/fonts/NotoSansJP-VF.otf"
+
 [internationalization]
 
 locale/translations=PackedStringArray("res://translations/strings.en.translation", "res://translations/strings.ja.translation")
