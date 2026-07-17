@@ -18,6 +18,9 @@ var map_tree: MapTree = null
 ## 次の戦闘の相手。マップでノードを選んだときに決まる。
 var pending_enemy: EnemyData = null
 
+## 次の戦闘の土俵。相手と同じくマップでノードを選んだときに決まる。
+var pending_field: FieldData = null
+
 ## このランで獲得したカスタムパーツのID。M4で導入。
 var acquired_part_ids: Array[int] = []
 
@@ -29,6 +32,7 @@ func reset_run() -> void:
 	player_stats = default_player_stats()
 	map_tree = MapTree.generate()
 	pending_enemy = null
+	pending_field = null
 	acquired_part_ids = []
 	continues_left = MAX_CONTINUES
 

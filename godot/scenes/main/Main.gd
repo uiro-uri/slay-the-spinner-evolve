@@ -34,12 +34,14 @@ func goto_map() -> void:
 	map.setup(GameState.map_tree)
 
 
-## 進む先を選んだら、その段にふさわしい敵を決めて戦闘へ。
+## 進む先を選んだら、その段にふさわしい敵と土俵を決めて戦闘へ。
 func _on_map_node_chosen(coord: Vector2i) -> void:
 	if not GameState.map_tree.advance_to(coord):
 		push_error("Main: 進めないノードが選ばれた: %s" % coord)
 		return
-	GameState.pending_enemy = EnemyRoster.pick_for_step(GameState.map_tree.current_step())
+	var step := GameState.map_tree.current_step()
+	GameState.pending_enemy = EnemyRoster.pick_for_step(step)
+	GameState.pending_field = FieldRoster.pick_for_step(step)
 	goto_battle()
 
 

@@ -34,7 +34,7 @@ static func resolve(request: BattleRequest) -> BattleResult:
 
 	var player := State.new(request.player)
 	var enemy := State.new(request.enemy)
-	var walls := ArenaWall.from_rect(request.arena_bounds)
+	var walls := ArenaWall.build(request.wall_shape, request.arena_bounds)
 	var center := request.arena_bounds.get_center()
 
 	var dt := request.time_step
@@ -49,19 +49,28 @@ static func resolve(request: BattleRequest) -> BattleResult:
 		_integrate(player, center, request, dt)
 		_integrate(enemy, center, request, dt)
 		_resolve_disc_collision(player, enemy, request, t, result)
-		_resolve_walls(player, walls, request, t, result)
-		_resolve_walls(enemy, walls, request, t, result)
+		# リングアウトの土俵では壁で弾かない。場外へ出たかは決着判定で見る。
+		if not request.ring_out:
+			_resolve_walls(player, walls, request, t, result)
+			_resolve_walls(enemy, walls, request, t, result)
+		_resolve_obstacles(player, request, t, result)
+		_resolve_obstacles(enemy, request, t, result)
 		_apply_natural_decay(player, request, dt)
 		_apply_natural_decay(enemy, request, dt)
 
 		t += dt
 
-		var player_out := player.rps <= request.lose_threshold
-		var enemy_out := enemy.rps <= request.lose_threshold
+		# 場外判定は壁の内側にいるかで見る（壁を弾かない土俵でのみ有効）。
+		var player_rung := request.ring_out and not ArenaWall.point_inside(walls, player.position)
+		var enemy_rung := request.ring_out and not ArenaWall.point_inside(walls, enemy.position)
+
+		var player_out := player.rps <= request.lose_threshold or player_rung
+		var enemy_out := enemy.rps <= request.lose_threshold or enemy_rung
 		if player_out or enemy_out:
 			result.player_frames.append(_snapshot(player))
 			result.enemy_frames.append(_snapshot(enemy))
 			result.finish_time = t
+			result.ring_out = player_rung or enemy_rung
 			if player_out and enemy_out:
 				result.outcome = BattleResult.Outcome.DRAW
 			elif enemy_out:
@@ -154,6 +163,26 @@ static func _resolve_walls(
 			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
+		s.rps *= req.wall_damping
+
+
+## 障害物(固定円)との衝突。壁と同型で、法線が中心からの放射方向になるだけ。
+## 衝撃波は壁と同じwall_impactsチャンネルに載せる（見た目も壁と同じ控えめな波）。
+static func _resolve_obstacles(
+	s: State, req: BattleRequest, t: float, result: BattleResult
+) -> void:
+	for o in req.obstacles:
+		var obstacle_center := Vector2(o.x, o.y)
+		var obstacle_radius := o.z
+		if not SpinnerPhysics.obstacle_hit(
+			obstacle_center, obstacle_radius, s.position, s.velocity, s.stats.radius
+		):
+			continue
+		var normal := (s.position - obstacle_center).normalized()
+		result.wall_impacts.append(
+			BattleResult.Impact.new(t, s.position - normal * s.stats.radius)
+		)
+		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
 		s.rps *= req.wall_damping
 
 

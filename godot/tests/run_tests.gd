@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "enemies", "parts", "spawn", "battle", "disc", "wobble", "playtest"
+	"translations", "gamestate", "font", "physics", "map", "enemies", "parts", "spawn", "battle", "fields", "disc", "wobble", "playtest"
 ]
 
 
@@ -55,6 +55,9 @@ func _init() -> void:
 
 	print("== battle ==")
 	_test_battle()
+
+	print("== fields ==")
+	_test_fields()
 
 	print("== disc ==")
 	_test_disc()
@@ -113,10 +116,12 @@ func _test_gamestate_autoload() -> void:
 	var part_ids: Array[int] = [1, 2]
 	game_state.acquired_part_ids = part_ids
 	game_state.pending_enemy = EnemyRoster.all()[0]
+	game_state.pending_field = FieldRoster.all()[0]
 	game_state.reset_run()
 
 	_check(game_state.acquired_part_ids.is_empty(), "reset_run()でacquired_part_idsが空になる")
 	_check(game_state.pending_enemy == null, "reset_run()でpending_enemyが消える")
+	_check(game_state.pending_field == null, "reset_run()でpending_fieldが消える")
 	_check(game_state.player_stats != null, "reset_run()でプレイヤーの性能が用意される")
 	_check(game_state.map_tree != null, "reset_run()でマップが生成される")
 	if game_state.map_tree != null:
@@ -198,6 +203,12 @@ func _test_battle() -> void:
 	var suite = load("res://tests/test_battle_resolver.gd").new()
 	suite.run(_check)
 	_done("battle")
+
+
+func _test_fields() -> void:
+	var suite = load("res://tests/test_field_variations.gd").new()
+	suite.run(_check)
+	_done("fields")
 
 
 func _test_disc() -> void:

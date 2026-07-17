@@ -87,6 +87,10 @@ const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark
 
 var _max_rps: float = 1.0
 
+## この戦闘の土俵。ランから来る。null ならシーンの@export値とArena.BOUNDSを使う
+## （Battle.tscn単体で調整するとき用）。
+var _field: FieldData = null
+
 ## この戦闘での敵の出現内容。発射前に決めて予告しておく。
 var _enemy_plan: EnemySpawn.Plan
 
@@ -143,8 +147,8 @@ func _plan_enemy_spawn() -> EnemySpawn.Plan:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	return EnemySpawn.plan(
-		_arena.center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
-		_enemy.stats.radius, Arena.BOUNDS.size.x * 0.5
+		_center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
+		_enemy.stats.radius, _inradius()
 	)
 
 
@@ -156,6 +160,35 @@ func _apply_run_state() -> void:
 	var enemy: EnemyData = GameState.pending_enemy
 	if enemy != null and enemy.stats != null:
 		_enemy.stats = enemy.stats
+	_field = GameState.pending_field
+	# 土俵の見た目(壁の位置・形状・障害物)を反映してから最初の描画に入る。
+	_arena.setup(_field)
+
+
+## 土俵の矩形。フィールドがあればそれ、なければシーン既定のArena.BOUNDS。
+func _bounds() -> Rect2:
+	return _field.arena_bounds if _field != null else Arena.BOUNDS
+
+
+func _center() -> Vector2:
+	return _bounds().get_center()
+
+
+func _wall_shape() -> ArenaWall.WallShape:
+	return _field.wall_shape if _field != null else ArenaWall.WallShape.RECT
+
+
+func _inradius() -> float:
+	if _field != null:
+		return _field.inradius()
+	return ArenaWall.inradius_for(ArenaWall.WallShape.RECT, Arena.BOUNDS)
+
+
+## 発射地点を土俵の内側へ寄せる。矩形は矩形クランプ、非矩形は内接円クランプ。
+func _clamp_launch(pos: Vector2) -> Vector2:
+	if _wall_shape() == ArenaWall.WallShape.RECT:
+		return ArenaWall.clamp_inside(_bounds(), pos, _player.stats.radius)
+	return ArenaWall.clamp_inside_circle(_center(), _inradius(), pos, _player.stats.radius)
 
 
 ## 狙っている間、コマを三角形の頂点(＝発射地点)へ置く。ここから飛ぶ、が
@@ -163,11 +196,11 @@ func _apply_run_state() -> void:
 func _on_aim_moved(origin: Vector2) -> void:
 	if _result != null:
 		return
-	_player.position = ArenaWall.clamp_inside(Arena.BOUNDS, origin, _player.stats.radius)
+	_player.position = _clamp_launch(origin)
 
 
 func _on_launched(pos: Vector2, velocity: Vector2) -> void:
-	_begin(ArenaWall.clamp_inside(Arena.BOUNDS, pos, _player.stats.radius), velocity)
+	_begin(_clamp_launch(pos), velocity)
 
 
 ## 発射して戦闘へ入る。auto_startもここを通す。
@@ -202,9 +235,20 @@ func build_request(
 	var request := BattleRequest.new()
 	request.player = BattleRequest.Launch.new(_player.stats, player_pos, player_vel)
 	request.enemy = BattleRequest.Launch.new(_enemy.stats, enemy_pos, enemy_vel)
-	request.arena_bounds = Arena.BOUNDS
-	request.stage_strength = stage_strength
-	request.stage_shape = stage_shape
+	# 土俵(壁の位置・形状、傾斜、障害物、リングアウト)はフィールドから。
+	# フィールドが無い単体調整時はシーンの@export値とArena.BOUNDSを使う。
+	if _field != null:
+		request.arena_bounds = _field.arena_bounds
+		request.wall_shape = _field.wall_shape
+		request.obstacles = _field.obstacles
+		request.ring_out = _field.ring_out
+		request.stage_strength = _field.stage_strength
+		request.stage_shape = _field.stage_shape
+	else:
+		request.arena_bounds = Arena.BOUNDS
+		request.wall_shape = ArenaWall.WallShape.RECT
+		request.stage_strength = stage_strength
+		request.stage_shape = stage_shape
 	request.violence = violence
 	request.spin_kick_scale = spin_kick_scale
 	request.natural_damping = natural_damping
@@ -319,9 +363,9 @@ func _finish() -> void:
 			_player.defeated = true
 			_enemy.defeated = true
 		BattleResult.Outcome.PLAYER_WIN:
-			_message.text = "BATTLE_WIN"
+			_message.text = "BATTLE_RING_OUT_WIN" if _result.ring_out else "BATTLE_WIN"
 		_:
-			_message.text = "BATTLE_LOSE"
+			_message.text = "BATTLE_RING_OUT_LOSE" if _result.ring_out else "BATTLE_LOSE"
 
 	await get_tree().create_timer(finish_delay).timeout
 	finished.emit(player_won)
