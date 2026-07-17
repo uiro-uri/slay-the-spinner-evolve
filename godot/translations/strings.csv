@@ -10,6 +10,10 @@ GAMEOVER_TITLE,GAME OVER,ゲームオーバー
 GAMEOVER_CONTINUE,Continue,コンティニュー
 GAMEOVER_GIVE_UP,Give Up,あきらめる
 GAMEOVER_CONTINUES_LEFT,Continues left: {0},残りコンティニュー: {0}
+GAMECLEAR_TITLE,GAME CLEAR!,ゲームクリア!
+GAMECLEAR_PARTS,Parts acquired: {0},取得パーツ: {0}
+GAMECLEAR_CONTINUES_LEFT,Continues left: {0},コンティニュー残: {0}
+GAMECLEAR_TO_TITLE,To Title,タイトルへ
 MAP_CHOOSE_NEXT,Choose your path,進む先を選べ
 MAP_ACQUIRED_HEADING,Your Build,取得済みアップグレード
 MAP_NO_UPGRADES,No parts yet,まだありません
