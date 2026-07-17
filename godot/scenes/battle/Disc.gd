@@ -29,6 +29,12 @@ extends Node2D
 ## が、そこでは尾が一周してマークを覆うので、破綻したマークは目立たない。
 ## そもそも毎秒40回転するコマは現実でもただのブレなので、これは嘘ではない。
 ##
+##  3. **半透明のオーラとパーティクル**が勢いの存在感を示す。コマの背後に本体色の
+##     薄いオーラを敷き、縁から粒が流れ出る。勢い(RPS比)が減ればオーラは細り、
+##     粒は減り、力尽きれば消える。数式は SpinAura(純粋関数)が持つ。粒は回転する
+##     ローカル座標系に描くので visual_rps() で自動的に公転する(実rpsで公転させると
+##     マークと同じくナイキストを超えて逆回転に見えるため、そちらはしない)。
+##
 ## マークの回転は限界の手前で頭打ちにしてある。超えた分は逆回転に見えてしまい、
 ## それは明確な嘘になるため。速さは尾が担うので情報は失われない。
 
@@ -58,6 +64,9 @@ var rps: float = 0.0
 ## 決着後に色を落とすためのフラグ。
 var defeated: bool = false
 
+## パーティクルの流れの位相に使う経過時刻。_processで進める。
+var _time: float = 0.0
+
 
 func _ready() -> void:
 	if stats == null:
@@ -85,13 +94,28 @@ func tail_ratio() -> float:
 	return clampf(rps / tail_full_rps, 0.0, 1.0)
 
 
+## オーラとパーティクルに使う勢い(0〜1)。尾と同じ尺度を使い、力尽きたコマは
+## 勢いゼロ扱いにする(オーラも粒も消える)。ヘッドレスでテストできるよう関数にする。
+func aura_ratio() -> float:
+	return 0.0 if defeated else tail_ratio()
+
+
 func _process(delta: float) -> void:
+	_time += delta
 	rotation += visual_rps() * TAU * delta
 	queue_redraw()
 
 
 func _draw() -> void:
 	var radius := stats.radius
+
+	# 本体の前に、勢いを示すオーラと流れる粒を敷く。力尽きた/止まったコマでは
+	# aura_ratio()が0になり、このブロックは丸ごと素通りする(敗北表示は不変)。
+	var ar := aura_ratio()
+	if ar > 0.001:
+		_draw_aura(radius, ar)
+		_draw_particles(radius, ar)
+
 	var fill := body_color
 	if defeated:
 		fill = fill.darkened(0.7)
@@ -104,6 +128,25 @@ func _draw() -> void:
 
 	_draw_tail(radius)
 	_draw_mark(radius, Color(Palette.SPIN_MARK, 0.95))
+
+
+## 本体色の薄い同心円を重ねて、勢いのオーラにする。回転不変なので回転座標系の
+## ままでよい。色はbody_color由来+呼び出し側alpha(SPIN_MARKと同じ規約)。
+func _draw_aura(radius: float, ratio: float) -> void:
+	# 外側の淡い輪から内側の濃い輪へ重ねて、柔らかいグラデーションに見せる。
+	for k in range(SpinAura.RING_COUNT - 1, -1, -1):
+		var ring := SpinAura.aura_ring(ratio, radius, k)
+		draw_circle(Vector2.ZERO, ring.radius, Color(body_color, ring.alpha))
+
+
+## コマの縁から流れ出る半透明の粒。回転座標系に描くので自動的に公転する。
+## 本体色を少し白へ寄せて、地のコマより明るく浮かせる。
+func _draw_particles(radius: float, ratio: float) -> void:
+	var tint := body_color.lerp(Color.WHITE, 0.35)
+	for i in SpinAura.PARTICLE_COUNT:
+		var p := SpinAura.particle_state(_time, i, ratio, radius)
+		if p.alpha > 0.003:
+			draw_circle(p.offset, p.radius, Color(tint, p.alpha))
 
 
 ## マークの後ろへ伸びる弧。長いほど速い。一周すればブレたリングになる。
