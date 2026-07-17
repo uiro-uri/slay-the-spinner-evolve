@@ -1,12 +1,14 @@
 extends Node2D
 
-## 1戦分の進行。物理ステップを駆動し、勝敗を決める。
+## 1戦分の進行。ここは計算せず、BattleResolverが返した結果を再生するだけ。
 ##
-## 計算式はSpinnerPhysicsの純粋関数が持つ。ここは「毎フレーム何をどの順で
-## 呼ぶか」と、その結果としての勝敗だけを見る。
+## 発射された瞬間に戦いは全部決まっている(発射は1回きりで、以後入力がない)ので、
+## その場で最後まで計算してしまい、あとは時刻を進めながら軌跡をなぞる。
+## 将来オンライン対戦をやるときは、この resolve() の呼び先がサーバーになる。
 ##
-## プロトタイプ(simulation.py)はサーバー側で全ステップを先に計算し、
-## その履歴をCSSアニメーションで再生していた。ここではリアルタイムに回す。
+## プロトタイプ(simulation.py)もサーバーで全ステップを先に計算していた。
+## あれが駄目だったのは結果をCSSキーフレームで再生していたからで、権威を
+## サーバーに置く構造自体は正しかった。ここでは同じ構造をGodotの描画で再生する。
 ##
 ## 数値はすべて手触りで調整する前提。プロトタイプの値は出発点でしかない。
 
@@ -68,12 +70,17 @@ const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark
 @onready var _player_bar: ProgressBar = $UI/Bars/PlayerBar
 @onready var _enemy_bar: ProgressBar = $UI/Bars/EnemyBar
 
-var _running: bool = false
-var _resolved: bool = false
 var _max_rps: float = 1.0
 
 ## この戦闘での敵の出現内容。発射前に決めて予告しておく。
 var _enemy_plan: EnemySpawn.Plan
+
+## 再生中の結果と、その中での現在時刻。
+var _result: BattleResult = null
+var _playback_time: float = 0.0
+
+## まだ出していない衝突イベントの位置。時刻が来たら順に衝撃波を出す。
+var _next_impact: int = 0
 
 
 func _ready() -> void:
@@ -96,9 +103,7 @@ func _ready() -> void:
 	_update_bars()
 
 	if auto_start:
-		_launcher.set_enabled(false)
-		_message.text = ""
-		start(auto_start_pos, auto_start_vel, _enemy_plan.position, _enemy_plan.velocity)
+		_begin(auto_start_pos, auto_start_vel)
 
 
 func _plan_enemy_spawn() -> EnemySpawn.Plan:
@@ -125,50 +130,105 @@ func _apply_run_state() -> void:
 ## 狙っている間、コマを三角形の頂点(＝発射地点)へ置く。ここから飛ぶ、が
 ## 見たままになる。以前はどこをクリックしても発射の瞬間にコマが飛んでいた。
 func _on_aim_moved(origin: Vector2) -> void:
-	if _running:
+	if _result != null:
 		return
 	_player.position = origin
 
 
 func _on_launched(pos: Vector2, velocity: Vector2) -> void:
+	_begin(pos, velocity)
+
+
+## 発射して戦闘へ入る。auto_startもここを通す。
+##
+## 以前はauto_startが独自に組み立てていて hide_plan() を呼び忘れており、
+## 予告の三角形が戦闘中ずっと画面に残っていた。調整用の経路とはいえ、
+## 挙動を見るために使う経路が本編と違う絵を出すのは困る。
+func _begin(player_pos: Vector2, player_vel: Vector2) -> void:
 	_launcher.set_enabled(false)
 	_telegraph.hide_plan()
 	_message.text = ""
-	start(pos, velocity, _enemy_plan.position, _enemy_plan.velocity)
+	start(player_pos, player_vel, _enemy_plan.position, _enemy_plan.velocity)
 
 
 ## 初期位置と初速を与えて開始する。座標はアリーナのユニット系。
+##
+## ここで戦いを最後まで計算してしまい、以降は再生するだけ。
 func start(
 	player_pos: Vector2, player_vel: Vector2,
 	enemy_pos: Vector2, enemy_vel: Vector2
 ) -> void:
-	_player.position = player_pos
-	_player.velocity = player_vel
+	var request := build_request(player_pos, player_vel, enemy_pos, enemy_vel)
+	play(BattleResolver.resolve(request))
+
+
+## 今の調整値で、この発射内容のリクエストを組み立てる。
+## 将来サーバーへ送るのはこれ。
+func build_request(
+	player_pos: Vector2, player_vel: Vector2,
+	enemy_pos: Vector2, enemy_vel: Vector2
+) -> BattleRequest:
+	var request := BattleRequest.new()
+	request.player = BattleRequest.Launch.new(_player.stats, player_pos, player_vel)
+	request.enemy = BattleRequest.Launch.new(_enemy.stats, enemy_pos, enemy_vel)
+	request.arena_bounds = Arena.BOUNDS
+	request.stage_strength = stage_strength
+	request.stage_shape = stage_shape
+	request.violence = violence
+	request.spin_kick_scale = spin_kick_scale
+	request.natural_damping = natural_damping
+	request.wall_damping = wall_damping
+	request.lose_threshold = lose_threshold
+	return request
+
+
+## 計算済みの結果を再生する。ローカルで解いた結果でも、将来サーバーから
+## 返ってきた結果でも、ここから先は同じ。
+func play(result: BattleResult) -> void:
+	_result = result
+	_playback_time = 0.0
+	_next_impact = 0
+
 	_player.reset_spin()
-
-	_enemy.position = enemy_pos
-	_enemy.velocity = enemy_vel
 	_enemy.reset_spin()
-
 	_max_rps = maxf(_player.stats.rps, _enemy.stats.rps)
-	_running = true
-	_resolved = false
+	_apply_frame(0.0)
 	set_physics_process(true)
 
 
 func _physics_process(delta: float) -> void:
-	if not _running:
+	if _result == null:
 		return
 
-	_integrate(_player, delta)
-	_integrate(_enemy, delta)
-	_resolve_disc_collision()
-	_resolve_walls(_player)
-	_resolve_walls(_enemy)
-	_apply_natural_decay(_player, delta)
-	_apply_natural_decay(_enemy, delta)
+	_playback_time += delta
+	_apply_frame(_playback_time)
+	_emit_due_impacts(_playback_time)
+
+	if _playback_time >= _result.finish_time:
+		_finish()
+
+
+## 時刻に応じた状態をコマへ反映する。フレーム間はBattleResultが補間するので、
+## 描画のfpsが計算の刻み幅と違っていても滑らかに動く。
+func _apply_frame(t: float) -> void:
+	var p := _result.sample(_result.player_frames, t)
+	_player.position = p.position
+	_player.velocity = p.velocity
+	_player.rps = p.rps
+
+	var e := _result.sample(_result.enemy_frames, t)
+	_enemy.position = e.position
+	_enemy.velocity = e.velocity
+	_enemy.rps = e.rps
+
 	_update_bars()
-	_check_finish()
+
+
+## 衝突は計算中に起きているので、再生時刻が追いついたところで衝撃波を出す。
+func _emit_due_impacts(t: float) -> void:
+	while _next_impact < _result.impacts.size() and _result.impacts[_next_impact].time <= t:
+		_spawn_spark(_result.impacts[_next_impact].point)
+		_next_impact += 1
 
 
 func _update_bars() -> void:
@@ -178,64 +238,6 @@ func _update_bars() -> void:
 	_enemy_bar.value = _enemy.rps
 
 
-## 位置と速度を1ステップ進める。
-func _integrate(disc: Disc, delta: float) -> void:
-	disc.position += disc.velocity * delta
-
-	var accel := SpinnerPhysics.friction_accel(disc.velocity, disc.stats.friction)
-	accel += SpinnerPhysics.stage_slope_accel(
-		disc.position, _arena.center(), stage_strength, stage_shape
-	)
-	disc.velocity += accel * delta
-
-
-## コマ同士がぶつかったら、弾き合いとRPSの削り合いを起こす。
-func _resolve_disc_collision() -> void:
-	if not SpinnerPhysics.is_colliding(
-		_player.position, _player.stats.radius, _player.velocity,
-		_enemy.position, _enemy.stats.radius, _enemy.velocity
-	):
-		return
-
-	# 接触点から衝撃波を出す。半径で重み付けした中点＝実際に触れている場所で、
-	# プロトタイプ(simulation.py:54)の collision_points と同じ式。
-	_spawn_spark(
-		(_player.position * _enemy.stats.radius + _enemy.position * _player.stats.radius)
-		/ (_player.stats.radius + _enemy.stats.radius)
-	)
-
-	# 削り量は衝突前の速さで決める。弾性衝突で速度が変わる前に取っておく。
-	var player_speed := _player.velocity.length()
-	var enemy_speed := _enemy.velocity.length()
-
-	var bounced := SpinnerPhysics.elastic_velocities(
-		_player.position, _player.velocity, _player.stats.mass,
-		_enemy.position, _enemy.velocity, _enemy.stats.mass
-	)
-	_player.velocity = bounced[0]
-	_enemy.velocity = bounced[1]
-
-	var player_drain := SpinnerPhysics.spin_drain(
-		_enemy.stats.mass, enemy_speed,
-		_player.stats.mass, _player.stats.radius, violence
-	)
-	var enemy_drain := SpinnerPhysics.spin_drain(
-		_player.stats.mass, player_speed,
-		_enemy.stats.mass, _enemy.stats.radius, violence
-	)
-
-	# 失った回転の分だけ弾き飛ばされる。
-	_player.velocity += SpinnerPhysics.spin_kick(
-		_player.position, _enemy.position, _player.stats.radius, player_drain, spin_kick_scale
-	)
-	_enemy.velocity += SpinnerPhysics.spin_kick(
-		_enemy.position, _player.position, _enemy.stats.radius, enemy_drain, spin_kick_scale
-	)
-
-	_player.rps = maxf(_player.rps - player_drain, 0.0)
-	_enemy.rps = maxf(_enemy.rps - enemy_drain, 0.0)
-
-
 ## 衝撃波をアリーナのユニット系に生やす。自分で消えるので後始末は要らない。
 func _spawn_spark(at: Vector2) -> void:
 	var spark := COLLISION_SPARK.instantiate()
@@ -243,48 +245,27 @@ func _spawn_spark(at: Vector2) -> void:
 	$ArenaRoot.add_child(spark)
 
 
-func _resolve_walls(disc: Disc) -> void:
-	for wall in _arena.walls:
-		if not SpinnerPhysics.wall_hit(
-			wall.point, wall.normal, disc.position, disc.velocity, disc.stats.radius
-		):
-			continue
-		disc.velocity = SpinnerPhysics.wall_bounce(
-			disc.velocity, wall.normal, disc.stats.restitution
-		)
-		disc.rps *= wall_damping
-
-
-func _apply_natural_decay(disc: Disc, delta: float) -> void:
-	disc.rps = maxf(
-		disc.rps - SpinnerPhysics.natural_spin_decay(disc.stats.radius, natural_damping, delta),
-		0.0
-	)
-
-
-## 先に回転が尽きた方が負け。両方尽きていたら引き分け扱いで敗北とする。
-func _check_finish() -> void:
-	if _resolved:
-		return
-	var player_out := _player.rps <= lose_threshold
-	var enemy_out := _enemy.rps <= lose_threshold
-	if not player_out and not enemy_out:
-		return
-
-	_resolved = true
-	_running = false
+## 再生が結果の終わりまで来た。勝敗はもう決まっているので、見せるだけ。
+func _finish() -> void:
 	set_physics_process(false)
 
-	var player_won := enemy_out and not player_out
-	_player.defeated = player_out
-	_enemy.defeated = enemy_out
+	# 最後のフレームをそのまま残す。補間の途中で止まると中途半端な絵になる。
+	_apply_frame(_result.finish_time)
 
-	if player_out and enemy_out:
-		_message.text = "BATTLE_DRAW"
-	elif player_won:
-		_message.text = "BATTLE_WIN"
-	else:
-		_message.text = "BATTLE_LOSE"
+	var player_won := _result.player_won()
+	_player.defeated = not player_won
+	_enemy.defeated = player_won
+
+	match _result.outcome:
+		BattleResult.Outcome.DRAW:
+			_message.text = "BATTLE_DRAW"
+			# 引き分けは両方力尽きている。
+			_player.defeated = true
+			_enemy.defeated = true
+		BattleResult.Outcome.PLAYER_WIN:
+			_message.text = "BATTLE_WIN"
+		_:
+			_message.text = "BATTLE_LOSE"
 
 	await get_tree().create_timer(finish_delay).timeout
 	finished.emit(player_won)
