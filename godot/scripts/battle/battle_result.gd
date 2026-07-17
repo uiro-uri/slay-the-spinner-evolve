@@ -61,6 +61,9 @@ var time_step: float = 1.0 / 60.0
 ## 上限に達して打ち切ったか。真なら決着が付かないまま終わっている。
 var timed_out: bool = false
 
+## 決着がリングアウト(場外)によるものか。演出とメッセージの出し分けに使う。
+var ring_out: bool = false
+
 
 func player_won() -> bool:
 	return outcome == Outcome.PLAYER_WIN
@@ -105,6 +108,7 @@ func to_dict() -> Dictionary:
 		"finish_time": finish_time,
 		"time_step": time_step,
 		"timed_out": timed_out,
+		"ring_out": ring_out,
 	}
 
 
@@ -124,6 +128,7 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.finish_time = d["finish_time"]
 	r.time_step = d["time_step"]
 	r.timed_out = d["timed_out"]
+	r.ring_out = d.get("ring_out", false)
 	return r
 
 
