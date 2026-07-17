@@ -109,6 +109,13 @@ Comments and commit messages are in Japanese. Keep the existing language of what
 **Do not put explanatory comments in `godot/project.godot`** — Godot regenerates the file whenever
 settings are written and strips them.
 
+### Sound effects (SE)
+
+For SE, see `docs/se.md`. No audio infrastructure exists yet — no `AudioStreamPlayer`, no audio
+bus, no assets. It's deliberately **not** implemented yet: there are no sourced/licensed sound
+assets, and the collision/wall-bounce timing in `spinner_physics.gd` is still being tuned by feel,
+so there's nothing stable to bind SE triggers to.
+
 ## Shipping
 
 The web build deploys to GitHub Pages from `main` via `.github/workflows/pages.yml`, gated on
