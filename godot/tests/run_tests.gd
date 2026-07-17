@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "enemies", "parts", "spawn", "battle", "fields", "disc", "wobble", "playtest"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "spawn", "battle", "fields", "disc", "wobble", "playtest"
 ]
 
 
@@ -43,6 +43,9 @@ func _init() -> void:
 
 	print("== map ==")
 	_test_map()
+
+	print("== mapglow ==")
+	_test_map_glow()
 
 	print("== enemies ==")
 	_test_enemies()
@@ -185,6 +188,12 @@ func _test_map() -> void:
 	var suite = load("res://tests/test_map_tree.gd").new()
 	suite.run(_check)
 	_done("map")
+
+
+func _test_map_glow() -> void:
+	var suite = load("res://tests/test_map_glow.gd").new()
+	suite.run(_check)
+	_done("mapglow")
 
 
 func _test_parts() -> void:
