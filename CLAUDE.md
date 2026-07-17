@@ -79,6 +79,12 @@ destroyed uncommitted code twice); and run `verify.sh` with a distinct `WEB_PORT
 parallel sessions might hold the default 8099 — the port guard fails loudly instead of silently
 verifying a stale build, but only if ports don't collide.
 
+For balance questions and physics-bug hunting, `scripts/playtest.sh` runs bot armies through
+`BattleResolver` headlessly (25k battles in ~10s, deterministic by seed) and emits
+`build/playtest/report.md`; see `docs/playtest.md`. Invariant violations there come with the full
+request JSON — `BattleRequest.from_dict()` reproduces them instantly. If you change the
+progression in `Main.gd` (enemy-per-step, rewards), mirror it in `godot/playtest/run_sim.gd`.
+
 Visual bugs need measurement, not screenshots: a single frame cannot show that something is
 static or flickering. Capture with `--write-movie` at **60fps** (other rates alias differently
 and don't reproduce what players see) and diff adjacent frames, or count pixels by color — the

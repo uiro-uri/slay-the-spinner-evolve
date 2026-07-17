@@ -12,6 +12,10 @@ const WEIGHTS := {
 	CustomPart.Rarity.RARE: 1,
 }
 
+## 報酬として一度に見せる枚数。画面(Main)もシミュレーション(RunSim)も
+## これを参照する。別々に持つと乖離するため。
+const REWARD_CHOICES := 3
+
 ## 反発の上限。プロトタイプの min(2.0, ...) に相当。
 const RESTITUTION_CAP := 2.0
 

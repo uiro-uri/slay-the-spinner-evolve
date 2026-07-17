@@ -26,13 +26,6 @@ func reset_run() -> void:
 	acquired_part_ids = []
 
 
-## プロトタイプの Object(1.5, 0.5, 0.98, 1.0, 15.0) に相当する初期性能。
-## 手触りで調整する前提の値。
+## 初期性能の実体はSpinnerStats.default_player()にある(シミュレーションと共有)。
 static func default_player_stats() -> SpinnerStats:
-	var stats := SpinnerStats.new()
-	stats.mass = 1.5
-	stats.radius = 0.5
-	stats.friction = 0.98
-	stats.restitution = 1.0
-	stats.rps = 15.0
-	return stats
+	return SpinnerStats.default_player()
