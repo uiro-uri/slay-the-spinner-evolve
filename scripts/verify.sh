@@ -238,7 +238,19 @@ else
 fi
 
 # --- 6. web render ----------------------------------------------------------
-stage "6. Web描画 (Chromium)"
+# 横(1280x720)と縦(SP=スマホ縦画面)の両方で描画を確認する。SP版とはWeb版を
+# スマホの縦画面ブラウザで開いた状態のこと(専用ビルドはない)。判定基準は
+# ビューポートに依らず同じ(起動/JSエラー0/単色でない)。崩れ具合はそれぞれ
+# 残すスクリーンショットを人が見て確認する。SP縦の寸法は SP_W/SP_H で変えられる。
+stage "6. Web描画 (Chromium, 横1280x720 と 縦SP)"
+
+SP_W="${SP_W:-390}"; SP_H="${SP_H:-844}"
+
+# チェック対象: "キー|ラベル|幅|高さ|出力png"
+web_specs=(
+  "web|横 1280x720|1280|720|web.png"
+  "sp|縦 SP ${SP_W}x${SP_H}|${SP_W}|${SP_H}|sp.png"
+)
 
 if [[ $QUICK -eq 1 ]]; then
   skip "--quick のため省略"
@@ -252,25 +264,30 @@ elif ss -tln 2>/dev/null | grep -q ":${WEB_PORT} "; then
   fail "ポート ${WEB_PORT} が既に使用中。古いサーバーを止めるか WEB_PORT を変えてください"
 else
   mkdir -p "$ARTIFACT_DIR"
+  # サーバーは一度だけ立て、横と縦を同じビルドに対して確認する。
   (cd "$BUILD_DIR/web" && exec python3 -m http.server "$WEB_PORT" >/dev/null 2>&1) &
   server_pid=$!
   sleep 2
-  out="$("$VENV_DIR/bin/python" "$REPO_ROOT/scripts/verify_web.py" "$WEB_PORT" "$ARTIFACT_DIR/web.png")"
-  web_rc=$?
-  kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
 
-  if [[ $web_rc -ne 0 || -z "$out" ]]; then
-    fail "Web描画の確認を実行できなかった"
-  else
-    IFS='|' read -r n_err n_colors booted <<<"$(tail -1 <<<"$out")"
-    [[ "$booted" == "1" ]] && ok "ブラウザでGodotが起動" || fail "ブラウザでGodotが起動しなかった"
-    [[ "$n_err" == "0" ]] && ok "JSエラーなし" || fail "JSエラー ${n_err}件"
-    if [[ ! "$n_colors" =~ ^[0-9]+$ ]] || [[ "$n_colors" -lt 3 ]]; then
-      fail "canvasが実質ブランク (色数 $n_colors)"
-    else
-      ok "canvas描画OK (色数 $n_colors) -> build/verify/web.png"
+  for spec in "${web_specs[@]}"; do
+    IFS='|' read -r _key label w h png <<<"$spec"
+    out="$("$VENV_DIR/bin/python" "$REPO_ROOT/scripts/verify_web.py" "$WEB_PORT" "$ARTIFACT_DIR/$png" "$w" "$h")"
+    web_rc=$?
+    if [[ $web_rc -ne 0 || -z "$out" ]]; then
+      fail "Web描画の確認を実行できなかった ($label)"
+      continue
     fi
-  fi
+    IFS='|' read -r n_err n_colors booted <<<"$(tail -1 <<<"$out")"
+    [[ "$booted" == "1" ]] && ok "ブラウザでGodotが起動 ($label)" || fail "ブラウザでGodotが起動しなかった ($label)"
+    [[ "$n_err" == "0" ]] && ok "JSエラーなし ($label)" || fail "JSエラー ${n_err}件 ($label)"
+    if [[ ! "$n_colors" =~ ^[0-9]+$ ]] || [[ "$n_colors" -lt 3 ]]; then
+      fail "canvasが実質ブランク ($label, 色数 $n_colors)"
+    else
+      ok "canvas描画OK ($label, 色数 $n_colors) -> build/verify/$png"
+    fi
+  done
+
+  kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
 fi
 
 # --- 結果 -------------------------------------------------------------------

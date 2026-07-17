@@ -58,13 +58,15 @@ stage of `scripts/verify.sh` has a substantive pass criterion:
 | 3. headless run | no errors from `--quit-after` |
 | 4. export ×3 | exit code, a `.pck` size floor, **and** that the Web preset's `variant/thread_support` is off — enabling it makes Godot demand SharedArrayBuffer, which needs COOP/COEP headers that GitHub Pages cannot serve, so the game would break in production only |
 | 5. native render | launch the **exported** Linux binary, capture via `--write-movie`, assert non-blank |
-| 6. web render | Chromium on the served export: no JS errors, canvas non-blank |
+| 6. web render | Chromium on the served export, at both landscape (1280×720) and portrait (SP = phone in a mobile browser; no dedicated build): Godot booted, no JS errors, canvas non-blank |
 
 Stage 5 deliberately runs `build/linux/slay-the-spinner.x86_64`, not `--path godot`. Running the
 project only proves the editor can play it from source; a broken binary/pck pairing would sail
 through. What ships is the export, so the export is what gets launched.
 
-Stages 5 and 6 leave `build/verify/native.png` and `build/verify/web.png` to eyeball.
+Stages 5 and 6 leave `build/verify/native.png`, `build/verify/web.png`, and `build/verify/sp.png`
+(phone portrait) to eyeball. The SP portrait size defaults to 390×844 and is overridable via
+`SP_W`/`SP_H`.
 
 Tests live in `godot/tests/`; `run_tests.gd` is the entry point. When adding a test suite, add its
 name to `EXPECTED_TESTS` — the runner cross-checks that every suite ran to completion, because a
