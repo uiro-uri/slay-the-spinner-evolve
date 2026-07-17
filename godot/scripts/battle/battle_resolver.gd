@@ -25,6 +25,9 @@ class State:
 	## 場外に飛ばないよう積分・壁・減衰と軌跡の記録は続ける。
 	var alive: bool = true
 
+	## リングアウト(場外)で脱落したか。決着がリングアウトかの判定に使う。
+	var rung: bool = false
+
 	func _init(launch: BattleRequest.Launch) -> void:
 		stats = launch.stats
 		position = launch.position
@@ -42,7 +45,7 @@ static func resolve(request: BattleRequest) -> BattleResult:
 		enemies.append(State.new(launch))
 		var track: Array[BattleResult.Snapshot] = []
 		result.enemy_tracks.append(track)
-	var walls := ArenaWall.from_rect(request.arena_bounds)
+	var walls := ArenaWall.build(request.wall_shape, request.arena_bounds)
 	var center := request.arena_bounds.get_center()
 
 	var dt := request.time_step
@@ -71,24 +74,28 @@ static func resolve(request: BattleRequest) -> BattleResult:
 				if enemies[i].alive and enemies[j].alive:
 					_resolve_disc_collision(enemies[i], enemies[j], request, t, result)
 
-		_resolve_walls(player, walls, request, t, result)
-		_apply_natural_decay(player, request, dt)
+		# 壁(リングアウトの土俵では弾かない)・障害物・自然減衰・場外判定を体ごとに。
+		# 壁/障害物/減衰は体単位で独立なので、体の並び順は結果に影響しない。
+		_resolve_body_field(player, walls, request, dt, t, result)
 		for enemy in enemies:
-			_resolve_walls(enemy, walls, request, t, result)
-			_apply_natural_decay(enemy, request, dt)
+			_resolve_body_field(enemy, walls, request, dt, t, result)
 			enemy.alive = enemy.rps > request.lose_threshold
 
 		t += dt
 
-		var player_out := player.rps <= request.lose_threshold
+		# プレイヤーが力尽きるか場外へ出たら負け。敵は全員そうなれば勝ち。
+		var player_out := player.rps <= request.lose_threshold or player.rung
 		var all_enemies_out := enemies.all(
-			func(e: State) -> bool: return e.rps <= request.lose_threshold
+			func(e: State) -> bool: return e.rps <= request.lose_threshold or e.rung
 		)
 		if player_out or all_enemies_out:
 			result.player_frames.append(_snapshot(player))
 			for i in enemies.size():
 				result.enemy_tracks[i].append(_snapshot(enemies[i]))
 			result.finish_time = t
+			result.ring_out = player.rung or enemies.any(
+				func(e: State) -> bool: return e.rung
+			)
 			if player_out and all_enemies_out:
 				result.outcome = BattleResult.Outcome.DRAW
 			elif player_out:
@@ -173,6 +180,25 @@ static func _resolve_disc_collision(
 	b.rps = maxf(b.rps - b_drain, 0.0)
 
 
+## 1体ぶんの土俵まわり: 壁・障害物・自然減衰・リングアウト判定。
+## 体ごとに独立しており、他の体には触れない。
+static func _resolve_body_field(
+	s: State, walls: Array[ArenaWall], req: BattleRequest, dt: float, t: float, result: BattleResult
+) -> void:
+	# リングアウトの土俵では壁で弾かない。場外へ出たかは下で見る。
+	if not req.ring_out:
+		_resolve_walls(s, walls, req, t, result)
+	_resolve_obstacles(s, req, t, result)
+	_apply_natural_decay(s, req, dt)
+	# リングアウト: 場外へ出たコマはその場で脱落させ凍結する。何体いても場外へ
+	# 飛び続けてアリーナ脱出の不変条件を壊さないように(1対1では決着で即座に
+	# 止まるので問題にならないが、複数敵では倒れた1体の隣で戦いが続くため)。
+	if req.ring_out and not ArenaWall.point_inside(walls, s.position):
+		s.rung = true
+		s.rps = 0.0
+		s.velocity = Vector2.ZERO
+
+
 static func _resolve_walls(
 	s: State, walls: Array[ArenaWall], req: BattleRequest, t: float, result: BattleResult
 ) -> void:
@@ -187,6 +213,26 @@ static func _resolve_walls(
 			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
+		s.rps *= req.wall_damping
+
+
+## 障害物(固定円)との衝突。壁と同型で、法線が中心からの放射方向になるだけ。
+## 衝撃波は壁と同じwall_impactsチャンネルに載せる（見た目も壁と同じ控えめな波）。
+static func _resolve_obstacles(
+	s: State, req: BattleRequest, t: float, result: BattleResult
+) -> void:
+	for o in req.obstacles:
+		var obstacle_center := Vector2(o.x, o.y)
+		var obstacle_radius := o.z
+		if not SpinnerPhysics.obstacle_hit(
+			obstacle_center, obstacle_radius, s.position, s.velocity, s.stats.radius
+		):
+			continue
+		var normal := (s.position - obstacle_center).normalized()
+		result.wall_impacts.append(
+			BattleResult.Impact.new(t, s.position - normal * s.stats.radius)
+		)
+		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
 		s.rps *= req.wall_damping
 
 

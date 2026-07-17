@@ -117,6 +117,22 @@ static func wall_bounce(vel: Vector2, wall_normal: Vector2, restitution: float) 
 	return vel.bounce(wall_normal) * restitution
 
 
+## 障害物(固定された円)にめり込んでいて、かつ障害物へ向かって進んでいるか。
+## 壁のwall_hitと同じ構造で、法線が固定でなく中心からの放射方向になるだけ。
+## 反射は wall_bounce(vel, (pos - obstacle_center).normalized(), restitution) を使う。
+## 完全に中心が重なっている(delta=0)時はnormalized()がゼロを返し、
+## Vector2.bounce(ゼロ)は元の速度をそのまま返すのでNaNにならない。
+static func obstacle_hit(
+	obstacle_center: Vector2, obstacle_radius: float,
+	pos: Vector2, vel: Vector2, radius: float
+) -> bool:
+	var delta := pos - obstacle_center
+	var sum := obstacle_radius + radius
+	if delta.length_squared() >= sum * sum:
+		return false
+	return vel.dot(delta) < 0.0
+
+
 ## 何もしなくても回転は落ちていく。大きいコマほど速く落ちる。
 static func natural_spin_decay(radius: float, rate: float, delta: float) -> float:
 	return radius * rate * delta

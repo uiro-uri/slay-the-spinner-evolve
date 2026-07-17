@@ -96,6 +96,10 @@ const ENEMY_COLOR := Color(0.906, 0.298, 0.235)
 
 var _max_rps: float = 1.0
 
+## この戦闘の土俵。ランから来る。null ならシーンの@export値とArena.BOUNDSを使う
+## （Battle.tscn単体で調整するとき用）。
+var _field: FieldData = null
+
 ## この戦闘での敵たち。1体でも複数体(乱戦)でも同じ配列で扱う。
 ## 4つの配列は同じindexで対応する(_enemies[i]の予告が_telegraphs[i])。
 var _enemies: Array[Disc] = []
@@ -164,15 +168,24 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	var telegraph := EnemyTelegraph.new()
 	_enemy_telegraphs_root.add_child(telegraph)
 
+	# HPバーの見た目はプレイヤーバー(Battle.tscnで設定)に合わせる。背景は共有し、
+	# 塗りだけ敵色で作る。動的生成なのでtscnのサブリソースは使えず、コードで組む。
 	var bar := ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, 22)
 	bar.show_percentage = false
+	var bg := _player_bar.get_theme_stylebox("background")
+	if bg != null:
+		bar.add_theme_stylebox_override("background", bg)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = ENEMY_COLOR
+	fill.set_corner_radius_all(4)
+	bar.add_theme_stylebox_override("fill", fill)
 	_bars.add_child(bar)
 
 	var speed := data.launch_speed if data != null else fallback_enemy_speed
 	var plan := EnemySpawn.plan(
-		_arena.center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
-		disc.stats.radius, Arena.BOUNDS.size.x * 0.5
+		_center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
+		disc.stats.radius, _inradius()
 	)
 	disc.position = plan.position
 	disc.velocity = Vector2.ZERO
@@ -195,12 +208,41 @@ func _process(_delta: float) -> void:
 		_enemies[i].position = _telegraphs[i].display_position()
 
 
-## ランの状態があればプレイヤーの性能に使う。Battle.tscn単体で走らせたときは
+## ランの状態があればプレイヤーの性能と土俵に使う。Battle.tscn単体で走らせたときは
 ## シーンに置いてある値のままにして、単体で調整できるようにしておく。
 ## 敵の性能は_spawn_enemyがEnemyDataから直接ディスクへ入れる。
 func _apply_run_state() -> void:
 	if GameState.player_stats != null:
 		_player.stats = GameState.player_stats
+	_field = GameState.pending_field
+	# 土俵の見た目(壁の位置・形状・障害物)を反映してから最初の描画に入る。
+	_arena.setup(_field)
+
+
+## 土俵の矩形。フィールドがあればそれ、なければシーン既定のArena.BOUNDS。
+func _bounds() -> Rect2:
+	return _field.arena_bounds if _field != null else Arena.BOUNDS
+
+
+func _center() -> Vector2:
+	return _bounds().get_center()
+
+
+func _wall_shape() -> ArenaWall.WallShape:
+	return _field.wall_shape if _field != null else ArenaWall.WallShape.RECT
+
+
+func _inradius() -> float:
+	if _field != null:
+		return _field.inradius()
+	return ArenaWall.inradius_for(ArenaWall.WallShape.RECT, Arena.BOUNDS)
+
+
+## 発射地点を土俵の内側へ寄せる。矩形は矩形クランプ、非矩形は内接円クランプ。
+func _clamp_launch(pos: Vector2) -> Vector2:
+	if _wall_shape() == ArenaWall.WallShape.RECT:
+		return ArenaWall.clamp_inside(_bounds(), pos, _player.stats.radius)
+	return ArenaWall.clamp_inside_circle(_center(), _inradius(), pos, _player.stats.radius)
 
 
 ## 狙っている間、コマを三角形の頂点(＝発射地点)へ置く。ここから飛ぶ、が
@@ -208,11 +250,11 @@ func _apply_run_state() -> void:
 func _on_aim_moved(origin: Vector2) -> void:
 	if _result != null:
 		return
-	_player.position = ArenaWall.clamp_inside(Arena.BOUNDS, origin, _player.stats.radius)
+	_player.position = _clamp_launch(origin)
 
 
 func _on_launched(pos: Vector2, velocity: Vector2) -> void:
-	_begin(ArenaWall.clamp_inside(Arena.BOUNDS, pos, _player.stats.radius), velocity)
+	_begin(_clamp_launch(pos), velocity)
 
 
 ## 発射して戦闘へ入る。auto_startもここを通す。
@@ -248,9 +290,20 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 			_enemies[i].stats, _enemy_plans[i].position, _enemy_plans[i].velocity
 		))
 	request.enemies = enemies
-	request.arena_bounds = Arena.BOUNDS
-	request.stage_strength = stage_strength
-	request.stage_shape = stage_shape
+	# 土俵(壁の位置・形状、傾斜、障害物、リングアウト)はフィールドから。
+	# フィールドが無い単体調整時はシーンの@export値とArena.BOUNDSを使う。
+	if _field != null:
+		request.arena_bounds = _field.arena_bounds
+		request.wall_shape = _field.wall_shape
+		request.obstacles = _field.obstacles
+		request.ring_out = _field.ring_out
+		request.stage_strength = _field.stage_strength
+		request.stage_shape = _field.stage_shape
+	else:
+		request.arena_bounds = Arena.BOUNDS
+		request.wall_shape = ArenaWall.WallShape.RECT
+		request.stage_strength = stage_strength
+		request.stage_shape = stage_shape
 	request.violence = violence
 	request.spin_kick_scale = spin_kick_scale
 	request.natural_damping = natural_damping
@@ -371,9 +424,9 @@ func _finish() -> void:
 			for enemy in _enemies:
 				enemy.defeated = true
 		BattleResult.Outcome.PLAYER_WIN:
-			_message.text = "BATTLE_WIN"
+			_message.text = "BATTLE_RING_OUT_WIN" if _result.ring_out else "BATTLE_WIN"
 		_:
-			_message.text = "BATTLE_LOSE"
+			_message.text = "BATTLE_RING_OUT_LOSE" if _result.ring_out else "BATTLE_LOSE"
 
 	await get_tree().create_timer(finish_delay).timeout
 	finished.emit(player_won)
