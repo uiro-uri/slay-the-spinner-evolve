@@ -182,21 +182,31 @@ ensure_venv() {
 }
 
 # --- 5. native render -------------------------------------------------------
-# ビルドが起動して実際に絵を出すかまで見る。Movie Makerモードで固定FPS
-# 描画させPNG連番を得るので、ffmpeg等の外部ツールは要らない。
-stage "5. ネイティブ描画"
+# 配布するバイナリそのものを起動して絵が出るかまで見る。
+#
+# ここでプロジェクト(--path godot)を動かしても意味がない。それはエディタが
+# ソースから直接動かしているだけで、書き出したバイナリとpckの組み合わせが
+# 壊れていても素通りする。Steamやブラウザに載るのは書き出した方なので、
+# 書き出した方を起動する。
+#
+# Movie Makerモードで固定FPS描画させPNG連番を得るので、ffmpeg等は要らない。
+stage "5. ネイティブ描画 (書き出したバイナリ)"
+
+native_bin="$BUILD_DIR/linux/slay-the-spinner.x86_64"
 
 if [[ $QUICK -eq 1 ]]; then
   skip "--quick のため省略"
 elif [[ -z "${DISPLAY:-}" ]]; then
   skip "DISPLAYがない (WSLg等のGUIが必要)"
+elif [[ ! -x "$native_bin" ]]; then
+  fail "書き出したバイナリがない: $native_bin"
 elif ! ensure_venv; then
   skip "venvを用意できない ($VENV_DIR)"
 else
   frames="$ARTIFACT_DIR/frames"
   rm -rf "$frames"; mkdir -p "$frames"
   log="$(mktemp)"
-  timeout 90 "$GODOT_BIN" --path "$GODOT_PROJECT" \
+  timeout 90 "$native_bin" \
     --write-movie "$frames/f.png" --fixed-fps 10 --quit-after 15 >"$log" 2>&1
   frame="$(find "$frames" -name '*.png' | sort | tail -1)"
   if [[ -z "$frame" ]]; then

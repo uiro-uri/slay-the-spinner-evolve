@@ -16,3 +16,19 @@ ENEMY_3_2,Piercer,ピアサー
 ENEMY_4_1,Juggernaut,ジャガーノート
 ENEMY_4_2,Driller,ドリラー
 ENEMY_5_1,Overlord,オーバーロード
+REWARD_HEADING,Choose a custom part,カスタムパーツを選べ
+REWARD_SELECT,Select,選ぶ
+PART_RARITY_RARE,RARE,レア
+PART_EFFECT_MASS,Mass ×{0},質量 ×{0}
+PART_EFFECT_RADIUS,Diameter ×{0},直径 ×{0}
+PART_EFFECT_FRICTION,Friction ×{0},摩擦 ×{0}
+PART_EFFECT_RESTITUTION,Bounce ×{0},反発 ×{0}
+PART_EFFECT_RPS,Spin ×{0},回転 ×{0}
+PART_EFFECT_CAP," (max {0})",（上限 {0}）
+PART_GRAVITY_NEGATOR,Gravity Negator,重力キャンセラー
+PART_GIANT_GROWTH,Giant Growth,ジャイアントグロース
+PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
+PART_SHRINK,Shrink,シュリンク
+PART_FULL_STEAM_AHEAD,Full Steam Ahead,フルスロットル
+PART_RAGE_REFLECTION,Rage Reflection,レイジリフレクション
+PART_SPIN_ENGINE,Spin Engine,スピンエンジン

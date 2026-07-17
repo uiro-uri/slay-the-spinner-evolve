@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "enemies"
+	"translations", "gamestate", "font", "physics", "map", "enemies", "parts"
 ]
 
 
@@ -46,6 +46,9 @@ func _init() -> void:
 
 	print("== enemies ==")
 	_test_enemies()
+
+	print("== parts ==")
+	_test_parts()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -143,6 +146,12 @@ func _test_map() -> void:
 	var suite = load("res://tests/test_map_tree.gd").new()
 	suite.run(_check)
 	_done("map")
+
+
+func _test_parts() -> void:
+	var suite = load("res://tests/test_custom_part.gd").new()
+	suite.run(_check)
+	_done("parts")
 
 
 func _test_enemies() -> void:

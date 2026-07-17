@@ -8,6 +8,10 @@ extends Node
 const TITLE_SCENE: PackedScene = preload("res://scenes/title/Title.tscn")
 const MAP_SCENE: PackedScene = preload("res://scenes/map/MapScreen.tscn")
 const BATTLE_SCENE: PackedScene = preload("res://scenes/battle/Battle.tscn")
+const REWARD_SCENE: PackedScene = preload("res://scenes/reward/RewardScreen.tscn")
+
+## 報酬として見せる枚数。
+const REWARD_CHOICES := 3
 
 @onready var _screen_holder: Node = $ScreenHolder
 
@@ -46,15 +50,28 @@ func goto_battle() -> void:
 	battle.finished.connect(_on_battle_finished)
 
 
-## M4で勝利時は報酬画面を挟む。今はマップへ戻すだけ。
+## 負けたらそこでラン終了。勝てば報酬を選んでマップへ戻る。
 func _on_battle_finished(player_won: bool) -> void:
 	if not player_won:
+		# TODO: ゲームオーバー画面。今はタイトルへ戻す。
 		goto_title()
 		return
 	if GameState.map_tree.is_goal():
-		# ボスに勝ったらラン終了。M4以降でちゃんとした決着画面にする。
+		# ボスに勝ったらラン終了。TODO: クリア画面。
 		goto_title()
 		return
+	goto_reward()
+
+
+func goto_reward() -> void:
+	var reward := _swap_screen(REWARD_SCENE)
+	reward.part_chosen.connect(_on_part_chosen)
+	reward.setup(CustomPartCatalog.pick_choices(REWARD_CHOICES))
+
+
+func _on_part_chosen(part: CustomPart) -> void:
+	part.apply_to(GameState.player_stats)
+	GameState.acquired_part_ids.append(part.id)
 	goto_map()
 
 
