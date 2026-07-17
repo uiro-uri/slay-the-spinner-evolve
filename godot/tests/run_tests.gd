@@ -11,7 +11,9 @@ extends SceneTree
 var _failures: Array[String] = []
 var _completed: Array[String] = []
 
-const EXPECTED_TESTS: Array[String] = ["translations", "gamestate", "font", "physics"]
+const EXPECTED_TESTS: Array[String] = [
+	"translations", "gamestate", "font", "physics", "map", "enemies"
+]
 
 
 func _check(condition: bool, message: String) -> void:
@@ -38,6 +40,12 @@ func _init() -> void:
 
 	print("== physics ==")
 	_test_physics()
+
+	print("== map ==")
+	_test_map()
+
+	print("== enemies ==")
+	_test_enemies()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -81,11 +89,19 @@ func _test_gamestate_autoload() -> void:
 
 	var game_state: Node = load("res://autoloads/GameState.gd").new()
 	var part_ids: Array[int] = [1, 2]
-	game_state.current_node_id = 42
 	game_state.acquired_part_ids = part_ids
+	game_state.pending_enemy = EnemyRoster.all()[0]
 	game_state.reset_run()
-	_check(game_state.current_node_id == -1, "reset_run()でcurrent_node_idが初期化される")
+
 	_check(game_state.acquired_part_ids.is_empty(), "reset_run()でacquired_part_idsが空になる")
+	_check(game_state.pending_enemy == null, "reset_run()でpending_enemyが消える")
+	_check(game_state.player_stats != null, "reset_run()でプレイヤーの性能が用意される")
+	_check(game_state.map_tree != null, "reset_run()でマップが生成される")
+	if game_state.map_tree != null:
+		_check(
+			game_state.map_tree.current_coord == MapTree.START_COORD,
+			"reset_run()でマップがスタート地点から始まる"
+		)
 	game_state.free()
 
 	_done("gamestate")
@@ -121,3 +137,43 @@ func _test_physics() -> void:
 	var suite = load("res://tests/test_spinner_physics.gd").new()
 	suite.run(_check)
 	_done("physics")
+
+
+func _test_map() -> void:
+	var suite = load("res://tests/test_map_tree.gd").new()
+	suite.run(_check)
+	_done("map")
+
+
+func _test_enemies() -> void:
+	# どの段にも出せる敵がいること。1体でも欠けるとその段で進行不能になる。
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	for step in range(1, MapTree.STEP_GOAL + 1):
+		var enemy: EnemyData = EnemyRoster.pick_for_step(step, rng)
+		_check(
+			enemy != null and enemy.stats != null,
+			"段%d に出せる敵がいる (レベル%d)" % [step, EnemyRoster.level_for_step(step)]
+		)
+
+	# ゴールがボス(レベル5)になること。プロトタイプが修正コミットで狙った挙動。
+	_check(
+		EnemyRoster.level_for_step(MapTree.STEP_GOAL) == 5,
+		"ゴール(段%d)がレベル5のボスになる" % MapTree.STEP_GOAL
+	)
+	# 段が進むほど強くなること(下がらない)
+	var monotonic := true
+	for step in range(1, MapTree.STEP_GOAL):
+		if EnemyRoster.level_for_step(step + 1) < EnemyRoster.level_for_step(step):
+			monotonic = false
+	_check(monotonic, "段が進んでも敵レベルが下がらない")
+
+	# 名前が翻訳されること(訳抜けはキーがそのまま出るので分かる)
+	TranslationServer.set_locale("ja")
+	var untranslated: Array[String] = []
+	for enemy in EnemyRoster.all():
+		if tr(enemy.display_name) == enemy.display_name:
+			untranslated.append(enemy.display_name)
+	_check(untranslated.is_empty(), "敵の名前に訳がある (未訳: %s)" % [untranslated])
+
+	_done("enemies")

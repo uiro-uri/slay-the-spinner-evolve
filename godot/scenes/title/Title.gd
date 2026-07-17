@@ -13,7 +13,7 @@ func _ready() -> void:
 
 
 func _on_start_pressed() -> void:
-	GameState.reset_run()
+	# ランの初期化はMainがやる。Titleは押されたことだけ伝える。
 	start_requested.emit()
 
 

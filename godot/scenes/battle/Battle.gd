@@ -67,9 +67,12 @@ func _ready() -> void:
 	set_physics_process(false)
 	_launcher.launched.connect(_on_launched)
 	_message.text = "BATTLE_DRAG_TO_SHOOT"
+	_apply_run_state()
 	# 発射前は待機位置に置いておく。
 	_enemy.position = enemy_start_pos
 	_enemy.velocity = Vector2.ZERO
+	_player.reset_spin()
+	_enemy.reset_spin()
 	_max_rps = maxf(_player.stats.rps, _enemy.stats.rps)
 	_update_bars()
 
@@ -77,6 +80,18 @@ func _ready() -> void:
 		_launcher.set_enabled(false)
 		_message.text = ""
 		start(auto_start_pos, auto_start_vel, enemy_start_pos, enemy_start_vel)
+
+
+## ランの状態があればそれを使う。Battle.tscn単体で走らせたときは
+## シーンに置いてある値のままにして、単体で調整できるようにしておく。
+func _apply_run_state() -> void:
+	if GameState.player_stats != null:
+		_player.stats = GameState.player_stats
+	var enemy: EnemyData = GameState.pending_enemy
+	if enemy != null and enemy.stats != null:
+		_enemy.stats = enemy.stats
+		enemy_start_pos = enemy.start_pos
+		enemy_start_vel = enemy.start_vel
 
 
 func _on_launched(pos: Vector2, velocity: Vector2) -> void:

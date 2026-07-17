@@ -6,3 +6,13 @@ BATTLE_DRAG_TO_SHOOT,Drag to Shoot!,引っ張って発射!
 BATTLE_WIN,You Win!,勝利!
 BATTLE_LOSE,You Lose...,敗北...
 BATTLE_DRAW,Draw,引き分け
+MAP_CHOOSE_NEXT,Choose your path,進む先を選べ
+ENEMY_1_1,Chipling,コマ小僧
+ENEMY_1_2,Needlet,ニードレット
+ENEMY_2_1,Rambull,ランブル
+ENEMY_2_2,Spindle,スピンドル
+ENEMY_3_1,Bruiser,ブルーザー
+ENEMY_3_2,Piercer,ピアサー
+ENEMY_4_1,Juggernaut,ジャガーノート
+ENEMY_4_2,Driller,ドリラー
+ENEMY_5_1,Overlord,オーバーロード
