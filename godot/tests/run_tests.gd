@@ -86,6 +86,10 @@ func _test_translations() -> void:
 
 	TranslationServer.set_locale("ja")
 	_check(tr("TITLE_START") == "ゲームスタート", "ja: TITLE_START -> '%s'" % tr("TITLE_START"))
+	_check(
+		tr("GAMEOVER_CONTINUE") == "コンティニュー",
+		"ja: GAMEOVER_CONTINUE -> '%s'" % tr("GAMEOVER_CONTINUE")
+	)
 
 	# 未定義キーはキー自身が返る＝訳抜けを検出できる
 	_check(tr("NO_SUCH_KEY") == "NO_SUCH_KEY", "未定義キーはそのまま返る")
@@ -117,6 +121,21 @@ func _test_gamestate_autoload() -> void:
 			game_state.map_tree.current_coord == MapTree.START_COORD,
 			"reset_run()でマップがスタート地点から始まる"
 		)
+
+	# コンティニュー回数。定数はautoload名ではなくロード済みインスタンス経由で参照する
+	# （--script実行時はGameStateがツリーに入っていないため）。
+	_check(
+		game_state.continues_left == game_state.MAX_CONTINUES,
+		"reset_run()でコンティニュー回数が満タンになる"
+	)
+	var before: int = game_state.continues_left
+	_check(game_state.use_continue() == true, "use_continue()は残ありならtrueを返す")
+	_check(game_state.continues_left == before - 1, "use_continue()で残り回数が1減る")
+	while game_state.continues_left > 0:
+		game_state.use_continue()
+	_check(game_state.use_continue() == false, "残0のuse_continue()はfalse")
+	_check(game_state.continues_left == 0, "残0を下回らない")
+
 	game_state.free()
 
 	_done("gamestate")

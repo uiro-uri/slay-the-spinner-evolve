@@ -6,6 +6,10 @@ BATTLE_DRAG_TO_SHOOT,Drag to Shoot!,引っ張って発射!
 BATTLE_WIN,You Win!,勝利!
 BATTLE_LOSE,You Lose...,敗北...
 BATTLE_DRAW,Draw,引き分け
+GAMEOVER_TITLE,GAME OVER,ゲームオーバー
+GAMEOVER_CONTINUE,Continue,コンティニュー
+GAMEOVER_GIVE_UP,Give Up,あきらめる
+GAMEOVER_CONTINUES_LEFT,Continues left: {0},残りコンティニュー: {0}
 MAP_CHOOSE_NEXT,Choose your path,進む先を選べ
 ENEMY_1_1,Chipling,コマ小僧
 ENEMY_1_2,Needlet,ニードレット

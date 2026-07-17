@@ -9,6 +9,7 @@ const TITLE_SCENE: PackedScene = preload("res://scenes/title/Title.tscn")
 const MAP_SCENE: PackedScene = preload("res://scenes/map/MapScreen.tscn")
 const BATTLE_SCENE: PackedScene = preload("res://scenes/battle/Battle.tscn")
 const REWARD_SCENE: PackedScene = preload("res://scenes/reward/RewardScreen.tscn")
+const GAMEOVER_SCENE: PackedScene = preload("res://scenes/gameover/GameOver.tscn")
 
 ## 報酬として見せる枚数。
 const REWARD_CHOICES := 3
@@ -50,17 +51,37 @@ func goto_battle() -> void:
 	battle.finished.connect(_on_battle_finished)
 
 
-## 負けたらそこでラン終了。勝てば報酬を選んでマップへ戻る。
+## 負けたらゲームオーバー画面へ。勝てば報酬を選んでマップへ戻る。
 func _on_battle_finished(player_won: bool) -> void:
 	if not player_won:
-		# TODO: ゲームオーバー画面。今はタイトルへ戻す。
-		goto_title()
+		goto_gameover()
 		return
 	if GameState.map_tree.is_goal():
 		# ボスに勝ったらラン終了。TODO: クリア画面。
 		goto_title()
 		return
 	goto_reward()
+
+
+func goto_gameover() -> void:
+	var gameover := _swap_screen(GAMEOVER_SCENE)
+	gameover.continue_requested.connect(_on_continue_requested)
+	gameover.give_up_requested.connect(_on_give_up_requested)
+	gameover.setup(GameState.continues_left)
+
+
+## コンティニュー: 回数を1消費し、同じ相手・同じマップ位置で戦闘へ戻る。
+## pending_enemyもcurrent_coordも触らないので、そのまま再挑戦になる。
+func _on_continue_requested() -> void:
+	if not GameState.use_continue():
+		# 残0で来たら念のためタイトルへ（通常はボタンが隠れて起きない）。
+		goto_title()
+		return
+	goto_battle()
+
+
+func _on_give_up_requested() -> void:
+	goto_title()
 
 
 func goto_reward() -> void:
