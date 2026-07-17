@@ -52,34 +52,36 @@ static func by_name(name: String) -> Kind:
 
 
 ## 発射位置と初速を決める。enemy_planは予告済みの確定値(＝ボットにも見える情報)。
+## fieldは戦う土俵。壁の形で発射できる範囲が変わるので、矩形決め打ちにはしない。
 static func decide(
 	kind: Kind,
-	arena: Rect2,
+	field: FieldData,
 	player_radius: float,
 	enemy_plan: EnemySpawn.Plan,
 	rng: RandomNumberGenerator
 ) -> Launch:
-	var center := arena.get_center()
+	var center := field.center()
 
 	match kind:
 		Kind.RANDOM:
-			var pos := ArenaWall.clamp_inside(arena, Vector2(
-				rng.randf_range(arena.position.x, arena.end.x),
-				rng.randf_range(arena.position.y, arena.end.y)
+			var bounds := field.arena_bounds
+			var pos := _clamp(field, Vector2(
+				rng.randf_range(bounds.position.x, bounds.end.x),
+				rng.randf_range(bounds.position.y, bounds.end.y)
 			), player_radius)
 			var dir := Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
 			return Launch.new(pos, dir * rng.randf_range(0.0, MAX_SPEED))
 
 		Kind.AIM_CENTER:
-			var pos := _ring_position(arena, player_radius, rng)
+			var pos := _ring_position(field, player_radius, rng)
 			return Launch.new(pos, (center - pos).normalized() * MAX_SPEED)
 
 		Kind.AIM_SPAWN:
-			var pos := _ring_position(arena, player_radius, rng)
+			var pos := _ring_position(field, player_radius, rng)
 			return Launch.new(pos, (enemy_plan.position - pos).normalized() * MAX_SPEED)
 
 		_:
-			var pos := _ring_position(arena, player_radius, rng)
+			var pos := _ring_position(field, player_radius, rng)
 			# 敵の未来位置を単純な等速仮定で先読みする。傾斜で曲がるので
 			# 完璧ではないが、序盤の交差には十分当たる。
 			var to_enemy := enemy_plan.position.distance_to(pos)
@@ -89,9 +91,15 @@ static func decide(
 			return Launch.new(pos, (predicted - pos).normalized() * MAX_SPEED)
 
 
+## Battle._clamp_launch と同じ寄せ方。矩形は矩形クランプ、非矩形は内接円。
+static func _clamp(field: FieldData, pos: Vector2, player_radius: float) -> Vector2:
+	if field.wall_shape == ArenaWall.WallShape.RECT:
+		return ArenaWall.clamp_inside(field.arena_bounds, pos, player_radius)
+	return ArenaWall.clamp_inside_circle(field.center(), field.inradius(), pos, player_radius)
+
+
 ## 外周寄りのランダムな一点。実プレイヤーも大抵は縁から撃つ。
-static func _ring_position(arena: Rect2, player_radius: float, rng: RandomNumberGenerator) -> Vector2:
-	var center := arena.get_center()
-	var ring := arena.size.x * 0.5 - player_radius - 0.5
-	var pos := center + Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU)) * ring
-	return ArenaWall.clamp_inside(arena, pos, player_radius)
+static func _ring_position(field: FieldData, player_radius: float, rng: RandomNumberGenerator) -> Vector2:
+	var ring := field.inradius() - player_radius - 0.5
+	var pos := field.center() + Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU)) * ring
+	return _clamp(field, pos, player_radius)

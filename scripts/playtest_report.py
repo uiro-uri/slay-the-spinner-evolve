@@ -219,6 +219,23 @@ def run_tables(runs, out):
         out.append(f"- {key}: {pct(deaths[key], len(pool))}")
     out.append("")
 
+    out.append("### 土俵別の勝率 (intercept+greedy)\n")
+    out.append("土俵は段ごとに一様抽選なので、どれも同じくらいの勝率になるはず。"
+               "突出した土俵は、その形が有利/不利になっている兆候。\n")
+    out.append("| 土俵 | 勝率 | 試行 |")
+    out.append("|---|---|---|")
+    by_field = defaultdict(lambda: [0, 0])
+    for r in runs:
+        if r["policy"] != ALERT_POLICY or r["reward_policy"] != ALERT_REWARD:
+            continue
+        for b in r["battles"]:
+            by_field[b.get("field", "?")][0] += 1
+            by_field[b.get("field", "?")][1] += b["win"]
+    for name in sorted(by_field):
+        n, wins = by_field[name]
+        out.append(f"| {name} | {pct(wins, n)} | {n} |")
+    out.append("")
+
     out.append("### パーツ別: 取ったランのクリア率 vs 取らなかったラン\n")
     out.append("(相関であって因果ではない。強い正の差＝そのパーツを取ると"
                "勝ちやすい兆候)\n")

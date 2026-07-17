@@ -4,7 +4,7 @@ extends RefCounted
 ## 1ラン(タイトル→マップ→戦闘→報酬→…→ボスorゲームオーバー)を丸ごと回す。
 ##
 ## ローグライクのバランス(パーツの強弱、どの段で死ぬか、RPSのインフレ)は
-## ラン全体でしか測れない。Main.gdの進行(段→敵、勝利→報酬3枚から1枚)を
+## ラン全体でしか測れない。Main.gdの進行(段→敵と土俵、勝利→報酬3枚から1枚)を
 ## 最小限に写しているので、Main.gd側の進行を変えたらここも見ること。
 ## 報酬の枚数はCustomPartCatalog.REWARD_CHOICES(画面と共有)を参照する。
 
@@ -56,14 +56,17 @@ static func play_one(
 			break
 		tree.advance_to(nexts[rng.randi_range(0, nexts.size() - 1)])
 
+		# Main._on_node_chosen と同じ順で、その段の敵と土俵を決める。
 		var group := EnemyRoster.pick_group_for_step(tree.current_step(), rng)
+		var field := FieldRoster.pick_for_step(tree.current_step(), rng)
 		var record := BattleSim.play_one(
-			rng.randi(), group, launch_policy, stats, overrides
+			rng.randi(), group, launch_policy, stats, overrides, field
 		)
 		battles.append({
 			"step": tree.current_step(),
 			"level": record["level"],
 			"count": record["count"],
+			"field": record["field"],
 			"win": record["win"],
 			"finish_time": record["finish_time"],
 			"rps_before": stats.rps,
