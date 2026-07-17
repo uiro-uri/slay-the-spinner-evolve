@@ -14,17 +14,21 @@ static func level_for_step(step: int) -> int:
 	return clampi((step + 1) / 2, 1, 5)
 
 
+## 発射の速さは、プロトタイプのENEMY_LISTに入っていた速度ベクトルの大きさ。
+## そのベクトル自体は死んだデータ(app.pyが読んでいなかった)だが、レベルが
+## 上がるほど大きい値が入っており、強い敵ほど速く発射させる意図は読み取れる。
+## 出現位置と向きはEnemySpawnが毎回ランダムに決めるので、大きさだけを使う。
 static func all() -> Array[EnemyData]:
 	return [
-		_enemy(1, "ENEMY_1_1", Vector2(0, 0), Vector2(2, 1), 0.5, 0.5, 0.97, 1.0, 15.0),
-		_enemy(1, "ENEMY_1_2", Vector2(1, 0), Vector2(1, 2), 0.5, 0.25, 0.98, 1.0, 15.0),
-		_enemy(2, "ENEMY_2_1", Vector2(0, 1), Vector2(4, 1), 1.0, 1.0, 0.97, 1.0, 20.0),
-		_enemy(2, "ENEMY_2_2", Vector2(1, 1), Vector2(1, 4), 1.0, 0.25, 0.98, 1.0, 20.0),
-		_enemy(3, "ENEMY_3_1", Vector2(0, 2), Vector2(5, 2), 2.0, 1.5, 0.98, 1.0, 40.0),
-		_enemy(3, "ENEMY_3_2", Vector2(1, 2), Vector2(2, 5), 2.0, 0.5, 0.985, 1.0, 40.0),
-		_enemy(4, "ENEMY_4_1", Vector2(0, 3), Vector2(6, 2), 3.0, 2.0, 0.98, 1.0, 50.0),
-		_enemy(4, "ENEMY_4_2", Vector2(1, 3), Vector2(2, 6), 3.0, 0.5, 0.985, 1.0, 50.0),
-		_enemy(5, "ENEMY_5_1", Vector2(0, 4), Vector2(10, 10), 5.0, 3.0, 0.98, 1.0, 60.0),
+		_enemy(1, "ENEMY_1_1", 2.2, 0.5, 0.5, 0.97, 1.0, 15.0),
+		_enemy(1, "ENEMY_1_2", 2.2, 0.5, 0.25, 0.98, 1.0, 15.0),
+		_enemy(2, "ENEMY_2_1", 4.1, 1.0, 1.0, 0.97, 1.0, 20.0),
+		_enemy(2, "ENEMY_2_2", 4.1, 1.0, 0.25, 0.98, 1.0, 20.0),
+		_enemy(3, "ENEMY_3_1", 5.4, 2.0, 1.5, 0.98, 1.0, 40.0),
+		_enemy(3, "ENEMY_3_2", 5.4, 2.0, 0.5, 0.985, 1.0, 40.0),
+		_enemy(4, "ENEMY_4_1", 6.3, 3.0, 2.0, 0.98, 1.0, 50.0),
+		_enemy(4, "ENEMY_4_2", 6.3, 3.0, 0.5, 0.985, 1.0, 50.0),
+		_enemy(5, "ENEMY_5_1", 14.1, 5.0, 3.0, 0.98, 1.0, 60.0),
 	]
 
 
@@ -49,7 +53,7 @@ static func pick_for_step(step: int, rng: RandomNumberGenerator = null) -> Enemy
 
 
 static func _enemy(
-	level: int, name_: String, pos: Vector2, vel: Vector2,
+	level: int, name_: String, launch_speed: float,
 	mass: float, radius: float, friction: float, restitution: float, rps: float
 ) -> EnemyData:
 	var stats := SpinnerStats.new()
@@ -58,4 +62,4 @@ static func _enemy(
 	stats.friction = friction
 	stats.restitution = restitution
 	stats.rps = rps
-	return EnemyData.make(level, name_, pos, vel, stats)
+	return EnemyData.make(level, name_, launch_speed, stats)

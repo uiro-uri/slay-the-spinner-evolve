@@ -39,8 +39,15 @@ const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark
 @export_range(0.0, 5.0, 0.1) var finish_delay: float = 2.0
 
 ## 敵の初期状態。M3でマップから選ばれた敵に差し替える。
-@export var enemy_start_pos: Vector2 = Vector2(8, 2)
-@export var enemy_start_vel: Vector2 = Vector2(-3, 4)
+## 敵が出現する円周の、中心からの距離。壁とコマの半径より内側に取ること。
+@export_range(1.0, 5.0, 0.1) var enemy_spawn_radius: float = 4.0
+
+## 敵の狙いが中心からどれだけ外れうるか(度)。0なら必ず中心へ、
+## 大きいほど読みにくくなる。
+@export_range(0.0, 90.0, 5.0) var enemy_spread_deg: float = 30.0
+
+## Battle.tscn単体で走らせたときの敵の発射速度。本編ではEnemyDataから来る。
+@export_range(0.5, 30.0, 0.1) var fallback_enemy_speed: float = 4.0
 
 @export_group("調整用")
 
@@ -56,6 +63,7 @@ const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark
 @onready var _player: Disc = $ArenaRoot/PlayerDisc
 @onready var _enemy: Disc = $ArenaRoot/EnemyDisc
 @onready var _launcher: LaunchController = $ArenaRoot/LaunchController
+@onready var _telegraph: EnemyTelegraph = $ArenaRoot/EnemyTelegraph
 @onready var _message: Label = $UI/Message
 @onready var _player_bar: ProgressBar = $UI/Bars/PlayerBar
 @onready var _enemy_bar: ProgressBar = $UI/Bars/EnemyBar
@@ -64,15 +72,24 @@ var _running: bool = false
 var _resolved: bool = false
 var _max_rps: float = 1.0
 
+## この戦闘での敵の出現内容。発射前に決めて予告しておく。
+var _enemy_plan: EnemySpawn.Plan
+
 
 func _ready() -> void:
 	set_physics_process(false)
 	_launcher.launched.connect(_on_launched)
+	_launcher.aim_moved.connect(_on_aim_moved)
 	_message.text = "BATTLE_DRAG_TO_SHOOT"
 	_apply_run_state()
-	# 発射前は待機位置に置いておく。
-	_enemy.position = enemy_start_pos
+
+	# 敵の出現をここで決めてしまい、発射前から予告しておく。毎回変わるが、
+	# プレイヤーは狙う前に相手の軌道を読める。
+	_enemy_plan = _plan_enemy_spawn()
+	_enemy.position = _enemy_plan.position
 	_enemy.velocity = Vector2.ZERO
+	_telegraph.show_plan(_enemy_plan.position, _enemy_plan.velocity)
+
 	_player.reset_spin()
 	_enemy.reset_spin()
 	_max_rps = maxf(_player.stats.rps, _enemy.stats.rps)
@@ -81,7 +98,18 @@ func _ready() -> void:
 	if auto_start:
 		_launcher.set_enabled(false)
 		_message.text = ""
-		start(auto_start_pos, auto_start_vel, enemy_start_pos, enemy_start_vel)
+		start(auto_start_pos, auto_start_vel, _enemy_plan.position, _enemy_plan.velocity)
+
+
+func _plan_enemy_spawn() -> EnemySpawn.Plan:
+	var enemy: EnemyData = GameState.pending_enemy
+	var speed := enemy.launch_speed if enemy != null else fallback_enemy_speed
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	return EnemySpawn.plan(
+		_arena.center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
+		_enemy.stats.radius, Arena.BOUNDS.size.x * 0.5
+	)
 
 
 ## ランの状態があればそれを使う。Battle.tscn単体で走らせたときは
@@ -92,14 +120,21 @@ func _apply_run_state() -> void:
 	var enemy: EnemyData = GameState.pending_enemy
 	if enemy != null and enemy.stats != null:
 		_enemy.stats = enemy.stats
-		enemy_start_pos = enemy.start_pos
-		enemy_start_vel = enemy.start_vel
+
+
+## 狙っている間、コマを三角形の頂点(＝発射地点)へ置く。ここから飛ぶ、が
+## 見たままになる。以前はどこをクリックしても発射の瞬間にコマが飛んでいた。
+func _on_aim_moved(origin: Vector2) -> void:
+	if _running:
+		return
+	_player.position = origin
 
 
 func _on_launched(pos: Vector2, velocity: Vector2) -> void:
 	_launcher.set_enabled(false)
+	_telegraph.hide_plan()
 	_message.text = ""
-	start(pos, velocity, enemy_start_pos, enemy_start_vel)
+	start(pos, velocity, _enemy_plan.position, _enemy_plan.velocity)
 
 
 ## 初期位置と初速を与えて開始する。座標はアリーナのユニット系。

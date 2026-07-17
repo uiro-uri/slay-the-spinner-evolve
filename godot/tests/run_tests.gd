@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "enemies", "parts"
+	"translations", "gamestate", "font", "physics", "map", "enemies", "parts", "spawn"
 ]
 
 
@@ -49,6 +49,9 @@ func _init() -> void:
 
 	print("== parts ==")
 	_test_parts()
+
+	print("== spawn ==")
+	_test_spawn()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -152,6 +155,12 @@ func _test_parts() -> void:
 	var suite = load("res://tests/test_custom_part.gd").new()
 	suite.run(_check)
 	_done("parts")
+
+
+func _test_spawn() -> void:
+	var suite = load("res://tests/test_enemy_spawn.gd").new()
+	suite.run(_check)
+	_done("spawn")
 
 
 func _test_enemies() -> void:

@@ -28,6 +28,6 @@ func _draw() -> void:
 		var r := BOUNDS.size.x * 0.5 * (float(i) / 4.0)
 		draw_arc(center(), r, 0, TAU, 64, CENTER_MARK_COLOR, 0.03)
 
-	# 壁は矩形の枠線として素直に描く。プロトタイプはSVGポリゴンの座標計算を
-	# 誤って4枚が重なり、中央が塗り潰されて見えていた。
+	# 壁は矩形の枠線として描く。プロトタイプは辺ごとに平たい三角形を置いて
+	# 縁を作っていた（詳細はarena_wall.gd）。枠線なら太さが一定になる。
 	draw_rect(BOUNDS, WALL_COLOR, false, WALL_WIDTH)
