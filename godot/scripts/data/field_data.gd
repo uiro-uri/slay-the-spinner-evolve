@@ -1,9 +1,9 @@
 class_name FieldData
 extends Resource
 
-## 1戦を戦う土俵(フィールド)。壁の位置・形状、傾斜、障害物、リングアウトの
-## 有無をまとめる。EnemyDataと同じく、マップでノードを選んだ瞬間に
-## FieldRosterが1つ選び、GameState.pending_field 経由でBattleへ渡す。
+## 1戦を戦う土俵(フィールド)。壁の位置・形状、傾斜、障害物をまとめる。
+## EnemyDataと同じく、マップでノードを選んだ瞬間に FieldRosterが1つ選び、
+## GameState.pending_field 経由でBattleへ渡す。
 ##
 ## 数値は手触りで調整する前提。すべて@exportでInspectorから触れる。
 
@@ -26,14 +26,11 @@ extends Resource
 ## 障害物。xy=中心(アリーナ座標)、z=半径。固定された円柱としてコマを弾く。
 @export var obstacles: Array[Vector3] = []
 
-## 真なら壁は弾かず、コマの中心が場外へ出た時点でそのコマが即敗北になる。
-@export var ring_out: bool = false
-
 
 static func make(
 	title_key_: String, arena_bounds_: Rect2, wall_shape_: ArenaWall.WallShape,
 	stage_shape_: SpinnerPhysics.StageShape, stage_strength_: float,
-	obstacles_: Array[Vector3] = [], ring_out_: bool = false
+	obstacles_: Array[Vector3] = []
 ) -> FieldData:
 	var data := FieldData.new()
 	data.title_key = title_key_
@@ -42,7 +39,6 @@ static func make(
 	data.stage_shape = stage_shape_
 	data.stage_strength = stage_strength_
 	data.obstacles = obstacles_
-	data.ring_out = ring_out_
 	return data
 
 

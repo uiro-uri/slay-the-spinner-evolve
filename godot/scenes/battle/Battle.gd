@@ -290,13 +290,12 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 			_enemies[i].stats, _enemy_plans[i].position, _enemy_plans[i].velocity
 		))
 	request.enemies = enemies
-	# 土俵(壁の位置・形状、傾斜、障害物、リングアウト)はフィールドから。
+	# 土俵(壁の位置・形状、傾斜、障害物)はフィールドから。
 	# フィールドが無い単体調整時はシーンの@export値とArena.BOUNDSを使う。
 	if _field != null:
 		request.arena_bounds = _field.arena_bounds
 		request.wall_shape = _field.wall_shape
 		request.obstacles = _field.obstacles
-		request.ring_out = _field.ring_out
 		request.stage_strength = _field.stage_strength
 		request.stage_shape = _field.stage_shape
 	else:
@@ -424,9 +423,9 @@ func _finish() -> void:
 			for enemy in _enemies:
 				enemy.defeated = true
 		BattleResult.Outcome.PLAYER_WIN:
-			_message.text = "BATTLE_RING_OUT_WIN" if _result.ring_out else "BATTLE_WIN"
+			_message.text = "BATTLE_WIN"
 		_:
-			_message.text = "BATTLE_RING_OUT_LOSE" if _result.ring_out else "BATTLE_LOSE"
+			_message.text = "BATTLE_LOSE"
 
 	await get_tree().create_timer(finish_delay).timeout
 	finished.emit(player_won)

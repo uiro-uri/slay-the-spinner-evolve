@@ -6,8 +6,6 @@ BATTLE_DRAG_TO_SHOOT,Drag to Shoot!,引っ張って発射!
 BATTLE_WIN,You Win!,勝利!
 BATTLE_LOSE,You Lose...,敗北...
 BATTLE_DRAW,Draw,引き分け
-BATTLE_RING_OUT_WIN,Ring Out! You Win!,リングアウト！勝利！
-BATTLE_RING_OUT_LOSE,Ring Out! You Lose...,リングアウト！敗北...
 GAMEOVER_TITLE,GAME OVER,ゲームオーバー
 GAMEOVER_CONTINUE,Continue,コンティニュー
 GAMEOVER_GIVE_UP,Give Up,あきらめる
@@ -19,7 +17,6 @@ FIELD_PLATE,Shallow Plate,浅い皿
 FIELD_ARENA,Octagon Arena,八角形の闘技場
 FIELD_ROUND,Round Dish,円形の土俵
 FIELD_PILLARS,Pillar Field,柱の土俵
-FIELD_BRINK,The Brink,崖っぷち
 ENEMY_1_1,Chipling,コマ小僧
 ENEMY_1_2,Needlet,ニードレット
 ENEMY_2_1,Rambull,ランブル
