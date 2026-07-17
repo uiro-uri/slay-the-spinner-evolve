@@ -1,6 +1,6 @@
 extends RefCounted
 
-## フィールドバリエーション(壁の形・障害物・リングアウト・土俵抽選)のテスト。
+## フィールドバリエーション(壁の形・障害物・土俵抽選)のテスト。
 ##
 ## spinner_physics.gd / arena_wall.gd と同じく、向き・単調性・不変量で確かめる。
 ## 生の数値照合はせず、手触りの調整で定数が変わっても壊れない性質を見る。
@@ -17,11 +17,9 @@ func run(check: Callable) -> void:
 	_test_from_polygon(check)
 	_test_inradius(check)
 	_test_clamp_inside_circle(check)
-	_test_point_inside(check)
 	_test_roster(check)
 	_test_localization(check)
 	_test_serialization(check)
-	_test_ring_out(check)
 
 
 func _stats(mass: float, radius: float, rps: float) -> SpinnerStats:
@@ -125,21 +123,6 @@ func _test_clamp_inside_circle(check: Callable) -> void:
 	)
 
 
-func _test_point_inside(check: Callable) -> void:
-	var bounds := Rect2(0, 0, 10, 10)
-	var rect_walls := ArenaWall.build(ArenaWall.WallShape.RECT, bounds)
-	check.call(ArenaWall.point_inside(rect_walls, Vector2(5, 5)), "内外判定(矩形): 中心は内側")
-	check.call(not ArenaWall.point_inside(rect_walls, Vector2(11, 5)), "内外判定(矩形): 場外は外側")
-	check.call(not ArenaWall.point_inside(rect_walls, Vector2(5, -1)), "内外判定(矩形): 場外(上)は外側")
-
-	var octa_walls := ArenaWall.build(ArenaWall.WallShape.OCTAGON, bounds)
-	check.call(ArenaWall.point_inside(octa_walls, Vector2(5, 5)), "内外判定(八角形): 中心は内側")
-	check.call(
-		not ArenaWall.point_inside(octa_walls, Vector2(100, 100)),
-		"内外判定(八角形): 遠くの点は外側"
-	)
-
-
 func _test_roster(check: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1
@@ -188,7 +171,6 @@ func _test_serialization(check: Callable) -> void:
 	r.enemy = BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(8, 2), Vector2(-3, 4))
 	r.wall_shape = ArenaWall.WallShape.OCTAGON
 	r.obstacles = [Vector3(3, 3, 0.6), Vector3(7, 7, 0.6)]
-	r.ring_out = true
 
 	var revived := BattleRequest.from_dict(r.to_dict())
 	check.call(revived.wall_shape == r.wall_shape, "直列化: wall_shapeが往復する")
@@ -197,7 +179,6 @@ func _test_serialization(check: Callable) -> void:
 		revived.obstacles.size() == 2 and revived.obstacles[0].is_equal_approx(Vector3(3, 3, 0.6)),
 		"直列化: 障害物の値が往復する"
 	)
-	check.call(revived.ring_out == r.ring_out, "直列化: ring_outが往復する")
 
 	# JSONを通しても壊れない（サーバーへ送る前提）
 	var parsed = JSON.parse_string(JSON.stringify(r.to_dict()))
@@ -214,36 +195,3 @@ func _test_serialization(check: Callable) -> void:
 	var a := BattleResolver.resolve(r)
 	var b := BattleResolver.resolve(BattleRequest.from_dict(r.to_dict()))
 	check.call(a.outcome == b.outcome, "直列化: 障害物ありでも同じ結果")
-
-
-func _test_ring_out(check: Callable) -> void:
-	# 壁のない土俵で、外向きに強く撃つと場外へ出て即敗北になる。
-	# 傾斜を0にして中心へ引き戻されないようにし、確実に外へ抜けさせる。
-	var r := BattleRequest.new()
-	r.ring_out = true
-	r.wall_shape = ArenaWall.WallShape.RECT
-	r.stage_strength = 0.0
-	r.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(9, 5), Vector2(10, 0))
-	r.enemy = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(5, 5), Vector2.ZERO)
-
-	var result := BattleResolver.resolve(r)
-	check.call(result.ring_out, "リングアウト: 場外で決着したフラグが立つ")
-	check.call(not result.timed_out, "リングアウト: 上限前に決着する")
-	check.call(
-		result.outcome == BattleResult.Outcome.ENEMY_WIN,
-		"リングアウト: 場外へ出たコマが負ける (%s)" % ["draw", "player", "enemy"][result.outcome]
-	)
-	# リングアウトの土俵は壁で弾かないので、壁衝突は記録されない。
-	check.call(result.wall_impacts.is_empty(), "リングアウト: 壁で弾かず衝突も記録しない")
-
-	# 対照: 同じ発射でも ring_out=false なら壁で弾き返し、場外にはならない。
-	var r2 := BattleRequest.new()
-	r2.ring_out = false
-	r2.wall_shape = ArenaWall.WallShape.RECT
-	r2.stage_strength = 0.0
-	r2.max_duration = 5.0
-	r2.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(9, 5), Vector2(10, 0))
-	r2.enemy = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(5, 5), Vector2.ZERO)
-	var result2 := BattleResolver.resolve(r2)
-	check.call(not result2.ring_out, "リングアウト: 壁ありの土俵では場外にならない")
-	check.call(result2.wall_impacts.size() > 0, "リングアウト: 壁ありなら弾き返す")

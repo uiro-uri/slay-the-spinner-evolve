@@ -49,10 +49,8 @@ static func resolve(request: BattleRequest) -> BattleResult:
 		_integrate(player, center, request, dt)
 		_integrate(enemy, center, request, dt)
 		_resolve_disc_collision(player, enemy, request, t, result)
-		# リングアウトの土俵では壁で弾かない。場外へ出たかは決着判定で見る。
-		if not request.ring_out:
-			_resolve_walls(player, walls, request, t, result)
-			_resolve_walls(enemy, walls, request, t, result)
+		_resolve_walls(player, walls, request, t, result)
+		_resolve_walls(enemy, walls, request, t, result)
 		_resolve_obstacles(player, request, t, result)
 		_resolve_obstacles(enemy, request, t, result)
 		_apply_natural_decay(player, request, dt)
@@ -60,17 +58,12 @@ static func resolve(request: BattleRequest) -> BattleResult:
 
 		t += dt
 
-		# 場外判定は壁の内側にいるかで見る（壁を弾かない土俵でのみ有効）。
-		var player_rung := request.ring_out and not ArenaWall.point_inside(walls, player.position)
-		var enemy_rung := request.ring_out and not ArenaWall.point_inside(walls, enemy.position)
-
-		var player_out := player.rps <= request.lose_threshold or player_rung
-		var enemy_out := enemy.rps <= request.lose_threshold or enemy_rung
+		var player_out := player.rps <= request.lose_threshold
+		var enemy_out := enemy.rps <= request.lose_threshold
 		if player_out or enemy_out:
 			result.player_frames.append(_snapshot(player))
 			result.enemy_frames.append(_snapshot(enemy))
 			result.finish_time = t
-			result.ring_out = player_rung or enemy_rung
 			if player_out and enemy_out:
 				result.outcome = BattleResult.Outcome.DRAW
 			elif enemy_out:

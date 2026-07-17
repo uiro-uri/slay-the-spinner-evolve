@@ -123,15 +123,6 @@ static func clamp_inside_circle(
 	return center + delta.normalized() * max_dist
 
 
-## 点が壁の内側(凸領域内)にあるか。どれか1枚でも法線の外側ならfalse。
-## リングアウト判定に使う（壁で弾かず、外側へ出たら場外とみなす）。
-static func point_inside(walls: Array[ArenaWall], pos: Vector2) -> bool:
-	for wall in walls:
-		if wall.normal.dot(pos - wall.point) < 0.0:
-			return false
-	return true
-
-
 ## 矩形の短辺の半分＝多角形の外接円半径。土俵が縦横で違っても内側に収まる。
 static func _circumradius(bounds: Rect2) -> float:
 	return minf(bounds.size.x, bounds.size.y) * 0.5

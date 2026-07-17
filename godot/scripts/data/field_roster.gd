@@ -6,8 +6,8 @@ extends RefCounted
 ## どのフィールドもどの段でも成立するので、段によらず一様ランダムで選ぶ。
 ## nullを返さないので進行が止まらない（EnemyRosterのテストと同じ保証）。
 ##
-## 数値は手触りで調整する前提。壁の形・傾斜・障害物・リングアウトを
-## 組み合わせて、各戦闘の土俵に個性を出す。
+## 数値は手触りで調整する前提。壁の形・傾斜・障害物を組み合わせて、
+## 各戦闘の土俵に個性を出す。
 
 const _BOUNDS := Rect2(0, 0, 10, 10)
 
@@ -39,11 +39,6 @@ static func all() -> Array[FieldData]:
 			"FIELD_PILLARS", _BOUNDS, ArenaWall.WallShape.RECT,
 			SpinnerPhysics.StageShape.DISH, 4.9,
 			[Vector3(3, 3, 0.6), Vector3(7, 7, 0.6)]),
-		# リングアウトの縁。壁がなく、場外へ飛ばされると即敗北。
-		# 弱めの一定傾斜にして、強い衝突なら場外に出るようにする。
-		FieldData.make(
-			"FIELD_BRINK", _BOUNDS, ArenaWall.WallShape.ROUND,
-			SpinnerPhysics.StageShape.CONE, 3.5, [], true),
 	]
 
 

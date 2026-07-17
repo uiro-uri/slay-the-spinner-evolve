@@ -63,9 +63,6 @@ var wall_shape: ArenaWall.WallShape = ArenaWall.WallShape.RECT
 ## 障害物。xy=中心、z=半径の固定円。
 var obstacles: Array[Vector3] = []
 
-## 真なら壁で弾かず、場外へ出たコマが即敗北になる(リングアウト)。
-var ring_out: bool = false
-
 ## ステージの傾斜と、ぶつかり合いの調整値。Battle.tscnの@exportから来る。
 var stage_strength: float = 4.9
 var stage_shape: SpinnerPhysics.StageShape = SpinnerPhysics.StageShape.DISH
@@ -92,7 +89,6 @@ func to_dict() -> Dictionary:
 		"wall_shape": int(wall_shape),
 		"obstacles": obstacles.map(func(o: Vector3) -> Array:
 			return [o.x, o.y, o.z]),
-		"ring_out": ring_out,
 		"stage_strength": stage_strength,
 		"stage_shape": int(stage_shape),
 		"violence": violence,
@@ -115,7 +111,6 @@ static func from_dict(d: Dictionary) -> BattleRequest:
 	for o in d["obstacles"]:
 		obstacles_.append(Vector3(o[0], o[1], o[2]))
 	r.obstacles = obstacles_
-	r.ring_out = d["ring_out"]
 	r.stage_strength = d["stage_strength"]
 	r.stage_shape = d["stage_shape"]
 	r.violence = d["violence"]

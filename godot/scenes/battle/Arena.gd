@@ -16,13 +16,10 @@ const FLOOR_COLOR := Color("f0f0f0")
 const CENTER_MARK_COLOR := Color(0, 0, 0, 0.08)
 const OBSTACLE_COLOR := Color("b58cd9")
 const OBSTACLE_HIGHLIGHT := Color("d9c4f0")
-## リングアウトの土俵は壁色を変え、弾かない縁だと見て分かるようにする。
-const RING_OUT_WALL_COLOR := Color("d98c8c")
 
 var _bounds: Rect2 = BOUNDS
 var _wall_shape: ArenaWall.WallShape = ArenaWall.WallShape.RECT
 var _obstacles: Array[Vector3] = []
-var _ring_out: bool = false
 
 var walls: Array[ArenaWall] = ArenaWall.from_rect(BOUNDS)
 
@@ -33,12 +30,10 @@ func setup(field: FieldData) -> void:
 		_bounds = field.arena_bounds
 		_wall_shape = field.wall_shape
 		_obstacles = field.obstacles
-		_ring_out = field.ring_out
 	else:
 		_bounds = BOUNDS
 		_wall_shape = ArenaWall.WallShape.RECT
 		_obstacles = []
-		_ring_out = false
 	walls = ArenaWall.build(_wall_shape, _bounds)
 	queue_redraw()
 
@@ -48,8 +43,6 @@ func center() -> Vector2:
 
 
 func _draw() -> void:
-	var wall_color := RING_OUT_WALL_COLOR if _ring_out else WALL_COLOR
-
 	# 床。矩形はそのまま、非矩形は多角形で塗る。
 	if _wall_shape == ArenaWall.WallShape.RECT:
 		draw_rect(_bounds, FLOOR_COLOR, true)
@@ -65,12 +58,12 @@ func _draw() -> void:
 
 	# 壁の輪郭。矩形は枠線、非矩形は閉じた多角形。
 	if _wall_shape == ArenaWall.WallShape.RECT:
-		draw_rect(_bounds, wall_color, false, WALL_WIDTH)
+		draw_rect(_bounds, WALL_COLOR, false, WALL_WIDTH)
 	else:
 		var pts := ArenaWall.outline_points(_wall_shape, _bounds)
 		var loop := pts.duplicate()
 		loop.append(pts[0])
-		draw_polyline(loop, wall_color, WALL_WIDTH)
+		draw_polyline(loop, WALL_COLOR, WALL_WIDTH)
 
 	# 障害物は塗り円＋内側ハイライトで、盛り上がった柱に見せる。
 	for o in _obstacles:
