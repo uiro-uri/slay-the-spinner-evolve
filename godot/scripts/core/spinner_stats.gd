@@ -35,3 +35,17 @@ func duplicate_stats() -> SpinnerStats:
 	copy.restitution = restitution
 	copy.rps = rps
 	return copy
+
+
+## プレイヤーの初期性能。プロトタイプの Object(1.5, 0.5, 0.98, 1.0, 15.0) 相当。
+## GameState(実プレイ)とRunSim(シミュレーション)の両方がここを使う。
+## autoloadのGameStateに置くと--script実行から参照できない(識別子が
+## 解決できず、参照した側がコンパイルエラーになる)ため、こちらが持つ。
+static func default_player() -> SpinnerStats:
+	var stats := SpinnerStats.new()
+	stats.mass = 1.5
+	stats.radius = 0.5
+	stats.friction = 0.98
+	stats.restitution = 1.0
+	stats.rps = 15.0
+	return stats

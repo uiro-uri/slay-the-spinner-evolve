@@ -70,6 +70,27 @@ Tests live in `godot/tests/`; `run_tests.gd` is the entry point. When adding a t
 name to `EXPECTED_TESTS` — the runner cross-checks that every suite ran to completion, because a
 GDScript runtime error silently aborts just that function and would otherwise report success.
 
+**A new test isn't done until it has caught a deliberately broken implementation.** Every suite in
+this repo was validated by sabotaging the code (flip a sign, drop a clamp, skip a guard) and
+watching the test fail — several tests that "looked right" turned out to check nothing. Two
+mechanics for that workflow: `git add` the new files *before* sabotaging, because
+`git checkout --` restores the index copy and silently erases never-staged work (this has
+destroyed uncommitted code twice); and run `verify.sh` with a distinct `WEB_PORT=<port>` when
+parallel sessions might hold the default 8099 — the port guard fails loudly instead of silently
+verifying a stale build, but only if ports don't collide.
+
+For balance questions and physics-bug hunting, `scripts/playtest.sh` runs bot armies through
+`BattleResolver` headlessly (25k battles in ~10s, deterministic by seed) and emits
+`build/playtest/report.md`; see `docs/playtest.md`. Invariant violations there come with the full
+request JSON — `BattleRequest.from_dict()` reproduces them instantly. If you change the
+progression in `Main.gd` (enemy-per-step, rewards), mirror it in `godot/playtest/run_sim.gd`.
+
+Visual bugs need measurement, not screenshots: a single frame cannot show that something is
+static or flickering. Capture with `--write-movie` at **60fps** (other rates alias differently
+and don't reproduce what players see) and diff adjacent frames, or count pixels by color — the
+"spinning disc frozen at rps=15" and "87px telegraph hidden under the disc" bugs were both
+invisible in stills.
+
 ### Architecture
 
 State flows through an autoload singleton and scene swaps, replacing the prototype's Flask session
@@ -79,12 +100,41 @@ and routes:
   parts). In-memory only; no save/resume, matching the prototype's session dying on restart.
 - **`scenes/main/Main.gd`** — swaps screens under `ScreenHolder` and owns all routing decisions.
   Screens emit signals about what happened; they never decide where to go next.
-- **`scenes/title/`**, **`scenes/map/`**, **`scenes/battle/`** — the screens.
-- **`scripts/core/spinner_physics.gd`** — the physics, as pure static functions with no Node or
-  scene dependency, so headless tests call them directly.
+- **`scenes/title/`**, **`scenes/map/`**, **`scenes/battle/`**, **`scenes/reward/`** — the screens.
+- **`scripts/core/spinner_physics.gd`** — the physics formulas, as pure static functions with no
+  Node or scene dependency, so headless tests call them directly.
 - **`scripts/core/spinner_stats.gd`** — `SpinnerStats`: mass, radius, friction, restitution, rps.
 - **`scripts/data/map_tree.gd`** — branching map generation, keyed by `Vector2i(step, column)`.
 - **`scripts/data/enemy_roster.gd`** — enemy table and which level appears at which step.
+
+### Battles are resolved up front, then played back
+
+A launch is the only input a battle ever gets, so the whole fight is computed at launch time and
+then replayed. **`Battle.gd` is a playback machine — do not put gameplay logic in its loop.**
+
+- **`scripts/battle/battle_resolver.gd`** — `resolve(request) -> BattleResult`, a pure function
+  (no Node, no scene, no RNG, capped step count). This is the intended **server swap point** for
+  future online play: today it runs locally; later a server runs the same code.
+- **`scripts/battle/battle_request.gd` / `battle_result.gd`** — the full input/output, both
+  `to_dict()`-serializable; a JSON round-trip must not change the outcome (tested). Results carry
+  whole trajectories, not input+seed: Godot does not guarantee float reproducibility across
+  platforms, so replaying from a seed can produce a different winner on a different machine.
+- Playback samples frames with linear interpolation (render fps is independent of the physics
+  step) and emits collision sparks when playback time reaches each recorded impact.
+
+The enemy's spawn (position/velocity) is an **input** decided in `_ready()` via
+`EnemySpawn.plan()` and telegraphed before the player launches — not an outcome of resolution.
+
+### The telegraph may wobble; the launch may not
+
+`EnemyTelegraph` shows the enemy's committed plan wobbling inside a bounded envelope
+(`TelegraphWobble`, pure functions of time) so it can't be read at a glance. **The wobble is
+display-only: anything that launches must use the committed plan, never the displayed values** —
+otherwise the telegraph becomes a lie. A test pins this; keep it green. The wobble is zero at
+t=0 (frequency-scattered, not phase-scattered) so the disc doesn't jump the frame the telegraph
+appears. Launch positions are clamped inside the arena via `ArenaWall.clamp_inside` — the mouse
+can point outside, but shots from outside the walls skip the bounce check (inward movement never
+collides) and gave a free run-up.
 
 ### Physics: it is deliberately fake
 
@@ -127,8 +177,9 @@ settings are written and strips them.
 
 For SE, see `docs/se.md`. No audio infrastructure exists yet — no `AudioStreamPlayer`, no audio
 bus, no assets. It's deliberately **not** implemented yet: there are no sourced/licensed sound
-assets, and the collision/wall-bounce timing in `spinner_physics.gd` is still being tuned by feel,
-so there's nothing stable to bind SE triggers to.
+assets, and the physics is still being tuned by feel, so there's nothing stable to bind SE
+triggers to. When it lands, collision SE should hook the same recorded impacts that playback uses
+for sparks (`BattleResult.impacts`), not the physics step.
 
 ## Shipping
 

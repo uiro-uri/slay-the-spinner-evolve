@@ -11,9 +11,6 @@ const BATTLE_SCENE: PackedScene = preload("res://scenes/battle/Battle.tscn")
 const REWARD_SCENE: PackedScene = preload("res://scenes/reward/RewardScreen.tscn")
 const GAMEOVER_SCENE: PackedScene = preload("res://scenes/gameover/GameOver.tscn")
 
-## 報酬として見せる枚数。
-const REWARD_CHOICES := 3
-
 @onready var _screen_holder: Node = $ScreenHolder
 
 
@@ -87,7 +84,7 @@ func _on_give_up_requested() -> void:
 func goto_reward() -> void:
 	var reward := _swap_screen(REWARD_SCENE)
 	reward.part_chosen.connect(_on_part_chosen)
-	reward.setup(CustomPartCatalog.pick_choices(REWARD_CHOICES))
+	reward.setup(CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES))
 
 
 func _on_part_chosen(part: CustomPart) -> void:
