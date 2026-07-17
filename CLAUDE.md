@@ -1,103 +1,113 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this
+repository.
 
 ## Project overview
 
-"Slay the Spinner" is a small Flask web game inspired by beyblade-style battles combined with a
-roguelike branching map (à la Slay the Spire). The player customizes a spinning "Object" with
-physical properties (mass, radius, decay, restitution, rps), walks a branching node map, and fights
-enemies in a 2D physics simulation rendered client-side as CSS keyframe animations generated
-server-side.
+"Slay the Spinner" is a Beyblade-style battler crossed with a Slay-the-Spire-style branching map
+and rarity-weighted roguelike upgrades. Two spinning tops collide in a sloped stadium; whoever's
+rotation speed (`rps`) runs out first loses.
 
-There is no build system, package manifest, or test suite in this repo — it's a single Flask app
-with server-rendered Jinja2 templates and vanilla JS/CSS on the frontend.
+The game is being **rebuilt in Godot 4** targeting browser (HTML5 export) and Steam (native
+export). The Godot project lives in `godot/`.
 
-## Running the app
+`archive/flask-prototype/` holds the original Flask implementation. **It is frozen reference
+only — do not extend it.** It validated the game design, but it computed physics server-side per
+HTTP request and replayed the result as CSS `@keyframes`, which is not a real-time client game and
+cannot ship to a browser or Steam.
+
+## Working on the Godot project
+
+Godot 4.x is required; the same binary is both the editor and the headless CLI.
 
 ```bash
-pip install flask numpy
-python app.py
+scripts/verify.sh           # everything (see below)
+scripts/verify.sh --quick   # skip the rendering checks
 ```
 
-The app runs with Flask's built-in dev server (`debug=True`) on the default port. There is no
-`requirements.txt`/`pyproject.toml` — the only third-party dependencies are `flask` and `numpy`.
+**Do not launch the Godot editor with sudo.** It makes `godot/.godot/` root-owned, after which
+imports fail with permission errors, `.import` files get rewritten to `valid=false`, and you
+silently get builds with the font and translations missing. Recover with
+`sudo rm -rf godot/.godot`. `verify.sh` stage 0 detects this.
 
-Set `SECRET_KEY` in the environment for real deployments; it falls back to `'default_secret_key'`
-otherwise (see `app.py`).
+### Verification
 
-There are no linting, formatting, or test commands configured in this repo.
+Exit codes are not trusted here — a build with the font and translations missing exited 0. Each
+stage of `scripts/verify.sh` has a substantive pass criterion:
 
-## Architecture
+| Stage | Criterion |
+|---|---|
+| 0. preflight | `godot/.godot` is ours and writable (the sudo accident above) |
+| 1. import ×2 | the **2nd** run has no errors (the 1st legitimately errors: `.translation` files and the font aren't generated yet at boot) |
+| 2. tests | exit code **and** the completed-test count — a GDScript runtime error aborts a function without failing the run |
+| 3. headless run | no errors from `--quit-after` |
+| 4. export ×3 | exit code **and** a `.pck` size floor |
+| 5. native render | launch the Linux build, capture via `--write-movie`, assert non-blank |
+| 6. web render | Chromium on the served export: no JS errors, canvas non-blank |
 
-### Request flow (game loop)
+Stages 5 and 6 leave `build/verify/native.png` and `build/verify/web.png` to eyeball.
 
-The game is a state machine driven by Flask `session` and traversed through four routes in
-`app.py`, in this order:
+Tests live in `godot/tests/`; `run_tests.gd` is the entry point. When adding a test suite, add its
+name to `EXPECTED_TESTS` — the runner cross-checks that every suite ran to completion, because a
+GDScript runtime error silently aborts just that function and would otherwise report success.
 
-1. **`GET /`** (`index`) — title screen.
-2. **`GET/POST /map`** (`map`) — renders the branching node map (`MapTree`). POST advances the
-   player to a chosen node, spawns an `Enemy` scaled to the current map step
-   (`Enemy.get_random_enemy((map_tree.current_step+1) // 2)`), stores it in the session, and
-   redirects to `/simulation`.
-3. **`GET/POST /simulation`** (`simulation`) — GET shows the pre-battle setup; POST runs the
-   physics battle (`simulation.run_simulation`) between the player's `Object` and the enemy's
-   `Object`, then renders the animated result. Whoever's rotation speed (`rps`) hits zero first
-   loses.
-4. **`GET/POST /reward`** (`reward`) — after a win, offers 3 random `CustomPart`s (weighted by
-   rarity); POST applies the chosen part to `session['object1']` and redirects back to `/map`.
+### Architecture
 
-`GET /reset` clears the session and returns to `/`.
+State flows through an autoload singleton and scene swaps, replacing the prototype's Flask session
+and routes:
 
-All game state (`object1`, `map_tree`/`map`, `enemy`) is persisted in the Flask session as plain
-dicts via each class's `map()`/`from_map()` serialization pair — there is no database. When
-deserialization fails (`TypeError`, e.g. stale/incompatible session schema), routes redirect to
-`/reset` rather than crash.
+- **`autoloads/GameState.gd`** — one run's state (player stats, map tree, pending enemy, acquired
+  parts). In-memory only; no save/resume, matching the prototype's session dying on restart.
+- **`scenes/main/Main.gd`** — swaps screens under `ScreenHolder` and owns all routing decisions.
+  Screens emit signals about what happened; they never decide where to go next.
+- **`scenes/title/`**, **`scenes/map/`**, **`scenes/battle/`** — the screens.
+- **`scripts/core/spinner_physics.gd`** — the physics, as pure static functions with no Node or
+  scene dependency, so headless tests call them directly.
+- **`scripts/core/spinner_stats.gd`** — `SpinnerStats`: mass, radius, friction, restitution, rps.
+- **`scripts/data/map_tree.gd`** — branching map generation, keyed by `Vector2i(step, column)`.
+- **`scripts/data/enemy_roster.gd`** — enemy table and which level appears at which step.
 
-### Core domain classes
+### Physics: it is deliberately fake
 
-- **`object.py` — `Object`**: the physical stats of a spinning top (mass, radius, decay,
-  restitution, rps). Also defines `Wall`, a static line-segment obstacle used for wall-collision
-  physics in the simulation (`detect_collision`, `reflect`). Walls are hardcoded in the
-  `/simulation` route, not stored in session.
-- **`enemy.py` — `Enemy`**: pairs an `Object` with position/velocity and a `level` (1-5, higher
-  level = stronger stats). `ENEMY_LIST` is a hardcoded roster; `get_random_enemy(level)` picks one
-  matching the requested level (falls back to a random level if `None`).
-- **`custom_part.py` — `CustomPart`**: player-facing upgrades. Each part declares which
-  `update_*` method(s) it triggers (`update_mass`, `update_radius`, `update_decay`,
-  `update_restitution`, `update_rps`) via matching attribute names set in its constructor kwargs
-  (e.g. a part with `mass_value`/`mass_calculation` triggers `update_mass`). `CUSTOM_PARTS_DICT` is
-  the hardcoded catalog; `get_random_keys(n)` samples without replacement, weighted by rarity
-  (`common`/`rare`). To add a new part, add an entry to `CUSTOM_PARTS_DICT` and, if it needs new
-  behavior, a new `update_*` method plus its dispatch entry in `update_methods`.
-- **`maptree.py` — `MapTree`**: procedurally generates the branching route the player walks.
-  Nodes are keyed by a synthetic id `step*10 + column` (e.g. node `23` = step 2, column 3); each
-  node's `arrows_to_next` (`"left"`/`"straight"`/`"right"`) determines which node ids in the next
-  step it connects to (`+9`/`+10`/`+11`). `create_map_tree()` retries generation
-  (`while not success`) until the random tree satisfies reachability constraints for the
-  penultimate step's fixed nodes (81/82/83). Steps are fixed at 0 (start), 1-8 (branching), 9
-  (goal).
-- **`simulation.py` — `run_simulation`**: the physics core. Steps two objects forward in time
-  (`time_step` increments up to `simulation_time`), applying friction (via `decay`), gravity toward
-  a fixed origin, elastic object-object collisions (with an extra rotational-speed transfer effect
-  scaled by a `violent` constant), and wall collisions/reflection. `rps` (rotation speed) decays
-  naturally each tick and drops further on collisions; the first object whose `rps` reaches ~0 loses.
-  Returns position histories for both objects (used to build CSS animation keyframes in `app.py`),
-  `rps` timelines, stop times, and collision points.
+**Conservation laws do not hold system-wide and must not be treated as design constraints.**
+`spin_kick` converts rotation into linear motion, so energy increases. The momentum/energy tests
+exist only to check that the *elastic-collision formula itself* was written correctly — they are
+not laws the game must satisfy. If tuning wants an inelastic collision, change the test.
 
-### Frontend
+The force pulling tops toward the center is **the stadium's slope**, not gravity and not a spring.
+`StageShape.DISH` (linear in displacement) is a parabolic bowl; `StageShape.CONE` is a constant
+slope. Both are selectable because which one feels right is an open question.
 
-`templates/*.html` are server-rendered Jinja2 templates styled with Bootstrap 5 (via CDN) plus
-inline `<style>`/`<script>` blocks — no separate static JS/CSS build. Notable patterns:
+**Do not attempt numerical comparison against `archive/flask-prototype/simulation.py`.** `Vector2`
+components are 32-bit while GDScript's `float` and numpy are 64-bit, and collisions amplify the
+divergence exponentially — exact agreement is impossible and chasing it builds a test that can
+never go green. The prototype's *numbers* are discarded outright; only the shape of the formulas
+carried over. Tuning is judged by feel, and every tunable is an `@export` so it can be changed in
+the Inspector.
 
-- `map.html` renders the node tree as an HTML table computed from `MapTree.map()`, then uses
-  inline JS to `fetch()` `POST /map` when the player clicks a reachable node.
-- `simulation.html` receives pre-computed CSS `@keyframes` strings (`frames1`/`frames2`, built by
-  `generate_keyframes()` in `app.py`) and injects them directly into `<style>` to animate the two
-  objects along their simulated trajectories.
-- `reward.html` similarly uses `fetch()` to `POST /reward` with the chosen part id.
+Tests therefore assert direction, monotonicity, and other value-independent properties that survive
+tuning. Map generation is tested by generating many maps and checking invariants (no dead ends, no
+dangling arrows, no orphans, no crossing arrows), with a seedable RNG so a failure is reproducible.
 
 ### Localization
 
-Code comments and some in-app strings are in Japanese; templates/UI copy are primarily in English.
-Preserve the existing language of comments/strings you're editing rather than translating wholesale.
+Bilingual (Japanese/English) from the start. All UI strings are keys resolved through
+`godot/translations/strings.csv`; `Control` nodes auto-translate their `text`. A missing key renders
+as the key itself, which is how you spot gaps.
+
+The bundled Noto Sans JP is load-bearing: Godot's default font has no CJK glyphs and Japanese
+renders as tofu (□). `run_tests.gd` asserts the default font actually has Japanese glyphs, because
+the `.pck` size check does not catch this (the font ships regardless of whether it's referenced).
+
+Comments and commit messages are in Japanese. Keep the existing language of what you edit.
+
+**Do not put explanatory comments in `godot/project.godot`** — Godot regenerates the file whenever
+settings are written and strips them.
+
+## Conventions
+
+- Build output goes to `build/` at the repo root, deliberately outside `godot/`. Inside it, Godot
+  rescans the exported PNGs as project resources.
+- Commit `export_presets.cfg` and `.import` files; `.godot/`, `build/`, and `*.translation` are
+  generated.
