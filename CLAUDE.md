@@ -19,7 +19,8 @@ cannot ship to a browser or Steam.
 
 ## Working on the Godot project
 
-Godot 4.x is required; the same binary is both the editor and the headless CLI.
+Godot 4.7.x is the tested version — CI installs 4.7.1 stable and `project.godot` tags feature `4.7`;
+the same binary is both the editor and the headless CLI.
 
 ```bash
 scripts/verify.sh           # everything (see below)
@@ -118,6 +119,10 @@ and routes:
 - **`scripts/core/spinner_stats.gd`** — `SpinnerStats`: mass, radius, friction, restitution, rps.
 - **`scripts/data/map_tree.gd`** — branching map generation, keyed by `Vector2i(step, column)`.
 - **`scripts/data/enemy_roster.gd`** — enemy table and which level appears at which step.
+- **`scripts/data/`** also holds the rest of the roguelike data layer: `custom_part.gd` /
+  `custom_part_catalog.gd` (the rarity-weighted reward parts), `enemy_data.gd`, `enemy_spawn.gd`
+  (`EnemySpawn.plan()`, see below), and `field_data.gd` / `field_roster.gd` (per-step stage
+  variations).
 
 ### Battles are resolved up front, then played back
 
@@ -196,7 +201,8 @@ for sparks (`BattleResult.impacts`), not the physics step.
 ## Shipping
 
 The web build deploys to GitHub Pages from `main` via `.github/workflows/pages.yml`, gated on
-`scripts/verify.sh` going green — the same script, not a CI-only reimplementation.
+`scripts/verify.sh` going green — the same script, not a CI-only reimplementation. It is live at
+<https://uiro-uri.github.io/slay-the-spinner/>.
 
 For Steam, see `docs/steam.md`. GodotSteam is deliberately **not** vendored yet — without an App ID it cannot
 initialize, so it would be an untestable 50MB+ binary in the repo. When it goes in, every Steam call
@@ -207,5 +213,7 @@ without Steam, and native under Steam.
 
 - Build output goes to `build/` at the repo root, deliberately outside `godot/`. Inside it, Godot
   rescans the exported PNGs as project resources.
-- Commit `export_presets.cfg` and `.import` files; `.godot/`, `build/`, and `*.translation` are
+- Commit `export_presets.cfg`, `.import`, and `.uid` files — the `.uid` sidecars are Godot's stable
+  resource IDs, and scenes reference scripts by them, so an untracked `.uid` next to a committed
+  `.gd` is a gap to commit, **not** a stray to delete. `.godot/`, `build/`, and `*.translation` are
   generated.
