@@ -44,8 +44,11 @@ func duplicate_stats() -> SpinnerStats:
 static func default_player() -> SpinnerStats:
 	var stats := SpinnerStats.new()
 	stats.mass = 1.5
-	stats.radius = 0.5
+	stats.radius = 0.7
 	stats.friction = 0.98
-	stats.restitution = 1.0
+	# 反発の上限が1.0(それを超えると壁で加速して発散する)なので、初期値を
+	# 下げておかないとRage Reflectionが何も起こさない死に札になる。
+	# 壁で少し勢いを失う代わりに、パーツで無損失まで持っていける。
+	stats.restitution = 0.75
 	stats.rps = 15.0
 	return stats

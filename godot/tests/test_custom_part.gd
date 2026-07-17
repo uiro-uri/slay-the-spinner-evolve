@@ -4,6 +4,8 @@ extends RefCounted
 
 const TRIALS := 300
 
+const EPS := 1e-4
+
 
 func run(check: Callable) -> void:
 	_test_apply(check)
@@ -12,6 +14,7 @@ func run(check: Callable) -> void:
 	_test_selection(check)
 	_test_rarity_weighting(check)
 	_test_titles_translated(check)
+	_test_no_debuffs(check)
 
 
 func _stats() -> SpinnerStats:
@@ -72,14 +75,21 @@ func _test_caps(check: Callable) -> void:
 	# 上限に届かないうちは普通に掛かる
 	s = _stats()
 	s.rps = 10.0
-	CustomPartCatalog.by_id(7).apply_to(s)
-	check.call(is_equal_approx(s.rps, 12.0), "パーツ: 上限未満なら倍率どおり (%.2f)" % s.rps)
+	var spin: CustomPart = CustomPartCatalog.by_id(7)
+	spin.apply_to(s)
+	check.call(
+		is_equal_approx(s.rps, 10.0 * spin.multiplier),
+		"パーツ: 上限未満なら倍率どおり (%.2f)" % s.rps
+	)
 
-	# 上限なしのパーツは青天井
-	s = _stats()
-	s.mass = 1000.0
-	CustomPartCatalog.by_id(3).apply_to(s)
-	check.call(is_equal_approx(s.mass, 2000.0), "パーツ: 上限なしなら止まらない (%.0f)" % s.mass)
+	# 報酬は全部プラスなので、取るほど強くなる一方。上限がないと
+	# アリーナをコマが埋め尽くすので、伸びるステータスには全部上限がある。
+	for part in CustomPartCatalog.all():
+		if part.multiplier > 1.0:
+			check.call(
+				part.cap > 0.0,
+				"パーツ%d(%s): 強化札には上限がある" % [part.id, part.title_key]
+			)
 
 
 ## 説明文が実際の効果と食い違わないこと。
@@ -172,3 +182,48 @@ func _test_titles_translated(check: Callable) -> void:
 		if tr(part.title_key) == part.title_key:
 			untranslated.append(part.title_key)
 	check.call(untranslated.is_empty(), "パーツ: 名前に訳がある (未訳: %s)" % [untranslated])
+
+
+## 報酬にマイナスの札が混じっていないこと。
+##
+## プロトタイプには Gravity Negator(質量×0.5) と Shrink(直径×0.5) があり、
+## どちらも純粋なデバフだった。特に半径は削られるRPSに2乗で効くので、
+## Shrinkは耐えられる衝突回数を1/4にする。勝った報酬の3枚に自分を弱くする
+## 札が混じっているのは罠でしかない。
+##
+## 「マイナス」は名前ではなく実際の効果で判定する。硬さ(rps×質量×半径²)が
+## 下がる札は、何と名乗っていてもデバフ。
+func _test_no_debuffs(check: Callable) -> void:
+	for part in CustomPartCatalog.all():
+		var before := _stats()
+		var after := _stats()
+		part.apply_to(after)
+
+		var tough_before := before.rps * before.mass * before.radius * before.radius
+		var tough_after := after.rps * after.mass * after.radius * after.radius
+		check.call(
+			tough_after >= tough_before - EPS,
+			"パーツ%d(%s): 硬さを下げない (%.2f -> %.2f)" % [
+				part.id, part.title_key, tough_before, tough_after
+			]
+		)
+
+		# 硬さに関わらないステータス(摩擦・反発)も、悪い方へ動かさない
+		check.call(
+			after.friction <= before.friction + EPS,
+			"パーツ%d(%s): 摩擦を増やさない (%.3f -> %.3f)" % [
+				part.id, part.title_key, before.friction, after.friction
+			]
+		)
+		check.call(
+			after.restitution >= before.restitution - EPS,
+			"パーツ%d(%s): 反発を減らさない (%.3f -> %.3f)" % [
+				part.id, part.title_key, before.restitution, after.restitution
+			]
+		)
+
+	# 反発の上限は1.0以下であること。超えると壁で跳ねるたびに加速して発散する。
+	check.call(
+		CustomPartCatalog.RESTITUTION_CAP <= 1.0,
+		"反発の上限が1.0以下 (%.2f)。超えると壁で加速して発散する" % CustomPartCatalog.RESTITUTION_CAP
+	)

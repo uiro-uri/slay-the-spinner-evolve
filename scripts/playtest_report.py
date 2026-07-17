@@ -96,6 +96,18 @@ def run_tables(runs, out):
                    f"| {median([r['battles_won'] for r in rs])} |")
     out.append("")
 
+    out.append("### ボス戦 (段9に到達したランのうち)\n")
+    out.append("戦闘単体の表のLv5は初期性能のままの数字で、実プレイでは起きない"
+               "(ボスは必ずパーツを積んだ状態で会う)。こちらが実際の勝率。\n")
+    out.append("| 発射方針 | 報酬方針 | 到達率 | **ボス勝率** |")
+    out.append("|---|---|---|---|")
+    for (policy, reward), rs in sorted(cells.items()):
+        reached = [r for r in rs if r["cleared"] or r["died_at_step"] == 9]
+        cleared = sum(r["cleared"] for r in reached)
+        out.append(f"| {policy} | {reward} | {pct(len(reached), len(rs))} "
+                   f"| **{pct(cleared, len(reached))}** |")
+    out.append("")
+
     out.append("### どの段で死ぬか (interceptのみ)\n")
     deaths = defaultdict(int)
     pool = [r for r in runs if r["policy"] == "intercept"]
