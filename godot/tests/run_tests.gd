@@ -11,7 +11,7 @@ extends SceneTree
 var _failures: Array[String] = []
 var _completed: Array[String] = []
 
-const EXPECTED_TESTS: Array[String] = ["translations", "gamestate", "font"]
+const EXPECTED_TESTS: Array[String] = ["translations", "gamestate", "font", "physics"]
 
 
 func _check(condition: bool, message: String) -> void:
@@ -35,6 +35,9 @@ func _init() -> void:
 
 	print("== font ==")
 	_test_font_covers_japanese()
+
+	print("== physics ==")
+	_test_physics()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -112,3 +115,9 @@ func _test_font_covers_japanese() -> void:
 		)
 
 	_done("font")
+
+
+func _test_physics() -> void:
+	var suite = load("res://tests/test_spinner_physics.gd").new()
+	suite.run(_check)
+	_done("physics")
