@@ -384,6 +384,7 @@ func _on_aim_moved(origin: Vector2) -> void:
 
 
 func _on_launched(pos: Vector2, velocity: Vector2) -> void:
+	AudioManager.play("launch")
 	_begin(_clamp_launch(pos), velocity)
 
 
@@ -466,6 +467,8 @@ func play(result: BattleResult) -> void:
 		_enemy_bars[i].modulate.a = 1.0
 
 	_apply_frame(0.0)
+	# 戦闘中ずっと鳴る回転音を鳴らし始める。周波数・振幅は毎フレーム rps で更新する。
+	AudioManager.start_rotation()
 	set_physics_process(true)
 
 
@@ -475,6 +478,8 @@ func _physics_process(delta: float) -> void:
 
 	_playback_time += delta
 	_apply_frame(_playback_time)
+	# 自分のコマの残り回転で回転音を鳴らす。力尽きれば AudioLevels 側で無音になる。
+	AudioManager.update_rotation(_player.rps, _max_rps, lose_threshold)
 	_emit_due_impacts(_playback_time)
 	_emit_due_wall_impacts(_playback_time)
 	_apply_finish_focus(_playback_time)
@@ -537,6 +542,7 @@ func _apply_fadeout(i: int, t: float) -> void:
 func _emit_due_impacts(t: float) -> void:
 	while _next_impact < _result.impacts.size() and _result.impacts[_next_impact].time <= t:
 		_spawn_spark(_result.impacts[_next_impact].point)
+		AudioManager.play("impact")
 		_next_impact += 1
 
 
@@ -548,6 +554,7 @@ func _emit_due_wall_impacts(t: float) -> void:
 		and _result.wall_impacts[_next_wall_impact].time <= t
 	):
 		_spawn_wall_spark(_result.wall_impacts[_next_wall_impact].point)
+		AudioManager.play("wall")
 		_next_wall_impact += 1
 
 
@@ -582,6 +589,9 @@ func _spawn_wall_spark(at: Vector2) -> void:
 func _finish() -> void:
 	set_physics_process(false)
 
+	# 戦闘が終わったので回転音を止める(フェードアウトして消える)。
+	AudioManager.stop_rotation()
+
 	# スローはここで解除する。決着後の余韻タイマーは実時間で回す。
 	Engine.time_scale = 1.0
 
@@ -593,10 +603,13 @@ func _finish() -> void:
 	match _result.outcome:
 		BattleResult.Outcome.DRAW:
 			_message.text = "BATTLE_DRAW"
+			AudioManager.play("lose")
 		BattleResult.Outcome.PLAYER_WIN:
 			_message.text = "BATTLE_WIN"
+			AudioManager.play("win")
 		_:
 			_message.text = "BATTLE_LOSE"
+			AudioManager.play("lose")
 
 	# 力尽きたコマは即グレーアウトさせず、最後の姿を一拍見せてからフェードで消す。
 	var fade := _start_defeated_fadeout()
@@ -660,3 +673,5 @@ func _linger_then_reset_view() -> void:
 ## Engine.time_scale はグローバルなので、ここで必ず戻す。
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+	# 決着前にシーンが切り替わっても回転音が鳴りっぱなしにならないよう必ず止める。
+	AudioManager.stop_rotation()

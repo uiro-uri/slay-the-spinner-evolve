@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "spawn", "battle", "fields", "disc", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "spawn", "battle", "fields", "disc", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "audio"
 ]
 
 
@@ -97,6 +97,9 @@ func _init() -> void:
 
 	print("== rainbow ==")
 	_test_rainbow_background()
+
+	print("== audio ==")
+	_test_audio_levels()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -306,6 +309,12 @@ func _test_game_clear() -> void:
 	var suite = load("res://tests/test_game_clear.gd").new()
 	suite.run(_check)
 	_done("game_clear")
+
+
+func _test_audio_levels() -> void:
+	var suite = load("res://tests/test_audio_levels.gd").new()
+	suite.run(_check)
+	_done("audio")
 
 
 func _test_rainbow_background() -> void:

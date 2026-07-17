@@ -35,6 +35,9 @@ var _enabled: bool = true
 func set_enabled(value: bool) -> void:
 	_enabled = value
 	if not value:
+		if _dragging:
+			# 引いている途中で無効化(発射で戦闘へ入るなど)されたらチャージ音を止める。
+			AudioManager.stop_charge()
 		_dragging = false
 	queue_redraw()
 
@@ -49,6 +52,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_origin = get_local_mouse_position()
 			_current = _origin
 			aim_moved.emit(_origin)
+			# 引き始め。引き量0から鳴らし始め、動かすほど高く・大きくする。
+			AudioManager.start_charge()
 			queue_redraw()
 		elif _dragging:
 			_dragging = false
@@ -58,6 +63,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _dragging:
 			_current = get_local_mouse_position()
+			AudioManager.update_charge(_effective_pull().length() / max_pull)
 			queue_redraw()
 		else:
 			# 押す前もコマがマウスを追うので、どこから飛ぶのかが常に見える。
@@ -74,6 +80,8 @@ func _effective_pull() -> Vector2:
 
 
 func _release() -> void:
+	# 離した瞬間にチャージ音を止める。発射音は launched の購読側(Battle)で鳴らす。
+	AudioManager.stop_charge()
 	queue_redraw()
 	launched.emit(_origin, _effective_pull() * pull_to_speed)
 
