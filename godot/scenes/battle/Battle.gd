@@ -59,6 +59,30 @@ const BAR_ROW_H := 60.0
 ## 決着後、余韻を見せてから次へ進むまでの秒数。
 @export_range(0.0, 5.0, 0.1) var finish_delay: float = 2.0
 
+@export_group("決着演出")
+
+## 決着を付けたコマ同士の衝突に合わせて、カメラを衝突点へ寄せてスローにする。
+## 見た目だけの演出で、勝敗や軌跡(BattleResult)には一切影響しない。
+
+## 決着衝突でどこまで寄るか。1.0で等倍(寄らない)。
+@export_range(1.0, 4.0, 0.05) var finish_zoom: float = 2.0
+
+## スローの底。1.0で等速、小さいほど遅くなる。Engine.time_scaleに掛ける。
+@export_range(0.05, 1.0, 0.05) var finish_time_scale: float = 0.35
+
+## 決着衝突の何秒前から演出を効かせ始めるか(再生時間)。
+@export_range(0.0, 2.0, 0.02) var finish_zoom_lead: float = 0.28
+
+## 末尾のコマ衝突を「決着衝突」と見なす、finish_timeとの最大差(秒)。これより
+## 前の衝突しかなければ消耗戦とみなして演出しない。時間切れでも演出しない。
+@export_range(0.0, 2.0, 0.05) var finish_effect_window: float = 0.5
+
+## 決着後、ズームしたまま見せてから引くまでの秒数。finish_delayの内数。
+@export_range(0.0, 3.0, 0.1) var finish_zoom_hold: float = 0.7
+
+## ズームを元へ引き戻すのにかける秒数。finish_delayの内数。
+@export_range(0.05, 3.0, 0.1) var finish_zoom_release: float = 0.5
+
 ## 乱戦で倒れた敵が、rpsを尽かしてから消え始めるまでの待機(秒)。この間は暗転した姿で残る。
 ## 敵が1体だけの戦闘では消さない(決着後に暗くして残す既存挙動のまま)。
 @export_range(0.0, 5.0, 0.05) var enemy_fadeout_delay: float = EnemyFadeout.DEFAULT_DELAY
@@ -153,6 +177,14 @@ var _next_impact: int = 0
 ## 壁への衝突も同様に、時刻が追いついた順に控えめな衝撃波を出す。
 var _next_wall_impact: int = 0
 
+## いまのレイアウトのArenaRoot変換。決着演出でズームを掛けても必ずここへ戻す。
+## _recompute_layout()が更新するので、縦横切り替え後も正しい基準を保つ。
+var _arena_base_pos: Vector2 = Vector2.ZERO
+var _arena_base_scale: Vector2 = Vector2.ONE
+
+## 決着を付けたコマ衝突の時刻。負なら演出しない(play()で決める)。
+var _decisive_time: float = -1.0
+
 
 func _ready() -> void:
 	set_physics_process(false)
@@ -207,6 +239,7 @@ func _recompute_layout() -> void:
 	if not ScreenLayout.is_portrait(visible):
 		_arena_root.position = LAND_ARENA_POS
 		_arena_root.scale = LAND_ARENA_SCALE
+		_record_arena_base()
 		_set_rect(_message, LAND_MESSAGE_RECT)
 		_set_rect(_bars, LAND_BARS_RECT)
 		return
@@ -221,11 +254,20 @@ func _recompute_layout() -> void:
 
 	_arena_root.scale = LAND_ARENA_SCALE * k
 	_arena_root.position = top_left
+	_record_arena_base()
 
 	# メッセージはアリーナ幅に合わせ、アリーナの縦中央あたりへ。
 	_set_rect(_message, Rect2(top_left.x, top_left.y + arena_px * 0.4, arena_px, BAR_ROW_H))
 	# バーはアリーナ直下、幅いっぱい。
 	_set_rect(_bars, Rect2(top_left.x, top_left.y + arena_px + BAND_GAP, arena_px, BAR_ROW_H))
+
+
+## いまのレイアウトのArenaRoot変換を決着演出の起点として控える。演出はここを
+## 基準にズームし、終わったら必ずここへ戻す。レイアウトが変わるたびに更新する
+## ので、縦横切り替えやリサイズ後も正しい基準を保つ。
+func _record_arena_base() -> void:
+	_arena_base_pos = _arena_root.position
+	_arena_base_scale = _arena_root.scale
 
 
 ## CanvasLayer上のControl(アンカー0=左上)の矩形を offset で設定する。
@@ -406,6 +448,8 @@ func play(result: BattleResult) -> void:
 	_playback_time = 0.0
 	_next_impact = 0
 	_next_wall_impact = 0
+	# 決着を付けたコマ衝突があればその時刻を控える。無ければ -1(演出なし)。
+	_decisive_time = FinishFocus.decisive_impact_time(result, finish_effect_window)
 
 	_player.reset_spin()
 	for enemy in _enemies:
@@ -433,9 +477,28 @@ func _physics_process(delta: float) -> void:
 	_apply_frame(_playback_time)
 	_emit_due_impacts(_playback_time)
 	_emit_due_wall_impacts(_playback_time)
+	_apply_finish_focus(_playback_time)
 
 	if _playback_time >= _result.finish_time:
 		_finish()
+
+
+## 決着衝突に近づくほど、時間をスローにしカメラを衝突点へ寄せる。演出なし
+## (_decisive_time<0)なら強さは常に0で、time_scaleもArenaRootも素のままになる。
+##
+## スローはEngine.time_scaleで掛ける。_physics_processのdelta・SceneTreeTimer・
+## スパークの_processが同じ倍率で遅くなり、コマもスパークも一緒にスローになる。
+## _playback_timeはtime_scale済みのdeltaで進むので追加のスケールは要らない。
+func _apply_finish_focus(t: float) -> void:
+	var s := FinishFocus.strength_at(t, _decisive_time, finish_zoom_lead)
+	Engine.time_scale = lerpf(1.0, finish_time_scale, s)
+	var xform := FinishFocus.arena_transform(
+		_arena_base_pos, _arena_base_scale,
+		FinishFocus.decisive_impact_point(_result),
+		get_viewport_rect().size, finish_zoom, s
+	)
+	_arena_root.position = xform["position"]
+	_arena_root.scale = xform["scale"]
 
 
 ## 時刻に応じた状態をコマへ反映する。フレーム間はBattleResultが補間するので、
@@ -519,6 +582,9 @@ func _spawn_wall_spark(at: Vector2) -> void:
 func _finish() -> void:
 	set_physics_process(false)
 
+	# スローはここで解除する。決着後の余韻タイマーは実時間で回す。
+	Engine.time_scale = 1.0
+
 	# 最後のフレームをそのまま残す。補間の途中で止まると中途半端な絵になる。
 	_apply_frame(_result.finish_time)
 
@@ -541,5 +607,32 @@ func _finish() -> void:
 		_:
 			_message.text = "BATTLE_LOSE"
 
-	await get_tree().create_timer(finish_delay).timeout
+	await _linger_then_reset_view()
 	finished.emit(player_won)
+
+
+## 決着の余韻。演出があったときはズームしたまま少し見せてから、カメラを本来の
+## 位置へ滑らかに引き戻す。演出が無ければ従来どおり素の待ちだけ。合計は概ね
+## finish_delay に収める。
+func _linger_then_reset_view() -> void:
+	if _decisive_time < 0.0:
+		await get_tree().create_timer(finish_delay).timeout
+		return
+
+	await get_tree().create_timer(finish_zoom_hold).timeout
+
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.parallel().tween_property(_arena_root, "position", _arena_base_pos, finish_zoom_release)
+	tween.parallel().tween_property(_arena_root, "scale", _arena_base_scale, finish_zoom_release)
+	await tween.finished
+
+	var rest := finish_delay - finish_zoom_hold - finish_zoom_release
+	if rest > 0.0:
+		await get_tree().create_timer(rest).timeout
+
+
+## 演出の途中でシーンが切り替わっても、スローが 1.0 未満のまま残らないようにする。
+## Engine.time_scale はグローバルなので、ここで必ず戻す。
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0
