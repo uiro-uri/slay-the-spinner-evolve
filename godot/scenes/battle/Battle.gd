@@ -12,6 +12,8 @@ extends Node2D
 
 signal finished(player_won: bool)
 
+const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark.tscn")
+
 ## ステージの傾斜の強さ。
 @export_range(0.0, 20.0, 0.1) var stage_strength: float = 4.9
 
@@ -160,6 +162,13 @@ func _resolve_disc_collision() -> void:
 	):
 		return
 
+	# 接触点から衝撃波を出す。半径で重み付けした中点＝実際に触れている場所で、
+	# プロトタイプ(simulation.py:54)の collision_points と同じ式。
+	_spawn_spark(
+		(_player.position * _enemy.stats.radius + _enemy.position * _player.stats.radius)
+		/ (_player.stats.radius + _enemy.stats.radius)
+	)
+
 	# 削り量は衝突前の速さで決める。弾性衝突で速度が変わる前に取っておく。
 	var player_speed := _player.velocity.length()
 	var enemy_speed := _enemy.velocity.length()
@@ -190,6 +199,13 @@ func _resolve_disc_collision() -> void:
 
 	_player.rps = maxf(_player.rps - player_drain, 0.0)
 	_enemy.rps = maxf(_enemy.rps - enemy_drain, 0.0)
+
+
+## 衝撃波をアリーナのユニット系に生やす。自分で消えるので後始末は要らない。
+func _spawn_spark(at: Vector2) -> void:
+	var spark := COLLISION_SPARK.instantiate()
+	spark.position = at
+	$ArenaRoot.add_child(spark)
 
 
 func _resolve_walls(disc: Disc) -> void:
