@@ -4,30 +4,20 @@ extends RefCounted
 ## 1ラン(タイトル→マップ→戦闘→報酬→…→ボスorゲームオーバー)を丸ごと回す。
 ##
 ## ローグライクのバランス(パーツの強弱、どの段で死ぬか、RPSのインフレ)は
-## ラン全体でしか測れない。Main.gdの進行(段→敵、勝利→報酬3枚から1枚)を
+## ラン全体でしか測れない。Main.gdの進行(段→敵と土俵、勝利→報酬3枚から1枚)を
 ## 最小限に写しているので、Main.gd側の進行を変えたらここも見ること。
 ## 報酬の枚数はCustomPartCatalog.REWARD_CHOICES(画面と共有)を参照する。
 
 enum RewardPolicy {
 	## 3枚から一様ランダム。何も考えない人。
 	RANDOM,
-	## 雑な強さ順で選ぶ。回転>縮小>摩擦>反発>他。人間の柔軟さには届かないが、
-	## 「考えて選ぶ人」の近似として。
+	## 一番硬くなる札を取る。人間の柔軟さには届かないが「考えて選ぶ人」の近似。
 	GREEDY,
 }
 
 const REWARD_NAMES := {
 	RewardPolicy.RANDOM: "random",
 	RewardPolicy.GREEDY: "greedy",
-}
-
-## GREEDYの選好。パーツの対象ステータスへの雑なスコア。
-const GREEDY_SCORE := {
-	CustomPart.Stat.RPS: 5,
-	CustomPart.Stat.RADIUS: 3,   # 縮小前提(倍率<1で加点を反転する)
-	CustomPart.Stat.FRICTION: 2,
-	CustomPart.Stat.RESTITUTION: 1,
-	CustomPart.Stat.MASS: 1,
 }
 
 
@@ -66,14 +56,17 @@ static func play_one(
 			break
 		tree.advance_to(nexts[rng.randi_range(0, nexts.size() - 1)])
 
+		# Main._on_node_chosen と同じ順で、その段の敵と土俵を決める。
 		var group := EnemyRoster.pick_group_for_step(tree.current_step(), rng)
+		var field := FieldRoster.pick_for_step(tree.current_step(), rng)
 		var record := BattleSim.play_one(
-			rng.randi(), group, launch_policy, stats, overrides
+			rng.randi(), group, launch_policy, stats, overrides, field
 		)
 		battles.append({
 			"step": tree.current_step(),
 			"level": record["level"],
 			"count": record["count"],
+			"field": record["field"],
 			"win": record["win"],
 			"finish_time": record["finish_time"],
 			"rps_before": stats.rps,
@@ -90,7 +83,7 @@ static func play_one(
 
 		# 勝利報酬。Main._on_part_chosenと同じ適用。
 		var choices := CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, rng)
-		var part := _choose_part(choices, reward_policy, rng)
+		var part := _choose_part(choices, reward_policy, rng, stats)
 		part.apply_to(stats)
 		parts.append(part.id)
 
@@ -109,8 +102,22 @@ static func play_one(
 	}
 
 
+## 「耐えられる衝突回数」の目安。
+##
+## 1衝突で失うRPSは violence×(相手質量×相手速さ)÷(自分質量×自分半径²) なので、
+## 何発耐えられるかは rps×自分質量×自分半径² に比例する。この式が
+## 勝敗をほぼ決めているので、これを最大化する札を取るのが「考えて選ぶ人」。
+##
+## 最初はステータスごとの好みを手で並べていたが、それだと半径が2乗で効くことを
+## 見落として Shrink(半径×0.5) を良い札として選んでしまい、「上手い人」のはずが
+## 耐久を1/4にしていた。式から出す方が間違えない。
+static func toughness(stats: SpinnerStats) -> float:
+	return stats.rps * stats.mass * stats.radius * stats.radius
+
+
 static func _choose_part(
-	choices: Array[CustomPart], policy: RewardPolicy, rng: RandomNumberGenerator
+	choices: Array[CustomPart], policy: RewardPolicy, rng: RandomNumberGenerator,
+	stats: SpinnerStats
 ) -> CustomPart:
 	if policy == RewardPolicy.RANDOM:
 		return choices[rng.randi_range(0, choices.size() - 1)]
@@ -118,14 +125,13 @@ static func _choose_part(
 	var best: CustomPart = choices[0]
 	var best_score := -INF
 	for part in choices:
-		var score := float(GREEDY_SCORE.get(part.stat, 0))
-		# 「下げる」パーツは、下げて嬉しいステータス(半径・摩擦)なら加点のまま、
-		# 上げて嬉しいステータスなら減点に反転する。
-		var wants_lower := part.stat == CustomPart.Stat.RADIUS or part.stat == CustomPart.Stat.FRICTION
-		if part.multiplier < 1.0 and not wants_lower:
-			score = -score
-		if part.multiplier > 1.0 and wants_lower:
-			score = -score
+		# 実際に適用してみて測る。上限に当たって効かない札もここで分かる。
+		var probe := stats.duplicate_stats()
+		part.apply_to(probe)
+		var score := toughness(probe)
+		# 硬さが変わらない札(摩擦・反発)は速さで比べる。摩擦が低いほど、
+		# 反発が高いほど、当たったときに削れる量が増える。
+		score += (2.0 - probe.friction) * 0.01 + probe.restitution * 0.01
 		if score > best_score:
 			best_score = score
 			best = part

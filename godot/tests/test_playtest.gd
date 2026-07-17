@@ -14,6 +14,8 @@ func run(check: Callable) -> void:
 	_test_invariants_pass_healthy_result(check)
 	_test_battle_sim_deterministic(check)
 	_test_policies_stay_legal(check)
+	_test_field_reaches_battle(check)
+	_test_overrides_beat_field(check)
 	_test_run_sim_consistent(check)
 
 
@@ -105,27 +107,100 @@ func _test_battle_sim_deterministic(check: Callable) -> void:
 	)
 
 
+## どの土俵でも、ボットの発射が壁の内側から上限速度以下で出ること。
+##
+## 円形・八角形は矩形より内接円のぶん狭い。矩形クランプで済ませると角の方向で
+## 壁の外から撃ててしまい、「外から助走をつける」ズルになる(実プレイでは
+## Battle._clamp_launchが塞いでいる穴)。全フィールドを回して確かめる。
 func _test_policies_stay_legal(check: Callable) -> void:
-	var arena := Rect2(0, 0, 10, 10)
 	var radius := 0.5
 	var rng := RandomNumberGenerator.new()
 	var worst_speed := 0.0
-	var out_of_bounds := 0
 
-	for kind in LaunchPolicy.NAMES:
-		for i in 50:
-			rng.seed = i
-			var plan := EnemySpawn.plan(Vector2(5, 5), 4.0, 5.0, 30.0, rng, 0.5, 5.0)
-			var launch := LaunchPolicy.decide(kind, arena, radius, plan, rng)
-			worst_speed = maxf(worst_speed, launch.velocity.length())
-			if (launch.position.x < radius - EPS or launch.position.x > 10.0 - radius + EPS
-					or launch.position.y < radius - EPS or launch.position.y > 10.0 - radius + EPS):
-				out_of_bounds += 1
+	for field in FieldRoster.all():
+		var out_of_bounds := 0
+		var limit := field.inradius() - radius
+		for kind in LaunchPolicy.NAMES:
+			for i in 50:
+				rng.seed = i
+				var plan := EnemySpawn.plan(
+					field.center(), 4.0, 5.0, 30.0, rng, 0.5, field.inradius()
+				)
+				var launch := LaunchPolicy.decide(kind, field, radius, plan, rng)
+				worst_speed = maxf(worst_speed, launch.velocity.length())
+				if field.wall_shape == ArenaWall.WallShape.RECT:
+					var b := field.arena_bounds
+					if (launch.position.x < b.position.x + radius - EPS
+							or launch.position.x > b.end.x - radius + EPS
+							or launch.position.y < b.position.y + radius - EPS
+							or launch.position.y > b.end.y - radius + EPS):
+						out_of_bounds += 1
+				elif launch.position.distance_to(field.center()) > limit + EPS:
+					out_of_bounds += 1
+		check.call(
+			out_of_bounds == 0,
+			"発射方針: %s の内側から撃つ (%d件はみ出し)" % [field.title_key, out_of_bounds]
+		)
 
-	check.call(out_of_bounds == 0, "発射方針: 発射位置がアリーナ内 (%d件はみ出し)" % out_of_bounds)
 	check.call(
 		worst_speed <= LaunchPolicy.MAX_SPEED + EPS,
 		"発射方針: 初速が上限以下 (最大 %.2f / 上限 %.0f)" % [worst_speed, LaunchPolicy.MAX_SPEED]
+	)
+
+
+## 土俵がリゾルバまで届くこと。ここが切れていると、計測だけが実プレイに存在
+## しない土俵(既定の矩形すり鉢)で回り、数字が実態とずれる。
+func _test_field_reaches_battle(check: Callable) -> void:
+	var enemies: Array[EnemyData] = [EnemyRoster.of_level(1)[0]]
+	var stats := SpinnerStats.default_player()
+
+	for field in FieldRoster.all():
+		var record := BattleSim.play_one(
+			5, enemies, LaunchPolicy.Kind.INTERCEPT, stats, null, field
+		)
+		check.call(
+			record["field"] == field.title_key,
+			"battle_sim: 土俵がレコードに載る (%s)" % field.title_key
+		)
+		check.call(
+			record["shape"] == int(field.stage_shape),
+			"battle_sim: 土俵の傾斜がリクエストへ届く (%s)" % field.title_key
+		)
+
+	# 土俵が違えば戦いも違う。同じ結果になるなら、どこかで捨てられている。
+	var plate: FieldData = null
+	var pillars: FieldData = null
+	for field in FieldRoster.all():
+		if field.title_key == "FIELD_PLATE":
+			plate = field
+		elif field.title_key == "FIELD_PILLARS":
+			pillars = field
+	var a := BattleSim.play_one(5, enemies, LaunchPolicy.Kind.INTERCEPT, stats, null, plate)
+	var b := BattleSim.play_one(5, enemies, LaunchPolicy.Kind.INTERCEPT, stats, null, pillars)
+	check.call(
+		a["finish_time"] != b["finish_time"] or a["impacts"] != b["impacts"],
+		"battle_sim: 土俵が変われば戦いも変わる"
+	)
+
+
+## スイープの上書きは土俵より後に載ること。逆だとフィールドが上書きを潰して、
+## スイープ表が全部同じ数字になる。
+func _test_overrides_beat_field(check: Callable) -> void:
+	var enemies: Array[EnemyData] = [EnemyRoster.of_level(1)[0]]
+	var stats := SpinnerStats.default_player()
+	var bowl: FieldData = null
+	for field in FieldRoster.all():
+		if field.title_key == "FIELD_BOWL":  # DISH固定の土俵
+			bowl = field
+	var overrides := BattleSim.Overrides.new()
+	overrides.stage_shape = int(SpinnerPhysics.StageShape.CONE)
+
+	var record := BattleSim.play_one(
+		5, enemies, LaunchPolicy.Kind.INTERCEPT, stats, overrides, bowl
+	)
+	check.call(
+		record["shape"] == int(SpinnerPhysics.StageShape.CONE),
+		"battle_sim: スイープの上書きが土俵に勝つ"
 	)
 
 

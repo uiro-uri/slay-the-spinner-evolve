@@ -103,6 +103,17 @@ if [[ $rc -ne 0 ]]; then
 fi
 
 "$VENV/bin/python" "$REPO_ROOT/scripts/playtest_report.py" "$OUT_DIR/data" >"$OUT_DIR/report.md"
+report_rc=$?
 echo "レポート: $OUT_DIR/report.md"
-# 所見の頭出し
-grep -E '^#|^\*\*|違反' "$OUT_DIR/report.md" | head -20
+echo
+
+# アラート(勝率0%/100%の段、不変条件違反)はレポートの先頭に出る。
+# 埋もれないようここにも出し、終了コードにも乗せる。
+sed -n '/^## アラート/,/^### ラン中の段ごとの勝率/p' "$OUT_DIR/report.md" | sed '$d'
+grep -A6 '^## 不変条件違反' "$OUT_DIR/report.md"
+
+if [[ $report_rc -ne 0 ]]; then
+  echo
+  echo "⚠️  遊びが成立していない段か、不変条件違反がある。上記とレポートを確認すること。"
+  exit 1
+fi

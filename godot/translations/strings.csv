@@ -38,10 +38,8 @@ PART_EFFECT_FRICTION,Friction ×{0},摩擦 ×{0}
 PART_EFFECT_RESTITUTION,Bounce ×{0},反発 ×{0}
 PART_EFFECT_RPS,Spin ×{0},回転 ×{0}
 PART_EFFECT_CAP," (max {0})",（上限 {0}）
-PART_GRAVITY_NEGATOR,Gravity Negator,重力キャンセラー
 PART_GIANT_GROWTH,Giant Growth,ジャイアントグロース
 PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
-PART_SHRINK,Shrink,シュリンク
 PART_FULL_STEAM_AHEAD,Full Steam Ahead,フルスロットル
 PART_RAGE_REFLECTION,Rage Reflection,レイジリフレクション
 PART_SPIN_ENGINE,Spin Engine,スピンエンジン

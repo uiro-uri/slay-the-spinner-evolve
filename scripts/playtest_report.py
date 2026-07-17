@@ -14,6 +14,29 @@ from pathlib import Path
 POLICY_ORDER = ["random", "aim_center", "aim_spawn", "intercept"]
 SHAPE_NAMES = {0: "すり鉢", 1: "円錐"}
 
+## アラートの基準となる腕。ここを全勝/全敗するなら誰がやっても同じ。
+ALERT_POLICY = "intercept"
+ALERT_REWARD = "greedy"
+
+## この試行数に満たない段は、全勝でも「たまたま」なので断定しない。
+## 20戦全勝なら、真の勝率が85%以下である確率は5%未満(0.85^20≒0.039)。
+MIN_SAMPLES = 20
+
+## アラートを出す勝率の帯。上下で非対称なのは理由がある。
+##
+## 「ちょうど0%/100%」だけを見ると壊れた段を取り逃す。敵のrpsを3000
+## (絶対に倒せない)にしても勝率は2%であって0%にならなかった。たまたま
+## 当たらずに相手が自滅する試合が残るため。0%も2%も同じく遊びがないので、
+## 下限は0ちょうどではなく帯で見る。
+##
+## 一方、上は100%の際まで許している。導入の段をほぼ自動勝利にするのは
+## 正当な設計で(現に段1は96.7%、段2は97.9%ある)、そこを鳴らすと誤報になる。
+## 「一度も負けない」なら選択がないが、たまに負けるなら緊張はある。
+##
+## 逆に「20回に1回しか勝てない段」が意図的なことはまずないので、下限は緩い。
+ALERT_LOW = 5.0
+ALERT_HIGH = 99.0
+
 
 def load(data_dir: Path):
     battles, runs = [], []
@@ -31,6 +54,85 @@ def pct(n, d):
 def median(xs):
     xs = sorted(xs)
     return xs[len(xs) // 2] if xs else 0.0
+
+
+def step_win_rates(runs):
+    """ラン中の段ごとの勝率。実際に起きる組み合わせ(段相応に育った状態)。
+
+    戦闘単体の表は初期性能のままの数字なので、Lv5が0%でも実プレイでは起きない。
+    アラートはこちらで判定する。
+    """
+    by_step = defaultdict(lambda: [0, 0])  # step -> [試行, 勝ち]
+    for r in runs:
+        if r["policy"] != ALERT_POLICY or r["reward_policy"] != ALERT_REWARD:
+            continue
+        for b in r["battles"]:
+            by_step[b["step"]][0] += 1
+            by_step[b["step"]][1] += b["win"]
+    return by_step
+
+
+def alerts(runs, out):
+    """勝率が0%か100%の段を検出する。
+
+    どちらも「遊びが成立していない」。全勝なら何をしても勝つので選択に意味がなく、
+    全敗なら何をしても負けるので理不尽。プレイヤーの入力が結果を変えない段は、
+    そこにゲームがない。
+    """
+    by_step = step_win_rates(runs)
+    if not by_step:
+        return False
+
+    problems, unsure = [], []
+    for step in sorted(by_step):
+        n, wins = by_step[step]
+        rate = 100.0 * wins / n
+        if ALERT_LOW < rate < ALERT_HIGH:
+            continue
+        too_easy = rate >= ALERT_HIGH
+        kind = "全勝" if wins == n else ("ほぼ全勝" if too_easy else
+               ("全敗" if wins == 0 else "ほぼ全敗"))
+        if n < MIN_SAMPLES:
+            unsure.append(f"段{step}: {kind}({wins}/{n})だが試行が少なく断定できない")
+        else:
+            problems.append(
+                f"**段{step}: 勝率 {rate:.1f}% ({wins}/{n})** — {kind}。"
+                + ("何をしても勝つので、そこに選択がない"
+                   if too_easy else "何をしても負けるので理不尽")
+            )
+
+    out.append("## アラート\n")
+    if problems:
+        out.append(f"⚠️ **遊びが成立していない段が {len(problems)} 件ある。**\n")
+        for p in problems:
+            out.append(f"- {p}")
+        out.append("")
+    else:
+        out.append(f"遊びが成立していない段はなし。\n")
+    out.append(f"判定: {ALERT_POLICY}+{ALERT_REWARD} の勝率が "
+               f"{ALERT_LOW:.0f}%以下 か {ALERT_HIGH:.0f}%以上 の段 "
+               f"(n≧{MIN_SAMPLES})。ちょうど0%/100%だけを見ると取り逃す —— "
+               f"敵を絶対に倒せない値にしても、たまたま相手が自滅する試合が残って "
+               f"勝率は2%であって0%にならなかった。\n")
+    if unsure:
+        out.append("試行が少なく判定を保留した段:\n")
+        for u in unsure:
+            out.append(f"- {u}")
+        out.append("")
+
+    out.append("### ラン中の段ごとの勝率\n")
+    out.append(f"({ALERT_POLICY}+{ALERT_REWARD}。段相応に育った状態＝実際に起きる組み合わせ)\n")
+    out.append("| 段 | 勝率 | 試行 |")
+    out.append("|---|---|---|")
+    for step in sorted(by_step):
+        n, wins = by_step[step]
+        rate = 100.0 * wins / n
+        flag = ""
+        if rate <= ALERT_LOW or rate >= ALERT_HIGH:
+            flag = " ⚠️" if n >= MIN_SAMPLES else " (n少)"
+        out.append(f"| {step} | {pct(wins, n)}{flag} | {n} |")
+    out.append("")
+    return bool(problems)
 
 
 def battle_tables(battles, out):
@@ -96,6 +198,18 @@ def run_tables(runs, out):
                    f"| {median([r['battles_won'] for r in rs])} |")
     out.append("")
 
+    out.append("### ボス戦 (段9に到達したランのうち)\n")
+    out.append("戦闘単体の表のLv5は初期性能のままの数字で、実プレイでは起きない"
+               "(ボスは必ずパーツを積んだ状態で会う)。こちらが実際の勝率。\n")
+    out.append("| 発射方針 | 報酬方針 | 到達率 | **ボス勝率** |")
+    out.append("|---|---|---|---|")
+    for (policy, reward), rs in sorted(cells.items()):
+        reached = [r for r in rs if r["cleared"] or r["died_at_step"] == 9]
+        cleared = sum(r["cleared"] for r in reached)
+        out.append(f"| {policy} | {reward} | {pct(len(reached), len(rs))} "
+                   f"| **{pct(cleared, len(reached))}** |")
+    out.append("")
+
     out.append("### どの段で死ぬか (interceptのみ)\n")
     deaths = defaultdict(int)
     pool = [r for r in runs if r["policy"] == "intercept"]
@@ -103,6 +217,23 @@ def run_tables(runs, out):
         deaths["クリア" if r["cleared"] else f"段{r['died_at_step']}"] += 1
     for key in sorted(deaths, key=lambda k: (k == "クリア", k)):
         out.append(f"- {key}: {pct(deaths[key], len(pool))}")
+    out.append("")
+
+    out.append("### 土俵別の勝率 (intercept+greedy)\n")
+    out.append("土俵は段ごとに一様抽選なので、どれも同じくらいの勝率になるはず。"
+               "突出した土俵は、その形が有利/不利になっている兆候。\n")
+    out.append("| 土俵 | 勝率 | 試行 |")
+    out.append("|---|---|---|")
+    by_field = defaultdict(lambda: [0, 0])
+    for r in runs:
+        if r["policy"] != ALERT_POLICY or r["reward_policy"] != ALERT_REWARD:
+            continue
+        for b in r["battles"]:
+            by_field[b.get("field", "?")][0] += 1
+            by_field[b.get("field", "?")][1] += b["win"]
+    for name in sorted(by_field):
+        n, wins = by_field[name]
+        out.append(f"| {name} | {pct(wins, n)} | {n} |")
     out.append("")
 
     out.append("### パーツ別: 取ったランのクリア率 vs 取らなかったラン\n")
@@ -131,27 +262,33 @@ def violations_table(battles, runs, out):
     out.append("## 不変条件違反\n")
     if not bad:
         out.append("なし。\n")
-        return
-    out.append(f"**{len(bad)}件。** シードで再現できる:\n")
+        return False
+    out.append(f"⚠️ **{len(bad)}件。** シードで再現できる:\n")
     for b in bad[:20]:
         out.append(f"- seed={b['seed']} lv={b.get('level')} policy={b.get('policy')}: "
                    f"{'; '.join(b['violations'])}")
     out.append("")
+    return True
 
 
-def main():
+def main() -> int:
     data_dir = Path(sys.argv[1])
     battles, runs = load(data_dir)
     out = [f"# テストプレイレポート\n",
            f"戦闘 {len(battles)}件 / ラン {len(runs)}件\n"]
+
+    # アラートは先頭に置く。末尾だと読まれない。
+    alerted = alerts(runs, out) if runs else False
     if battles:
         battle_tables(battles, out)
         sweep_tables(battles, out)
     if runs:
         run_tables(runs, out)
-    violations_table(battles, runs, out)
+    violated = violations_table(battles, runs, out)
     print("\n".join(out))
+    # 呼び出し側(playtest.sh)が気づけるよう終了コードにも出す。
+    return 1 if (alerted or violated) else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
