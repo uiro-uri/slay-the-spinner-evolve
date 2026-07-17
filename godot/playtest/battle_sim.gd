@@ -104,6 +104,8 @@ static func play_one(
 		"timed_out": result.timed_out,
 		"impacts": result.impacts.size(),
 	}
+	# 死因の内訳(一撃死かどうか、決着までの衝突回数)を足す。集計側が読む。
+	record.merge(BattleMetrics.classify(request, result))
 	if not violations.is_empty():
 		record["violations"] = violations
 		# from_dict()で即再現できるよう、入力を丸ごと残す

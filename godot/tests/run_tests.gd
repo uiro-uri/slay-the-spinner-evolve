@@ -50,6 +50,9 @@ func _init() -> void:
 	print("== enemies ==")
 	_test_enemies()
 
+	print("== roster ==")
+	_test_roster()
+
 	print("== parts ==")
 	_test_parts()
 
@@ -213,6 +216,12 @@ func _test_map_glow() -> void:
 	var suite = load("res://tests/test_map_glow.gd").new()
 	suite.run(_check)
 	_done("mapglow")
+
+
+func _test_roster() -> void:
+	var suite = load("res://tests/test_enemy_roster.gd").new()
+	suite.run(_check)
+	_done("roster")
 
 
 func _test_parts() -> void:
