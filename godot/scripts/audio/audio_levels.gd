@@ -17,17 +17,19 @@ extends RefCounted
 const ROT_FREQ_MIN := 70.0
 const ROT_FREQ_MAX := 190.0
 
-## 回転音の最大振幅。連続音なので衝突音より控えめにする。
-const ROT_AMP_MAX := 0.22
+## 回転音の最大振幅。連続音なので衝突音より控えめにする。短い衝突音・発射音を
+## 覆い隠さないよう、低めに抑える(手触りで調整可)。
+const ROT_AMP_MAX := 0.12
 
 ## --- チャージ音 ---
 
-## チャージ音の下限・上限の周波数(Hz)。引くほど高い「溜め」の唸り。
-const CHARGE_FREQ_MIN := 130.0
-const CHARGE_FREQ_MAX := 430.0
+## チャージ音の下限・上限の周波数(Hz)。引くほど高い「溜め」の唸り。三角波は倍音を
+## 多く含んで明るく聞こえるので、基音は低めに置く。
+const CHARGE_FREQ_MIN := 55.0
+const CHARGE_FREQ_MAX := 160.0
 
-## チャージ音の最大振幅。引き切ったところで最大。
-const CHARGE_AMP_MAX := 0.28
+## チャージ音の最大振幅。引き切ったところで最大。連続音なので控えめに。
+const CHARGE_AMP_MAX := 0.20
 
 
 ## 回転音の周波数。rps が大きいほど高い。reference rps(その戦闘の最大rps)で頭打ち。

@@ -59,8 +59,9 @@ func _ready() -> void:
 	_ensure_buses()
 	_load_streams()
 	_build_pool()
-	_rotation = _make_tone()
-	_charge = _make_tone()
+	# 回転音は柔らかい正弦波、チャージ音は硬く目立つ三角波。
+	_rotation = _make_tone(ToneSynth.Waveform.SINE)
+	_charge = _make_tone(ToneSynth.Waveform.TRIANGLE)
 
 
 ## SE/BGM バスが無ければ作って Master へ流す。default_bus_layout を置かずコードで
@@ -95,9 +96,10 @@ func _build_pool() -> void:
 		_pool.append(player)
 
 
-func _make_tone() -> ToneSynth:
+func _make_tone(waveform: ToneSynth.Waveform) -> ToneSynth:
 	var tone := ToneSynth.new()
 	tone.bus = SE_BUS
+	tone.waveform = waveform
 	add_child(tone)
 	return tone
 
@@ -116,16 +118,21 @@ func play(key: String) -> void:
 
 
 ## --- 回転音 ---
+##
+## 一旦オフにしている(連続音が短いワンショットSEを覆い隠すため)。フックは Battle 側に
+## 残したまま、ここを true にすれば復活する。
+const ROTATION_ENABLED := false
+
 
 func start_rotation() -> void:
-	if _rotation != null:
+	if ROTATION_ENABLED and _rotation != null:
 		_rotation.set_target(AudioLevels.ROT_FREQ_MIN, 0.0)
 
 
 ## その瞬間の rps に合わせて回転音を鳴らす。ref_rps はその戦闘の最大rps、
 ## lose_threshold 以下では無音になる。
 func update_rotation(rps: float, ref_rps: float, lose_threshold: float) -> void:
-	if _rotation == null:
+	if not ROTATION_ENABLED or _rotation == null:
 		return
 	var freq := AudioLevels.rotation_freq(rps, ref_rps)
 	var amp := AudioLevels.rotation_amplitude(rps, ref_rps, lose_threshold)
