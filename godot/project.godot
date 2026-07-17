@@ -3,7 +3,7 @@
 ; since the parameters that go here are not all obvious.
 ;
 ; Format:
-;   [section] ; section goes to a script
+;   [section] ; section goes between []
 ;   param=value ; assign values to parameters
 
 config_version=5
@@ -28,8 +28,6 @@ window/stretch/aspect="expand"
 
 [gui]
 
-; Godot標準フォントは日本語グリフを持たず豆腐(□)になるため、
-; 日英を1書体で賄えるNoto Sans JP(SIL OFL 1.1)を既定にする。
 theme/custom_font="res://assets/fonts/NotoSansJP-VF.otf"
 
 [internationalization]

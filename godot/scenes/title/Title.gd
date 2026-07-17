@@ -1,5 +1,8 @@
 extends Control
 
+## 遷移先はMainが決める。Titleは「押された」ことだけ知らせる。
+signal start_requested
+
 @onready var _start_button: Button = $CenterContainer/VBoxContainer/StartButton
 @onready var _language_button: Button = $CenterContainer/VBoxContainer/LanguageButton
 
@@ -10,8 +13,8 @@ func _ready() -> void:
 
 
 func _on_start_pressed() -> void:
-	# M3でマップ画面へ遷移させる。
-	GameState.reset_run()
+	# ランの初期化はMainがやる。Titleは押されたことだけ伝える。
+	start_requested.emit()
 
 
 func _on_language_pressed() -> void:

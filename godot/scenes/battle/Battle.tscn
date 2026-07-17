@@ -1,0 +1,79 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scenes/battle/Battle.gd" id="1_battle"]
+[ext_resource type="Script" path="res://scenes/battle/Arena.gd" id="2_arena"]
+[ext_resource type="PackedScene" path="res://scenes/battle/Disc.tscn" id="3_disc"]
+[ext_resource type="Script" path="res://scripts/core/spinner_stats.gd" id="4_stats"]
+[ext_resource type="Script" path="res://scenes/battle/LaunchController.gd" id="5_launch"]
+
+[sub_resource type="Resource" id="Resource_player"]
+script = ExtResource("4_stats")
+mass = 1.5
+radius = 0.5
+friction = 0.98
+restitution = 1.0
+rps = 15.0
+
+[sub_resource type="Resource" id="Resource_enemy"]
+script = ExtResource("4_stats")
+mass = 1.0
+radius = 0.5
+friction = 0.98
+restitution = 1.0
+rps = 15.0
+
+[node name="Battle" type="Node2D"]
+script = ExtResource("1_battle")
+
+[node name="ArenaRoot" type="Node2D" parent="."]
+position = Vector2(390, 110)
+scale = Vector2(50, 50)
+
+[node name="Arena" type="Node2D" parent="ArenaRoot"]
+script = ExtResource("2_arena")
+
+[node name="PlayerDisc" parent="ArenaRoot" instance=ExtResource("3_disc")]
+position = Vector2(2, 8)
+stats = SubResource("Resource_player")
+body_color = Color(0.204, 0.596, 0.859, 1)
+
+[node name="EnemyDisc" parent="ArenaRoot" instance=ExtResource("3_disc")]
+position = Vector2(8, 2)
+stats = SubResource("Resource_enemy")
+body_color = Color(0.906, 0.298, 0.235, 1)
+
+[node name="LaunchController" type="Node2D" parent="ArenaRoot"]
+script = ExtResource("5_launch")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Message" type="Label" parent="UI"]
+offset_left = 390.0
+offset_top = 300.0
+offset_right = 890.0
+offset_bottom = 360.0
+theme_override_font_sizes/font_size = 36
+text = "BATTLE_DRAG_TO_SHOOT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Bars" type="VBoxContainer" parent="UI"]
+offset_left = 390.0
+offset_top = 622.0
+offset_right = 890.0
+offset_bottom = 682.0
+theme_override_constants/separation = 6
+
+[node name="PlayerBar" type="ProgressBar" parent="UI/Bars"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+max_value = 15.0
+value = 15.0
+show_percentage = false
+
+[node name="EnemyBar" type="ProgressBar" parent="UI/Bars"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+max_value = 15.0
+value = 15.0
+show_percentage = false
