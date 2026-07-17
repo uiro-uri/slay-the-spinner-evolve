@@ -45,6 +45,25 @@ godot --headless --path godot --export-release "Web"
 # -> http://localhost:8099/index.html
 ```
 
+## 配信（GitHub Pages）
+
+Web版は **https://uiro-uri.github.io/slay-the-spinner/** で公開しています。
+`main` に push すると `.github/workflows/pages.yml` がビルドし、**`scripts/verify.sh`
+が緑のときだけ**デプロイします（同じスクリプトをそのままゲートに使っており、CI用の
+別実装は持ちません）。pull request ではビルドと検証だけを走らせ、公開はしません。
+
+書き出し成果物はgitに入れません。CIが毎回ビルドして直接配信します。
+
+### `variant/thread_support` を有効にしないでください
+
+有効にするとGodotはSharedArrayBufferを要求し、その利用には COOP/COEP ヘッダが
+必要になります。**GitHub Pagesは独自ヘッダを付けられないため、本番でだけゲームが
+起動しなくなります。** しかも書き出しは成功し、ローカルの `python3 -m http.server`
+経由の確認も通ってしまうので、気づけません。この事故を防ぐため、verify.sh の段階4で
+`export_presets.cfg` を検査して落とすようにしてあります。
+
+（`export_presets.cfg` はGodotが書き戻すためコメントを残せません。ここに書いています。）
+
 ## 検証
 
 ```bash
@@ -61,7 +80,7 @@ scripts/verify.sh --quick   # 描画確認を省略して速く回す
 | 1. import ×2 | **2回目**にエラーが無いこと（1回目は生成物が未作成で正当にエラーになる） |
 | 2. テスト | 終了コード＋完走したテスト数 |
 | 3. ヘッドレス起動 | `ERROR`が出ないこと |
-| 4. 書き出し ×3 | 終了コード＋pckサイズ下限 |
+| 4. 書き出し ×3 | 終了コード＋pckサイズ下限＋`thread_support`が無効なこと |
 | 5. ネイティブ描画 | 実際に起動して描画したフレームが単色でないこと |
 | 6. Web描画 | ブラウザでGodotが起動し、JSエラー0、canvasが単色でないこと |
 

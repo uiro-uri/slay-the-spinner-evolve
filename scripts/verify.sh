@@ -128,6 +128,17 @@ rm -f "$log"
 # 壊れたビルドもexit 0で通るため、pckサイズで焼き漏れを捕まえる。
 stage "4. 書き出し (Web/Linux/Windows)"
 
+# Webプリセットのthread_supportを有効にすると、GodotはSharedArrayBufferを
+# 要求する。それにはCOOP/COEPヘッダが要るが、配信先のGitHub Pagesは独自
+# ヘッダを付けられないため、本番でだけゲームが起動しなくなる。しかも
+# 書き出しは成功し、下のChromium確認もローカルのhttp.server経由では通って
+# しまうので、ここで明示的に弾かないと誰も気づけない。
+if grep -q '^variant/thread_support=true' "$GODOT_PROJECT/export_presets.cfg"; then
+  fail "Webプリセットの variant/thread_support が有効. SharedArrayBufferにCOOP/COEPヘッダが必要になり、GitHub Pagesでは起動しなくなる (ローカルの確認は通ってしまう)"
+else
+  ok "Webプリセットは thread_support 無効 (GitHub Pagesにヘッダ不要)"
+fi
+
 mkdir -p "$BUILD_DIR/web" "$BUILD_DIR/linux" "$BUILD_DIR/windows"
 for preset in Web Linux Windows; do
   log="$(mktemp)"

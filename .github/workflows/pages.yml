@@ -1,0 +1,152 @@
+name: Deploy web build to GitHub Pages
+
+# mainへのpushでWeb版を https://uiro-uri.github.io/slay-the-spinner/ へ公開する。
+# pull_requestでもbuildジョブだけ走らせて、公開せずに検証だけ先に確かめられる
+# ようにしてある。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'godot/**'
+      - 'scripts/**'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'godot/**'
+      - 'scripts/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# 既定は最小権限。デプロイジョブでのみ昇格する。
+permissions:
+  contents: read
+
+# 同時実行は1本に絞る。進行中のデプロイは中断しない
+# (Pagesの公開状態が中途半端になるため)。
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: 4.7.1
+  GODOT_RELEASE: stable
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve Godot paths
+        run: |
+          set -euo pipefail
+          echo "GODOT_BIN=$HOME/.godot-bin/godot4" >> "$GITHUB_ENV"
+          echo "GODOT_TEMPLATE_DIR=$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}" >> "$GITHUB_ENV"
+
+      # 展開後のテンプレートは約2GB。バージョン完全一致でキャッシュする。
+      # restore-keysは付けない: 別バージョンのテンプレートが復元されると
+      # 書き出しが不可解に壊れるため、ミスしたら黙って引き直す方が安全。
+      - name: Cache Godot editor + export templates
+        id: godot-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.godot-bin
+            ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.${{ env.GODOT_RELEASE }}
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux-x86_64-v1
+
+      - name: Install Godot ${{ env.GODOT_VERSION }} + export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-${GODOT_RELEASE}"
+          TMP="$(mktemp -d)"
+
+          # エディタ本体。同じバイナリが --headless CLI を兼ねる。
+          curl -fsSL -o "$TMP/godot.zip" \
+            "$BASE/Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_linux.x86_64.zip"
+          unzip -q "$TMP/godot.zip" -d "$TMP/godot"
+          mkdir -p "$HOME/.godot-bin"
+          mv "$TMP/godot/Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_linux.x86_64" "$GODOT_BIN"
+          chmod +x "$GODOT_BIN"
+
+          # 書き出しテンプレート。.tpzはzipで、中身は templates/ 配下にある。
+          # Godotは <version>.<release>/ の直下にファイルが並んでいることを
+          # 期待するので、templates/ を1段剥がす。
+          curl -fsSL -o "$TMP/templates.tpz" \
+            "$BASE/Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_export_templates.tpz"
+          unzip -q "$TMP/templates.tpz" -d "$TMP/tpz"
+          mkdir -p "$(dirname "$GODOT_TEMPLATE_DIR")"
+          mv "$TMP/tpz/templates" "$GODOT_TEMPLATE_DIR"
+          rm -rf "$TMP"
+
+          # 剥がし方が正しいかを表明する。ここを間違えるとGodotはテンプレート
+          # 未インストール扱いになり、書き出しが落ちる。
+          test -f "$GODOT_TEMPLATE_DIR/version.txt"
+          grep -qx "${GODOT_VERSION}.${GODOT_RELEASE}" "$GODOT_TEMPLATE_DIR/version.txt"
+          test -f "$GODOT_TEMPLATE_DIR/web_nothreads_release.zip"
+
+      - name: Show Godot version
+        run: "$GODOT_BIN --version"
+
+      # verify.sh の ensure_venv は playwright と PIL がimportできれば即returnする。
+      # 先にここで --with-deps 付き(sudoが要る)で用意しておけば、verify.sh側は
+      # 自前のインストールを走らせずにこのvenvを再利用する。
+      # おかげで verify.sh をCI用に改造せずに済む。
+      - name: Pre-warm Playwright venv with system deps
+        run: |
+          set -euo pipefail
+          VENV="$HOME/.cache/slay-the-spinner/venv"
+          python3 -m venv "$VENV"
+          "$VENV/bin/pip" install --quiet --upgrade pip
+          "$VENV/bin/pip" install --quiet playwright pillow
+          "$VENV/bin/python" -m playwright install --with-deps chromium
+          "$VENV/bin/python" -c 'import playwright, PIL'
+
+      # デプロイの門番。開発者がローカルで叩くのと同一のコマンドをそのまま使う。
+      # 「終了コードだけを信用しない」方針の実体がこれなので、CI用に弱い検査へ
+      # 置き換えることはしない。DISPLAYが無いので段階5(ネイティブ描画)だけが
+      # SKIPになり、SKIPは終了コードに影響しない。
+      #
+      # WEB_BOOT_MS: GPUの無いrunnerではソフトウェアレンダリング(SwiftShader)
+      # になり、約40MBのwasmのコンパイルが遅い。既定の15秒では起動を待ちきれない。
+      - name: Verify (gate)
+        env:
+          WEB_BOOT_MS: 45000
+        run: scripts/verify.sh
+
+      # 落ちたときにcanvasのスクリーンショットを見られるようにする。
+      # verify_web.pyは判定より先にscreenshotを撮るので、単色でFAILした場合でも
+      # 画像は残っている。
+      - name: Upload verify artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: verify-artifacts
+          path: build/verify/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
