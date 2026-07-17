@@ -19,22 +19,22 @@ const CELL := Vector2(64.0, 62.0)
 const ORIGIN := Vector2(640.0, 80.0)
 const NODE_RADIUS := 18.0
 
-const COLOR_LINE := Color(0.45, 0.45, 0.5, 0.55)
-const COLOR_VISITED := Color(0.6, 0.75, 0.9)
-const COLOR_CURRENT := Color(0.4, 0.7, 1.0)
-const COLOR_NEXT := Color(0.45, 0.85, 0.5)
-const COLOR_PLAIN := Color(0.75, 0.75, 0.78)
+const COLOR_LINE := Palette.MAP_LINE
+const COLOR_VISITED := Palette.MAP_VISITED
+const COLOR_CURRENT := Palette.MAP_CURRENT
+const COLOR_NEXT := Palette.MAP_NEXT
+const COLOR_PLAIN := Palette.MAP_PLAIN
 
 ## 現在地から進める先へ伸びる線の強調色。COLOR_NEXTに寄せた明るい緑。
-const COLOR_PATH := Color(0.55, 1.0, 0.6, 0.9)
+const COLOR_PATH := Palette.MAP_PATH
 ## 選択可能マスの背後に敷く淡いグロー。低アルファで、明滅で濃さが動く。
-const COLOR_GLOW := Color(0.5, 1.0, 0.55)
+const COLOR_GLOW := Palette.MAP_GLOW
 ## マウスオーバー中のマスの輪郭。
-const COLOR_HOVER_RING := Color(0.85, 1.0, 0.88)
+const COLOR_HOVER_RING := Palette.MAP_HOVER_RING
 ## 現在地を示す常時リング。
-const COLOR_CURRENT_RING := Color(0.6, 0.85, 1.0, 0.9)
+const COLOR_CURRENT_RING := Palette.MAP_CURRENT_RING
 ## ノードの縁取り。
-const COLOR_OUTLINE := Color(0.2, 0.2, 0.25, 0.8)
+const COLOR_OUTLINE := Palette.MAP_OUTLINE
 
 ## グロー環が明滅で広がる最大の追加半径(px)。
 const GLOW_EXTRA := 7.0
@@ -49,6 +49,22 @@ const ENTRANCE_DURATION := 0.35
 ## 選択不能を表す番兵。どのノード座標(段0〜9)とも一致しない。
 const NO_HOVER := Vector2i(-1, -1)
 
+## 縦画面(スマホ)向けの調整。横画面(設計比16:9)では効かない。
+@export_range(0.5, 1.0, 0.01) var portrait_fill: float = 0.9
+@export_range(0.0, 1.0, 0.05) var portrait_vertical_bias: float = 0.7
+
+## 縦画面で、左の取得済みパネル(tscnで右端316)とタイトルを避けるための境界。
+const PANEL_RIGHT := 316.0
+const EDGE_MARGIN := 16.0
+const TITLE_BOTTOM := 52.0
+
+## レイアウトの実効値。既定は設計値(横画面)。縦画面では_recompute_layoutが差し替える。
+var _origin := ORIGIN
+var _cell := CELL
+var _node_radius := NODE_RADIUS
+## 縦画面での拡大率。線幅やグローなどの装飾px にも掛ける。
+var _draw_scale := 1.0
+
 var _tree: MapTree
 var _buttons: Dictionary = {}
 
@@ -56,10 +72,21 @@ var _time := 0.0
 var _entrance := 0.0
 var _hovered_coord := NO_HOVER
 
+@onready var _acquired_list: VBoxContainer = $AcquiredPanel/VBox/Scroll/List
+
+
+func _ready() -> void:
+	# 画面比に合わせてノードの大きさ・間隔・位置を決める。縦画面のときだけ効く。
+	get_viewport().size_changed.connect(_recompute_layout)
+	_recompute_layout()
+
 
 func setup(tree: MapTree) -> void:
+	# 先にレイアウトを確定させてからノードを組む(ボタンが正しい大きさで並ぶ)。
+	_recompute_layout()
 	_tree = tree
 	_rebuild()
+	_rebuild_acquired()
 
 
 func _process(delta: float) -> void:
@@ -84,7 +111,7 @@ func _rebuild() -> void:
 	var reachable := _tree.next_coords()
 	for coord in _tree.nodes:
 		var button := Button.new()
-		button.size = Vector2(NODE_RADIUS, NODE_RADIUS) * 2.0
+		button.size = Vector2(_node_radius, _node_radius) * 2.0
 		button.position = _to_pixel(coord) - button.size * 0.5
 		button.flat = true
 		# ノードIDはメタ情報なので出さない（プロトタイプも同じ判断をしている）。
@@ -120,9 +147,64 @@ func _on_node_unhover(coord: Vector2i) -> void:
 		_hovered_coord = NO_HOVER
 
 
+## このランで取得済みのパーツ一覧を組み直す。集約はカタログの純関数に任せる。
+func _rebuild_acquired() -> void:
+	for child in _acquired_list.get_children():
+		_acquired_list.remove_child(child)
+		child.queue_free()
+
+	var entries := CustomPartCatalog.aggregate_acquired(GameState.acquired_part_ids)
+	if entries.is_empty():
+		var empty := Label.new()
+		empty.text = "MAP_NO_UPGRADES"  # キー＝自動翻訳
+		_acquired_list.add_child(empty)
+		return
+
+	for entry in entries:
+		_acquired_list.add_child(_build_row(entry["part"], entry["count"]))
+
+
+## 取得済みパーツ1件分の行。報酬カード(RewardScreen._build_card)の縮約版。
+## 選択ボタンや明滅はなく、名前＋効果を静的に見せるだけ。
+func _build_row(part: CustomPart, count: int) -> Control:
+	var is_rare := part.rarity == CustomPart.Rarity.RARE
+
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if is_rare:
+		panel.add_theme_stylebox_override("panel", CustomPart.rare_stylebox())
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	panel.add_child(box)
+
+	var title := Label.new()
+	# 個数がある時だけ「×2」を付ける。1個ならキーのまま渡して自動翻訳に任せる。
+	if count > 1:
+		title.text = tr(part.title_key) + tr("PART_COUNT_SUFFIX").format([count])
+	else:
+		title.text = part.title_key
+	title.add_theme_font_size_override("font_size", 16)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(title)
+
+	# 説明文はパーツの実データから生成される（custom_part.gd:describe）ので嘘にならない。
+	var text := Label.new()
+	text.text = part.describe()
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(text)
+
+	if is_rare:
+		# 金色の地は明るいので文字を暗くしないと読めない。報酬カードと同じ扱い。
+		for label in [title, text]:
+			label.add_theme_color_override("font_color", CustomPart.RARE_TEXT_COLOR)
+
+	return panel
+
+
 func _to_pixel(coord: Vector2i) -> Vector2:
 	# 列は中央(2)を基準に左右へ振り分ける。
-	return ORIGIN + Vector2((coord.y - 2) * CELL.x, coord.x * CELL.y)
+	return _origin + Vector2((coord.y - 2) * _cell.x, coord.x * _cell.y)
 
 
 ## 入場フェードのアルファを掛けた色を返す。
@@ -148,22 +230,22 @@ func _draw() -> void:
 			var to := _to_pixel(target)
 			# ノードの縁から縁へ引く。
 			var dir := (to - from).normalized()
-			var a := from + dir * NODE_RADIUS
-			var b := to - dir * NODE_RADIUS
+			var a := from + dir * _node_radius
+			var b := to - dir * _node_radius
 			# 現在地から進める先の辺だけ、明るく太く・薄く明滅させて経路を強調する。
 			if coord == _tree.current_coord and target in reachable:
 				var path_color := COLOR_PATH
 				path_color.a *= lerpf(0.7, 1.0, g)
-				draw_line(a, b, _faded(path_color, e), 3.0, true)
+				draw_line(a, b, _faded(path_color, e), 3.0 * _draw_scale, true)
 			else:
-				draw_line(a, b, _faded(COLOR_LINE, e), 2.0, true)
+				draw_line(a, b, _faded(COLOR_LINE, e), 2.0 * _draw_scale, true)
 
 	# --- 選択可能マスのグロー(ノード本体の背後) ---
 	for coord in reachable:
 		var center := _to_pixel(coord)
 		var glow := COLOR_GLOW
 		glow.a = lerpf(GLOW_ALPHA_MIN, GLOW_ALPHA_MAX, g)
-		draw_circle(center, NODE_RADIUS + GLOW_EXTRA * g, _faded(glow, e))
+		draw_circle(center, _node_radius + GLOW_EXTRA * g * _draw_scale, _faded(glow, e))
 
 	# --- ノード本体 ---
 	for coord in _tree.nodes:
@@ -176,18 +258,69 @@ func _draw() -> void:
 		elif coord.x < _tree.current_step():
 			color = COLOR_VISITED
 
-		var radius := NODE_RADIUS
+		var radius := _node_radius
 		if coord == _hovered_coord:
-			radius += HOVER_GROW
+			radius += HOVER_GROW * _draw_scale
 
 		draw_circle(center, radius, _faded(color, e))
-		draw_arc(center, radius, 0, TAU, 32, _faded(COLOR_OUTLINE, e), 2.0, true)
+		draw_arc(center, radius, 0, TAU, 32, _faded(COLOR_OUTLINE, e), 2.0 * _draw_scale, true)
 
 		# マウスオーバー中のマスは明るい太リングで強調する。
 		if coord == _hovered_coord:
-			draw_arc(center, radius + 1.0, 0, TAU, 32, _faded(COLOR_HOVER_RING, e), 3.0, true)
+			draw_arc(
+				center, radius + 1.0 * _draw_scale, 0, TAU, 32,
+				_faded(COLOR_HOVER_RING, e), 3.0 * _draw_scale, true
+			)
 
 	# --- 現在地マーカー(常時・明滅させない) ---
 	if _tree.nodes.has(_tree.current_coord):
 		var here := _to_pixel(_tree.current_coord)
-		draw_arc(here, NODE_RADIUS + 4.0, 0, TAU, 40, _faded(COLOR_CURRENT_RING, e), 2.0, true)
+		draw_arc(
+			here, _node_radius + 4.0 * _draw_scale, 0, TAU, 40,
+			_faded(COLOR_CURRENT_RING, e), 2.0 * _draw_scale, true
+		)
+
+
+## 画面比に応じてノードの大きさ・間隔・位置を決める。横画面(設計比16:9)は設計値のまま。
+## 縦画面のときだけ、左の取得済みパネルとタイトルを避けた領域へノード群をアスペクト維持で
+## 拡大し、横は領域中央、縦は中央やや下へ寄せる。
+func _recompute_layout() -> void:
+	var visible := get_viewport().get_visible_rect().size
+	if not ScreenLayout.is_portrait(visible):
+		_origin = ORIGIN
+		_cell = CELL
+		_node_radius = NODE_RADIUS
+		_draw_scale = 1.0
+		_reposition_buttons()
+		return
+
+	# ノード群の設計bbox(中心の広がり＋左右上下のノード半径ぶん)。
+	var span := Vector2((MapTree.COLUMN_COUNT - 1) * CELL.x, MapTree.STEP_GOAL * CELL.y)
+	var content := span + Vector2(NODE_RADIUS, NODE_RADIUS) * 2.0
+	# 左パネルとタイトルを避けた領域。
+	var region_pos := Vector2(PANEL_RIGHT + EDGE_MARGIN, TITLE_BOTTOM)
+	var region_size := Vector2(
+		visible.x - PANEL_RIGHT - EDGE_MARGIN * 2.0, visible.y - TITLE_BOTTOM - EDGE_MARGIN
+	)
+	var k := ScreenLayout.fit_scale(content, region_size)
+	var scaled := content * k
+	var top_left := region_pos + ScreenLayout.placement(
+		scaled, region_size, 0.5, portrait_vertical_bias
+	)
+
+	_draw_scale = k
+	_cell = CELL * k
+	_node_radius = NODE_RADIUS * k
+	# 中央列(2)のx。左端ノードの左端が top_left.x に来るよう原点を決める。
+	var half_span := (MapTree.COLUMN_COUNT - 1) * 0.5 * _cell.x
+	_origin = Vector2(top_left.x + _node_radius + half_span, top_left.y + _node_radius)
+	_reposition_buttons()
+
+
+## 既存ボタンの大きさと位置を今のレイアウト値で貼り直す。入場フェードは巻き戻さない。
+func _reposition_buttons() -> void:
+	for coord in _buttons:
+		var button: Button = _buttons[coord]
+		button.size = Vector2(_node_radius, _node_radius) * 2.0
+		button.position = _to_pixel(coord) - button.size * 0.5
+	queue_redraw()

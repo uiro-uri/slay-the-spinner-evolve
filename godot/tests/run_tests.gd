@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "spawn", "battle", "fields", "disc", "wobble", "playtest"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "spawn", "battle", "fields", "disc", "spinaura", "wobble", "contrast", "playtest", "screenlayout", "game_clear"
 ]
 
 
@@ -56,6 +56,9 @@ func _init() -> void:
 	print("== parts ==")
 	_test_parts()
 
+	print("== acquired ==")
+	_test_acquired()
+
 	print("== spawn ==")
 	_test_spawn()
 
@@ -68,11 +71,26 @@ func _init() -> void:
 	print("== disc ==")
 	_test_disc()
 
+	print("== spinaura ==")
+	_test_spin_aura()
+
 	print("== wobble ==")
 	_test_wobble()
 
+	print("== fadeout ==")
+	_test_enemy_fadeout()
+
+	print("== contrast ==")
+	_test_contrast()
+
 	print("== playtest ==")
 	_test_playtest()
+
+	print("== screenlayout ==")
+	_test_screen_layout()
+
+	print("== game_clear ==")
+	_test_game_clear()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -212,6 +230,12 @@ func _test_parts() -> void:
 	_done("parts")
 
 
+func _test_acquired() -> void:
+	var suite = load("res://tests/test_acquired_upgrades.gd").new()
+	suite.run(_check)
+	_done("acquired")
+
+
 func _test_spawn() -> void:
 	var suite = load("res://tests/test_enemy_spawn.gd").new()
 	suite.run(_check)
@@ -236,16 +260,46 @@ func _test_disc() -> void:
 	_done("disc")
 
 
+func _test_spin_aura() -> void:
+	var suite = load("res://tests/test_spin_aura.gd").new()
+	suite.run(_check)
+	_done("spinaura")
+
+
 func _test_wobble() -> void:
 	var suite = load("res://tests/test_telegraph_wobble.gd").new()
 	suite.run(_check)
 	_done("wobble")
 
 
+func _test_enemy_fadeout() -> void:
+	var suite = load("res://tests/test_enemy_fadeout.gd").new()
+	suite.run(_check)
+	_done("fadeout")
+
+
+func _test_contrast() -> void:
+	var suite = load("res://tests/test_contrast.gd").new()
+	suite.run(_check)
+	_done("contrast")
+
+
 func _test_playtest() -> void:
 	var suite = load("res://tests/test_playtest.gd").new()
 	suite.run(_check)
 	_done("playtest")
+
+
+func _test_game_clear() -> void:
+	var suite = load("res://tests/test_game_clear.gd").new()
+	suite.run(_check)
+	_done("game_clear")
+
+
+func _test_screen_layout() -> void:
+	var suite = load("res://tests/test_screen_layout.gd").new()
+	suite.run(_check)
+	_done("screenlayout")
 
 
 func _test_enemies() -> void:

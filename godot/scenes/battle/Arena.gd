@@ -11,11 +11,11 @@ extends Node2D
 const BOUNDS := Rect2(0.0, 0.0, 10.0, 10.0)
 
 const WALL_WIDTH := 0.2
-const WALL_COLOR := Color("d98cd9")
-const FLOOR_COLOR := Color("f0f0f0")
-const CENTER_MARK_COLOR := Color(0, 0, 0, 0.08)
-const OBSTACLE_COLOR := Color("b58cd9")
-const OBSTACLE_HIGHLIGHT := Color("d9c4f0")
+const WALL_COLOR := Palette.NEON_MAGENTA
+const FLOOR_COLOR := Palette.FLOOR
+const CENTER_MARK_COLOR := Palette.FLOOR_MARK
+const OBSTACLE_COLOR := Palette.NEON_VIOLET
+const OBSTACLE_HIGHLIGHT := Palette.NEON_VIOLET_HI
 
 var _bounds: Rect2 = BOUNDS
 var _wall_shape: ArenaWall.WallShape = ArenaWall.WallShape.RECT

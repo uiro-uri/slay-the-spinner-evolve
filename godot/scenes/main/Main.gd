@@ -10,6 +10,7 @@ const MAP_SCENE: PackedScene = preload("res://scenes/map/MapScreen.tscn")
 const BATTLE_SCENE: PackedScene = preload("res://scenes/battle/Battle.tscn")
 const REWARD_SCENE: PackedScene = preload("res://scenes/reward/RewardScreen.tscn")
 const GAMEOVER_SCENE: PackedScene = preload("res://scenes/gameover/GameOver.tscn")
+const GAMECLEAR_SCENE: PackedScene = preload("res://scenes/gameclear/GameClear.tscn")
 
 @onready var _screen_holder: Node = $ScreenHolder
 
@@ -56,10 +57,16 @@ func _on_battle_finished(player_won: bool) -> void:
 		goto_gameover()
 		return
 	if GameState.map_tree.is_goal():
-		# ボスに勝ったらラン終了。TODO: クリア画面。
-		goto_title()
+		# ボスに勝ったらラン終了。クリア画面で締める。
+		goto_gameclear()
 		return
 	goto_reward()
+
+
+func goto_gameclear() -> void:
+	var gameclear := _swap_screen(GAMECLEAR_SCENE)
+	gameclear.to_title_requested.connect(goto_title)
+	gameclear.setup(GameState.acquired_part_ids.size(), GameState.continues_left)
 
 
 func goto_gameover() -> void:

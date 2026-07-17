@@ -106,15 +106,22 @@ scripts/verify.sh --quick   # 描画確認を省略して速く回す
 | 3. ヘッドレス起動 | `ERROR`が出ないこと |
 | 4. 書き出し ×3 | 終了コード＋pckサイズ下限＋`thread_support`が無効なこと |
 | 5. ネイティブ描画 | **書き出したバイナリ**を起動し、描画したフレームが単色でないこと |
-| 6. Web描画 | ブラウザでGodotが起動し、JSエラー0、canvasが単色でないこと |
+| 6. Web描画 | 横(1280x720)と縦(SP=スマホ縦画面)の両方で、ブラウザでGodotが起動し、JSエラー0、canvasが単色でないこと |
+| 7. SP画面遷移描画 | 縦画面でTitle→Map→Battleと遷移させ、各画面が起動・エラー0・単色でないこと |
 
 段階5はプロジェクト（`--path godot`）ではなく `build/linux/` の書き出し済み
 バイナリを起動する。プロジェクトを動かしてもエディタがソースから再生できる
 ことしか分からず、バイナリとpckの組み合わせが壊れていても素通りする。
 実際に配布されるのは書き出した方なので、そちらを起動する。
 
-5と6は `build/verify/native.png` と `build/verify/web.png` を残すので、
-見た目は画像を見て確認する。
+5〜7は `build/verify/` に絵を残すので、見た目は画像を見て確認する:
+`native.png`・`web.png`（横）・`sp.png`（スマホ縦Title）・`sp_map.png`・`sp_battle.png`
+（スマホ縦のMap/Battle）。SP縦の寸法は `SP_W`/`SP_H`（既定 390x844）、縦画面での
+縦寄せは `SP_BIAS`（既定 0.7、Godot側 `portrait_vertical_bias` と合わせる）で変えられる。
+
+Map/Battleは縦画面のときだけ、コンテンツを幅いっぱいへ拡大し中央やや下へ寄せる
+レスポンシブ配置になる（横画面の見た目は変えない）。各画面の `portrait_fill` /
+`portrait_vertical_bias` はInspectorから手触りで調整できる。
 
 個別に回す場合:
 

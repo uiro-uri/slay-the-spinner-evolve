@@ -9,8 +9,9 @@ extends Node2D
 ##
 ## 座標はアリーナのユニット系。ArenaRootの子として置くこと。
 
-## プロトタイプの velocityArrow と同じ lime。
-const ARROW_COLOR := Color(0, 1, 0)
+## プロトタイプの velocityArrow と同じ lime 系。純緑は暗い床でも十分映えるが、
+## Palette.AIM に寄せて予告(赤)と対の彩度に揃える。
+const ARROW_COLOR := Palette.AIM
 
 ## 引いた距離(ユニット)を初速(ユニット/秒)に変換する倍率。
 @export_range(0.1, 20.0, 0.1) var pull_to_speed: float = 5.0

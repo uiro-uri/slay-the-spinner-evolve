@@ -21,11 +21,11 @@ extends Node2D
 ## ここを上げる。
 @export_range(0.2, 20.0, 0.1) var max_radius: float = 2.4
 
-## 出た瞬間の色。プロトタイプの rgba(255, 0, 255, 0.8)。
-@export var start_color: Color = Color(1.0, 0.0, 1.0, 0.8)
+## 出た瞬間の色。プロトタイプの rgba(255, 0, 255, 0.8) 相当。
+@export var start_color: Color = Color(Palette.SPARK_START, 0.8)
 
 ## 消える時の色。プロトタイプの rgba(255, 255, 125, 0.0)。
-@export var end_color: Color = Color(1.0, 1.0, 0.49, 0.0)
+@export var end_color: Color = Palette.SPARK_END
 
 var _elapsed: float = 0.0
 

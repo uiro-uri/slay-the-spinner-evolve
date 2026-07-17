@@ -38,3 +38,4 @@ locale/translations=PackedStringArray("res://translations/strings.en.translation
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.054902, 0.043137, 0.101961, 1)

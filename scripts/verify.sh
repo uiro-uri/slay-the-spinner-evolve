@@ -238,7 +238,19 @@ else
 fi
 
 # --- 6. web render ----------------------------------------------------------
-stage "6. Web描画 (Chromium)"
+# 横(1280x720)と縦(SP=スマホ縦画面)の両方で描画を確認する。SP版とはWeb版を
+# スマホの縦画面ブラウザで開いた状態のこと(専用ビルドはない)。判定基準は
+# ビューポートに依らず同じ(起動/JSエラー0/単色でない)。崩れ具合はそれぞれ
+# 残すスクリーンショットを人が見て確認する。SP縦の寸法は SP_W/SP_H で変えられる。
+stage "6. Web描画 (Chromium, 横1280x720 と 縦SP)"
+
+SP_W="${SP_W:-390}"; SP_H="${SP_H:-844}"
+
+# チェック対象: "キー|ラベル|幅|高さ|出力png"
+web_specs=(
+  "web|横 1280x720|1280|720|web.png"
+  "sp|縦 SP ${SP_W}x${SP_H}|${SP_W}|${SP_H}|sp.png"
+)
 
 if [[ $QUICK -eq 1 ]]; then
   skip "--quick のため省略"
@@ -252,23 +264,72 @@ elif ss -tln 2>/dev/null | grep -q ":${WEB_PORT} "; then
   fail "ポート ${WEB_PORT} が既に使用中。古いサーバーを止めるか WEB_PORT を変えてください"
 else
   mkdir -p "$ARTIFACT_DIR"
+  # サーバーは一度だけ立て、横と縦を同じビルドに対して確認する。
   (cd "$BUILD_DIR/web" && exec python3 -m http.server "$WEB_PORT" >/dev/null 2>&1) &
   server_pid=$!
   sleep 2
-  out="$("$VENV_DIR/bin/python" "$REPO_ROOT/scripts/verify_web.py" "$WEB_PORT" "$ARTIFACT_DIR/web.png")"
-  web_rc=$?
+
+  for spec in "${web_specs[@]}"; do
+    IFS='|' read -r _key label w h png <<<"$spec"
+    out="$("$VENV_DIR/bin/python" "$REPO_ROOT/scripts/verify_web.py" "$WEB_PORT" "$ARTIFACT_DIR/$png" "$w" "$h")"
+    web_rc=$?
+    if [[ $web_rc -ne 0 || -z "$out" ]]; then
+      fail "Web描画の確認を実行できなかった ($label)"
+      continue
+    fi
+    IFS='|' read -r n_err n_colors booted <<<"$(tail -1 <<<"$out")"
+    [[ "$booted" == "1" ]] && ok "ブラウザでGodotが起動 ($label)" || fail "ブラウザでGodotが起動しなかった ($label)"
+    [[ "$n_err" == "0" ]] && ok "JSエラーなし ($label)" || fail "JSエラー ${n_err}件 ($label)"
+    if [[ ! "$n_colors" =~ ^[0-9]+$ ]] || [[ "$n_colors" -lt 3 ]]; then
+      fail "canvasが実質ブランク ($label, 色数 $n_colors)"
+    else
+      ok "canvas描画OK ($label, 色数 $n_colors) -> build/verify/$png"
+    fi
+  done
+
+  kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
+fi
+
+# --- 7. SP画面遷移描画 ------------------------------------------------------
+# 段階6のsp.pngは起動直後のTitleしか写らない。Map(ステージ選択)とBattle(戦闘)の
+# 縦画面レイアウトを人が目視できるよう、実ブラウザでTitle→Map→Battleと遷移させて
+# 各画面を撮る。canvas単色でない・起動・エラー0は自動判定するが、拡大や中央やや下の
+# 当否は残す sp_map.png / sp_battle.png を人が見て確かめる(既存の「画像を見る」方針)。
+stage "7. SP画面遷移描画 (Map/Battle, 縦${SP_W}x${SP_H})"
+
+if [[ $QUICK -eq 1 ]]; then
+  skip "--quick のため省略"
+elif ! ensure_venv; then
+  skip "venvを用意できない ($VENV_DIR)"
+elif [[ ! -f "$BUILD_DIR/web/index.html" ]]; then
+  skip "Web書き出しがない"
+elif ss -tln 2>/dev/null | grep -q ":${WEB_PORT} "; then
+  fail "ポート ${WEB_PORT} が既に使用中。古いサーバーを止めるか WEB_PORT を変えてください"
+else
+  mkdir -p "$ARTIFACT_DIR"
+  (cd "$BUILD_DIR/web" && exec python3 -m http.server "$WEB_PORT" >/dev/null 2>&1) &
+  server_pid=$!
+  sleep 2
+  out="$("$VENV_DIR/bin/python" "$REPO_ROOT/scripts/verify_sp_screens.py" \
+    "$WEB_PORT" "$ARTIFACT_DIR/sp_map.png" "$ARTIFACT_DIR/sp_battle.png" "$SP_W" "$SP_H")"
+  sp_rc=$?
   kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
 
-  if [[ $web_rc -ne 0 || -z "$out" ]]; then
-    fail "Web描画の確認を実行できなかった"
+  if [[ $sp_rc -ne 0 || -z "$out" ]]; then
+    fail "SP画面遷移の確認を実行できなかった"
   else
-    IFS='|' read -r n_err n_colors booted <<<"$(tail -1 <<<"$out")"
-    [[ "$booted" == "1" ]] && ok "ブラウザでGodotが起動" || fail "ブラウザでGodotが起動しなかった"
-    [[ "$n_err" == "0" ]] && ok "JSエラーなし" || fail "JSエラー ${n_err}件"
-    if [[ ! "$n_colors" =~ ^[0-9]+$ ]] || [[ "$n_colors" -lt 3 ]]; then
-      fail "canvasが実質ブランク (色数 $n_colors)"
+    IFS='|' read -r n_err map_colors battle_colors booted <<<"$(tail -1 <<<"$out")"
+    [[ "$booted" == "1" ]] && ok "ブラウザでGodotが起動 (SP遷移)" || fail "ブラウザでGodotが起動しなかった (SP遷移)"
+    [[ "$n_err" == "0" ]] && ok "JS/Godotエラーなし (SP遷移)" || fail "SP遷移中にエラー ${n_err}件"
+    if [[ ! "$map_colors" =~ ^[0-9]+$ ]] || [[ "$map_colors" -lt 3 ]]; then
+      fail "Map(縦)が実質ブランク (色数 $map_colors)"
     else
-      ok "canvas描画OK (色数 $n_colors) -> build/verify/web.png"
+      ok "Map(縦)描画OK (色数 $map_colors) -> build/verify/sp_map.png"
+    fi
+    if [[ ! "$battle_colors" =~ ^[0-9]+$ ]] || [[ "$battle_colors" -lt 3 ]]; then
+      fail "Battle(縦)が実質ブランク (色数 $battle_colors)"
+    else
+      ok "Battle(縦)描画OK (色数 $battle_colors) -> build/verify/sp_battle.png"
     fi
   fi
 fi

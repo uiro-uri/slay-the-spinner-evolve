@@ -23,14 +23,14 @@ restitution = 1.0
 rps = 15.0
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_bar_bg"]
-bg_color = Color(0.101961, 0.101961, 0.12549, 0.6)
+bg_color = Color(0.098039, 0.078431, 0.2, 0.6)
 corner_radius_top_left = 4
 corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_player_fill"]
-bg_color = Color(0.204, 0.596, 0.859, 1)
+bg_color = Color(0.129412, 0.901961, 1, 1)
 corner_radius_top_left = 4
 corner_radius_top_right = 4
 corner_radius_bottom_right = 4
@@ -50,7 +50,7 @@ script = ExtResource("2_arena")
 [node name="PlayerDisc" parent="ArenaRoot" instance=ExtResource("3_disc")]
 position = Vector2(2, 8)
 stats = SubResource("Resource_player")
-body_color = Color(0.204, 0.596, 0.859, 1)
+body_color = Color(0.129412, 0.901961, 1, 1)
 
 [node name="EnemyDiscs" type="Node2D" parent="ArenaRoot"]
 

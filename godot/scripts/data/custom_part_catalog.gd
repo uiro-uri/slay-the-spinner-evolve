@@ -76,6 +76,27 @@ static func by_id(id: int) -> CustomPart:
 	return null
 
 
+## 取得済みIDの配列を初出順に集約する。{"part": CustomPart, "count": int} の配列を返す。
+## 同じパーツを複数回取っても1エントリにまとめ、countで個数を持たせる。
+## UIから切り離した純関数にして、ツリー不要でヘッドレステストできるようにする。
+static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
+	var order: Array[int] = []          # 初出順を保つ
+	var counts: Dictionary = {}          # id -> count
+	for id in ids:
+		if not counts.has(id):
+			order.append(id)
+			counts[id] = 0
+		counts[id] += 1
+
+	var result: Array[Dictionary] = []
+	for id in order:
+		var part := by_id(id)
+		# 未知IDは無視する（通常起きないが防御的に）。
+		if part != null:
+			result.append({"part": part, "count": counts[id]})
+	return result
+
+
 ## 報酬として見せる候補を重複なしで選ぶ。
 ##
 ## プロトタイプはk=3で引き直しては重複が消えるまでやり直していた(しかも

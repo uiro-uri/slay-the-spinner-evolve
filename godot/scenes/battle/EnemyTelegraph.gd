@@ -19,7 +19,7 @@ extends Node2D
 ## ArenaRootの子として置くこと（座標はアリーナのユニット系）。
 
 ## プレイヤーの狙い(lime)と対になる赤。
-@export var color: Color = Color(1, 0.2, 0.2, 0.85)
+@export var color: Color = Color(Palette.ENEMY, 0.85)
 
 ## 三角形の長さ。速い敵ほど長く出るので、強さが見た目で分かる。
 ##
