@@ -66,13 +66,14 @@ static func play_one(
 			break
 		tree.advance_to(nexts[rng.randi_range(0, nexts.size() - 1)])
 
-		var enemy := EnemyRoster.pick_for_step(tree.current_step(), rng)
+		var group := EnemyRoster.pick_group_for_step(tree.current_step(), rng)
 		var record := BattleSim.play_one(
-			rng.randi(), enemy, launch_policy, stats, overrides
+			rng.randi(), group, launch_policy, stats, overrides
 		)
 		battles.append({
 			"step": tree.current_step(),
 			"level": record["level"],
+			"count": record["count"],
 			"win": record["win"],
 			"finish_time": record["finish_time"],
 			"rps_before": stats.rps,

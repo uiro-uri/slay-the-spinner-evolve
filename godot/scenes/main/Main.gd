@@ -34,13 +34,13 @@ func goto_map() -> void:
 	map.setup(GameState.map_tree)
 
 
-## 進む先を選んだら、その段にふさわしい敵と土俵を決めて戦闘へ。
+## 進む先を選んだら、その段にふさわしい敵グループ(1〜3体)と土俵を決めて戦闘へ。
 func _on_map_node_chosen(coord: Vector2i) -> void:
 	if not GameState.map_tree.advance_to(coord):
 		push_error("Main: 進めないノードが選ばれた: %s" % coord)
 		return
 	var step := GameState.map_tree.current_step()
-	GameState.pending_enemy = EnemyRoster.pick_for_step(step)
+	GameState.pending_enemies = EnemyRoster.pick_group_for_step(step)
 	GameState.pending_field = FieldRoster.pick_for_step(step)
 	goto_battle()
 
@@ -70,7 +70,7 @@ func goto_gameover() -> void:
 
 
 ## コンティニュー: 回数を1消費し、同じ相手・同じマップ位置で戦闘へ戻る。
-## pending_enemyもcurrent_coordも触らないので、そのまま再挑戦になる。
+## pending_enemiesもcurrent_coordも触らないので、同じグループでそのまま再挑戦になる。
 func _on_continue_requested() -> void:
 	if not GameState.use_continue():
 		# 残0で来たら念のためタイトルへ（通常はボタンが隠れて起きない）。

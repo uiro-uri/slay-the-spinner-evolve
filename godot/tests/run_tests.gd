@@ -118,12 +118,13 @@ func _test_gamestate_autoload() -> void:
 	var game_state: Node = load("res://autoloads/GameState.gd").new()
 	var part_ids: Array[int] = [1, 2]
 	game_state.acquired_part_ids = part_ids
-	game_state.pending_enemy = EnemyRoster.all()[0]
+	var pending: Array[EnemyData] = [EnemyRoster.all()[0]]
+	game_state.pending_enemies = pending
 	game_state.pending_field = FieldRoster.all()[0]
 	game_state.reset_run()
 
 	_check(game_state.acquired_part_ids.is_empty(), "reset_run()でacquired_part_idsが空になる")
-	_check(game_state.pending_enemy == null, "reset_run()でpending_enemyが消える")
+	_check(game_state.pending_enemies.is_empty(), "reset_run()でpending_enemiesが空になる")
 	_check(game_state.pending_field == null, "reset_run()でpending_fieldが消える")
 	_check(game_state.player_stats != null, "reset_run()でプレイヤーの性能が用意される")
 	_check(game_state.map_tree != null, "reset_run()でマップが生成される")
@@ -268,5 +269,43 @@ func _test_enemies() -> void:
 		if tr(enemy.display_name) == enemy.display_name:
 			untranslated.append(enemy.display_name)
 	_check(untranslated.is_empty(), "敵の名前に訳がある (未訳: %s)" % [untranslated])
+
+	# 複数敵グループ。どの段でも1〜3体の非空グループが返り、各体の性能が正常なこと。
+	var group_rng := RandomNumberGenerator.new()
+	group_rng.seed = 3
+	var all_valid := true
+	var count_in_range := true
+	for _iter in range(200):
+		for step in range(1, MapTree.STEP_GOAL + 1):
+			var group := EnemyRoster.pick_group_for_step(step, group_rng)
+			if group.is_empty() or group.size() > 3:
+				count_in_range = false
+			for member in group:
+				if member == null or member.stats == null or member.stats.rps <= 0.0:
+					all_valid = false
+	_check(count_in_range, "グループ: どの段でも1〜3体が返る")
+	_check(all_valid, "グループ: 各体の性能が正常(stats非null・rps>0)")
+
+	# ボス段は常に単体。
+	var boss_rng := RandomNumberGenerator.new()
+	boss_rng.seed = 5
+	var boss_always_single := true
+	for _iter in range(200):
+		if EnemyRoster.pick_group_for_step(MapTree.STEP_GOAL, boss_rng).size() != 1:
+			boss_always_single = false
+	_check(boss_always_single, "グループ: ボス段(段%d)は常に単体" % MapTree.STEP_GOAL)
+
+	# 弱体化は複製に対して行い、共有Resourceを壊さないこと。同じ敵をグループ用に
+	# 取り出しても、元のall()のrpsは変わらない。
+	var lvl1_rps_before: float = EnemyRoster.of_level(1)[0].stats.rps
+	var scale_rng := RandomNumberGenerator.new()
+	scale_rng.seed = 9
+	for _iter in range(200):
+		EnemyRoster.pick_group_for_step(3, scale_rng)
+	var lvl1_rps_after: float = EnemyRoster.of_level(1)[0].stats.rps
+	_check(
+		is_equal_approx(lvl1_rps_before, lvl1_rps_after),
+		"グループ: 弱体化が共有Resourceを壊さない (%.2f -> %.2f)" % [lvl1_rps_before, lvl1_rps_after]
+	)
 
 	_done("enemies")

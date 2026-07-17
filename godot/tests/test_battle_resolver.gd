@@ -17,6 +17,7 @@ func run(check: Callable) -> void:
 	_test_wall_impacts(check)
 	_test_sampling(check)
 	_test_outcome(check)
+	_test_multi_enemy(check)
 
 
 func _stats(mass: float, radius: float, rps: float) -> SpinnerStats:
@@ -32,7 +33,7 @@ func _stats(mass: float, radius: float, rps: float) -> SpinnerStats:
 func _request() -> BattleRequest:
 	var r := BattleRequest.new()
 	r.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(2, 8), Vector2(6, -6))
-	r.enemy = BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(8, 2), Vector2(-3, 4))
+	r.enemies = [BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(8, 2), Vector2(-3, 4))]
 	return r
 
 
@@ -85,6 +86,11 @@ func _test_serialization_round_trip(check: Callable) -> void:
 	check.call(
 		result_revived.player_frames.size() == a.player_frames.size(),
 		"結果: dictを通してもフレーム数が変わらない"
+	)
+	check.call(
+		result_revived.enemy_tracks.size() == a.enemy_tracks.size()
+		and result_revived.enemy_tracks[0].size() == a.enemy_tracks[0].size(),
+		"結果: dictを通しても敵トラックが変わらない"
 	)
 	check.call(
 		result_revived.impacts.size() == a.impacts.size(),
@@ -149,7 +155,7 @@ func _test_frames_and_time(check: Callable) -> void:
 
 	check.call(result.player_frames.size() > 1, "解決: 軌跡が記録されている (%d)" % result.player_frames.size())
 	check.call(
-		result.player_frames.size() == result.enemy_frames.size(),
+		result.player_frames.size() == result.enemy_tracks[0].size(),
 		"解決: 両者のフレーム数が揃っている"
 	)
 	# フレーム数と決着時刻が刻み幅で整合すること
@@ -178,7 +184,7 @@ func _test_wall_impacts(check: Callable) -> void:
 	# 壁のすぐ内側から速く撃つ。敵は反対側で静止させ、コマ同士では当たらないようにする。
 	var r := BattleRequest.new()
 	r.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(0.8, 5), Vector2(-8, 0))
-	r.enemy = BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(9, 5), Vector2.ZERO)
+	r.enemies = [BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(9, 5), Vector2.ZERO)]
 
 	var result := BattleResolver.resolve(r)
 
@@ -223,7 +229,7 @@ func _test_outcome(check: Callable) -> void:
 	# 圧倒的に有利な条件なら勝つ。数値ではなく向きを見る。
 	var r := _request()
 	r.player = BattleRequest.Launch.new(_stats(5.0, 1.0, 40.0), Vector2(2, 8), Vector2(6, -6))
-	r.enemy = BattleRequest.Launch.new(_stats(0.5, 0.5, 1.0), Vector2(8, 2), Vector2(-3, 4))
+	r.enemies = [BattleRequest.Launch.new(_stats(0.5, 0.5, 1.0), Vector2(8, 2), Vector2(-3, 4))]
 	var strong := BattleResolver.resolve(r)
 	check.call(
 		strong.outcome == BattleResult.Outcome.PLAYER_WIN,
@@ -234,10 +240,77 @@ func _test_outcome(check: Callable) -> void:
 	# 逆なら負ける
 	var r2 := _request()
 	r2.player = BattleRequest.Launch.new(_stats(0.5, 0.5, 1.0), Vector2(2, 8), Vector2(6, -6))
-	r2.enemy = BattleRequest.Launch.new(_stats(5.0, 1.0, 40.0), Vector2(8, 2), Vector2(-3, 4))
+	r2.enemies = [BattleRequest.Launch.new(_stats(5.0, 1.0, 40.0), Vector2(8, 2), Vector2(-3, 4))]
 	var weak := BattleResolver.resolve(r2)
 	check.call(
 		weak.outcome == BattleResult.Outcome.ENEMY_WIN,
 		"解決: 回転で大きく負けていれば負ける (%s)" % ["draw", "player", "enemy"][weak.outcome]
 	)
 	check.call(not weak.player_won(), "解決: 負けたらplayer_won()は偽")
+
+
+## 複数敵(乱戦)。全敵を倒したときだけ勝ち、プレイヤーが落ちれば残っていても負け。
+## 各トラックの長さが揃い、敵同士の衝突も記録され、決定性とJSON往復も保つこと。
+func _test_multi_enemy(check: Callable) -> void:
+	# 弱い敵3体をプレイヤーの周りに置く。強いプレイヤーが全部倒すはず。
+	var r := _request()
+	r.player = BattleRequest.Launch.new(_stats(5.0, 1.0, 40.0), Vector2(5, 5), Vector2(2, 1))
+	r.enemies = [
+		BattleRequest.Launch.new(_stats(0.5, 0.5, 2.0), Vector2(2, 2), Vector2(2, 2)),
+		BattleRequest.Launch.new(_stats(0.5, 0.5, 2.0), Vector2(8, 2), Vector2(-2, 2)),
+		BattleRequest.Launch.new(_stats(0.5, 0.5, 2.0), Vector2(8, 8), Vector2(-2, -2)),
+	]
+	var result := BattleResolver.resolve(r)
+
+	check.call(result.enemy_tracks.size() == 3, "乱戦: 敵の数だけトラックがある (%d)" % result.enemy_tracks.size())
+	# 全トラックの長さがプレイヤーと揃う
+	var aligned := true
+	for track in result.enemy_tracks:
+		if track.size() != result.player_frames.size():
+			aligned = false
+	check.call(aligned, "乱戦: 全トラックの長さがプレイヤーと揃う")
+	check.call(
+		result.outcome == BattleResult.Outcome.PLAYER_WIN,
+		"乱戦: 全敵を倒せば勝ち (%s)" % ["draw", "player", "enemy"][result.outcome]
+	)
+
+	# プレイヤーが圧倒的に弱ければ、敵が残っていても負ける。
+	var r2 := _request()
+	r2.player = BattleRequest.Launch.new(_stats(0.5, 0.5, 1.0), Vector2(5, 5), Vector2(1, 0))
+	r2.enemies = [
+		BattleRequest.Launch.new(_stats(5.0, 1.0, 40.0), Vector2(2, 5), Vector2(3, 0)),
+		BattleRequest.Launch.new(_stats(5.0, 1.0, 40.0), Vector2(8, 5), Vector2(-3, 0)),
+	]
+	var loss := BattleResolver.resolve(r2)
+	check.call(
+		loss.outcome == BattleResult.Outcome.ENEMY_WIN,
+		"乱戦: プレイヤーが落ちれば敵が残っていても負け (%s)" % ["draw", "player", "enemy"][loss.outcome]
+	)
+
+	# 敵同士の衝突が起きること。プレイヤーを隅で静止させ、2体を正面衝突させる。
+	var r3 := BattleRequest.new()
+	r3.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(0.6, 0.6), Vector2.ZERO)
+	r3.enemies = [
+		BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(3, 5), Vector2(6, 0)),
+		BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(7, 5), Vector2(-6, 0)),
+	]
+	var clash := BattleResolver.resolve(r3)
+	check.call(clash.impacts.size() > 0, "乱戦: 敵同士の衝突が記録される (%d回)" % clash.impacts.size())
+
+	# 決定性: 同じ入力なら同じ結果。
+	var again := BattleResolver.resolve(r)
+	check.call(
+		again.outcome == result.outcome and absf(again.finish_time - result.finish_time) < EPS,
+		"乱戦: 同じ入力なら同じ結果"
+	)
+
+	# JSON往復しても結果が変わらない(サーバー化の前提)。
+	var json := JSON.stringify(r.to_dict())
+	var parsed = JSON.parse_string(json)
+	check.call(parsed != null, "乱戦: リクエストがJSONを通る")
+	if parsed != null:
+		var revived := BattleResolver.resolve(BattleRequest.from_dict(parsed))
+		check.call(
+			revived.outcome == result.outcome and absf(revived.finish_time - result.finish_time) < EPS,
+			"乱戦: JSONを通しても同じ結果"
+		)

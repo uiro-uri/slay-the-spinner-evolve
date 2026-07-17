@@ -168,7 +168,7 @@ func _test_localization(check: Callable) -> void:
 func _test_serialization(check: Callable) -> void:
 	var r := BattleRequest.new()
 	r.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(2, 8), Vector2(6, -6))
-	r.enemy = BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(8, 2), Vector2(-3, 4))
+	r.enemies = [BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(8, 2), Vector2(-3, 4))]
 	r.wall_shape = ArenaWall.WallShape.OCTAGON
 	r.obstacles = [Vector3(3, 3, 0.6), Vector3(7, 7, 0.6)]
 

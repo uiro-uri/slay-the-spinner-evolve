@@ -52,7 +52,10 @@ class Launch:
 
 
 var player: Launch
-var enemy: Launch
+
+## 敵は複数出うる（乱戦）。1体なら要素1の配列。順序はシリアライズ往復でも
+## 保たれ、決定性のある衝突解決順(=index順)の土台になるので崩さないこと。
+var enemies: Array[Launch] = []
 
 ## アリーナ。中心と壁はここから決まる。
 var arena_bounds: Rect2 = Rect2(0, 0, 10, 10)
@@ -83,7 +86,7 @@ var max_duration: float = 120.0
 func to_dict() -> Dictionary:
 	return {
 		"player": player.to_dict(),
-		"enemy": enemy.to_dict(),
+		"enemies": enemies.map(func(e: Launch) -> Dictionary: return e.to_dict()),
 		"arena": [arena_bounds.position.x, arena_bounds.position.y,
 			arena_bounds.size.x, arena_bounds.size.y],
 		"wall_shape": int(wall_shape),
@@ -104,7 +107,10 @@ func to_dict() -> Dictionary:
 static func from_dict(d: Dictionary) -> BattleRequest:
 	var r := BattleRequest.new()
 	r.player = Launch.from_dict(d["player"])
-	r.enemy = Launch.from_dict(d["enemy"])
+	var enemies_: Array[Launch] = []
+	for ed in d["enemies"]:
+		enemies_.append(Launch.from_dict(ed))
+	r.enemies = enemies_
 	r.arena_bounds = Rect2(d["arena"][0], d["arena"][1], d["arena"][2], d["arena"][3])
 	r.wall_shape = d["wall_shape"]
 	var obstacles_: Array[Vector3] = []

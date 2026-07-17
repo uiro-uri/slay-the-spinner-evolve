@@ -27,10 +27,10 @@ class Overrides:
 			request.violence = violence
 
 
-## 1戦。シードが同じなら結果も同じ。
+## 1戦。シードが同じなら結果も同じ。敵は複数体(乱戦)もありうる。
 static func play_one(
 	seed_value: int,
-	enemy: EnemyData,
+	enemies: Array[EnemyData],
 	policy: LaunchPolicy.Kind,
 	player_stats: SpinnerStats,
 	overrides: Overrides = null
@@ -44,24 +44,36 @@ static func play_one(
 
 	var arena := request.arena_bounds
 
-	# Battle._plan_enemy_spawn と同じ手順で出現を決める
-	var plan := EnemySpawn.plan(
-		arena.get_center(), SPAWN_RING, enemy.launch_speed,
-		SPAWN_SPREAD_DEG, rng, enemy.stats.radius, arena.size.x * 0.5
-	)
+	# Battle._spawn_enemy と同じ手順で、各敵の出現を index順に決める。
+	var plans: Array[EnemySpawn.Plan] = []
+	var enemy_launches: Array[BattleRequest.Launch] = []
+	var top_level := 0
+	for enemy in enemies:
+		var plan := EnemySpawn.plan(
+			arena.get_center(), SPAWN_RING, enemy.launch_speed,
+			SPAWN_SPREAD_DEG, rng, enemy.stats.radius, arena.size.x * 0.5
+		)
+		plans.append(plan)
+		enemy_launches.append(
+			BattleRequest.Launch.new(enemy.stats, plan.position, plan.velocity)
+		)
+		top_level = maxi(top_level, enemy.level)
 
-	var launch := LaunchPolicy.decide(policy, arena, player_stats.radius, plan, rng)
+	# 発射方針には先頭の敵の予告を渡す。乱戦でもプレイヤーの発射は1回きりなので、
+	# 狙う基準を1つに固定して決定性を保つ。
+	var launch := LaunchPolicy.decide(policy, arena, player_stats.radius, plans[0], rng)
 
 	request.player = BattleRequest.Launch.new(player_stats, launch.position, launch.velocity)
-	request.enemy = BattleRequest.Launch.new(enemy.stats, plan.position, plan.velocity)
+	request.enemies = enemy_launches
 
 	var result := BattleResolver.resolve(request)
 	var violations := PlaytestInvariants.check(request, result)
 
 	var record := {
 		"seed": seed_value,
-		"level": enemy.level,
-		"enemy": enemy.display_name,
+		"level": top_level,
+		"count": enemies.size(),
+		"enemy": enemies[0].display_name,
 		"policy": LaunchPolicy.NAMES[policy],
 		"shape": int(request.stage_shape),
 		"violence": request.violence,

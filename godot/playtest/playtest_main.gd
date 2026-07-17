@@ -58,7 +58,10 @@ func _init() -> void:
 				var pick_rng := RandomNumberGenerator.new()
 				pick_rng.seed = seed_value
 				var enemy := pool[pick_rng.randi_range(0, pool.size() - 1)]
-				var record := BattleSim.play_one(seed_value, enemy, policy, stats, overrides)
+				# このsweepはレベル別バランス計測用なので単体で回す(乱戦は
+				# RunSimがpick_group_for_step経由で通す)。
+				var enemies: Array[EnemyData] = [enemy]
+				var record := BattleSim.play_one(seed_value, enemies, policy, stats, overrides)
 				if record.has("violations"):
 					violations += 1
 				out.store_line(JSON.stringify(record))
