@@ -14,6 +14,14 @@ extends RefCounted
 ## 覆うマゼンタの塊は、衝突エフェクト(1pxの円をscale(1000)=直径1000pxまで
 ## 広げていた)の方だった。
 
+## アリーナの外周の形。矩形のほか、正多角形で非矩形の土俵を作れる。
+## ROUNDは辺の多い正多角形で円を近似する（ArenaWallは点＋法線の半平面なので
+## 曲面そのものは表せない。辺を増やせば円に見え、壁の当たり判定は無改造で通る）。
+enum WallShape { RECT, OCTAGON, ROUND }
+
+const _OCTAGON_SIDES := 8
+const _ROUND_SIDES := 32
+
 ## 壁上の任意の1点。
 var point: Vector2
 
@@ -49,3 +57,82 @@ static func from_rect(bounds: Rect2) -> Array[ArenaWall]:
 		ArenaWall.new(Vector2(center.x, bounds.position.y), Vector2.DOWN),
 		ArenaWall.new(Vector2(center.x, bounds.end.y), Vector2.UP),
 	]
+
+
+## 正多角形の各辺を「辺の中点 + 内向き法線」の半平面として返す。
+## 頂点は角度 i*TAU/sides、辺の中点はその半区画ずれた (i+0.5)*TAU/sides の向き。
+## 中心から辺までの距離(apothem) = circumradius * cos(PI/sides)。
+static func from_polygon(center: Vector2, circumradius: float, sides: int) -> Array[ArenaWall]:
+	var walls: Array[ArenaWall] = []
+	var apothem := circumradius * cos(PI / float(sides))
+	for i in sides:
+		var outward := Vector2.RIGHT.rotated((float(i) + 0.5) / float(sides) * TAU)
+		walls.append(ArenaWall.new(center + outward * apothem, -outward))
+	return walls
+
+
+## wall_shape に応じて壁を組む。RECTは既存のfrom_rect、それ以外は正多角形。
+static func build(shape: WallShape, bounds: Rect2) -> Array[ArenaWall]:
+	match shape:
+		WallShape.OCTAGON:
+			return from_polygon(bounds.get_center(), _circumradius(bounds), _OCTAGON_SIDES)
+		WallShape.ROUND:
+			return from_polygon(bounds.get_center(), _circumradius(bounds), _ROUND_SIDES)
+		_:
+			return from_rect(bounds)
+
+
+## 描画用の外周頂点列。閉じた輪郭や床の塗りに使う。RECTはboundsの四隅。
+static func outline_points(shape: WallShape, bounds: Rect2) -> PackedVector2Array:
+	if shape == WallShape.RECT:
+		return PackedVector2Array([
+			bounds.position,
+			Vector2(bounds.end.x, bounds.position.y),
+			bounds.end,
+			Vector2(bounds.position.x, bounds.end.y),
+		])
+	var center := bounds.get_center()
+	var r := _circumradius(bounds)
+	var sides := _sides_for(shape)
+	var pts := PackedVector2Array()
+	for i in sides:
+		pts.append(center + Vector2.RIGHT.rotated(float(i) / float(sides) * TAU) * r)
+	return pts
+
+
+## 壁の内接円半径。非矩形の発射クランプと敵の出現境界に使う。
+static func inradius_for(shape: WallShape, bounds: Rect2) -> float:
+	match shape:
+		WallShape.OCTAGON:
+			return _circumradius(bounds) * cos(PI / float(_OCTAGON_SIDES))
+		WallShape.ROUND:
+			return _circumradius(bounds) * cos(PI / float(_ROUND_SIDES))
+		_:
+			return _circumradius(bounds)
+
+
+## 円/多角形アリーナ用の保守的クランプ。内接円までしか許さない。
+## 八角形の角は使わないが、どの壁の内側にも必ず収まり最も簡単。
+static func clamp_inside_circle(
+	center: Vector2, inradius: float, pos: Vector2, radius: float
+) -> Vector2:
+	var max_dist := maxf(inradius - radius, 0.0)
+	var delta := pos - center
+	if delta.length() <= max_dist:
+		return pos
+	return center + delta.normalized() * max_dist
+
+
+## 矩形の短辺の半分＝多角形の外接円半径。土俵が縦横で違っても内側に収まる。
+static func _circumradius(bounds: Rect2) -> float:
+	return minf(bounds.size.x, bounds.size.y) * 0.5
+
+
+static func _sides_for(shape: WallShape) -> int:
+	match shape:
+		WallShape.OCTAGON:
+			return _OCTAGON_SIDES
+		WallShape.ROUND:
+			return _ROUND_SIDES
+		_:
+			return 4

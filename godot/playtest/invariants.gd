@@ -17,12 +17,16 @@ static func check(request: BattleRequest, result: BattleResult) -> Array[String]
 	var violations: Array[String] = []
 
 	_check_frames(request, result.player_frames, "player", violations)
-	_check_frames(request, result.enemy_frames, "enemy", violations)
+	for i in result.enemy_tracks.size():
+		_check_frames(request, result.enemy_tracks[i], "enemy[%d]" % i, violations)
 
-	if result.player_frames.size() != result.enemy_frames.size():
-		violations.append("フレーム数が両者で違う (%d vs %d)" % [
-			result.player_frames.size(), result.enemy_frames.size()
-		])
+	# 全トラックの長さがプレイヤーと揃っていること。1本でもずれると再生時に
+	# フレームの引き当てが狂う。
+	for i in result.enemy_tracks.size():
+		if result.enemy_tracks[i].size() != result.player_frames.size():
+			violations.append("フレーム数が揃っていない enemy[%d] (%d vs %d)" % [
+				i, result.enemy_tracks[i].size(), result.player_frames.size()
+			])
 
 	if not is_finite(result.finish_time) or result.finish_time < 0.0:
 		violations.append("決着時刻が壊れている (%s)" % result.finish_time)

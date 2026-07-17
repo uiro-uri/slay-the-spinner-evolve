@@ -43,9 +43,16 @@ enum Outcome { DRAW, PLAYER_WIN, ENEMY_WIN }
 
 ## 各ステップの状態。index * time_step が時刻。
 var player_frames: Array[Snapshot] = []
-var enemy_frames: Array[Snapshot] = []
+
+## 敵ごとの軌跡。enemy_tracks[i] が i 番目の敵の Array[Snapshot]。
+## GDScriptはネスト型付き配列(Array[Array[Snapshot]])を扱えないので素のArrayにする。
+## 各トラックの長さは player_frames と揃う(PlaytestInvariantsが検査する)。
+var enemy_tracks: Array = []
 
 var impacts: Array[Impact] = []
+
+## 壁にぶつかった瞬間。コマ同士より控えめな衝撃波を再生時に出す。
+var wall_impacts: Array[Impact] = []
 
 var outcome: Outcome = Outcome.DRAW
 
@@ -91,10 +98,16 @@ func sample(frames: Array[Snapshot], t: float) -> Snapshot:
 
 
 func to_dict() -> Dictionary:
+	# 敵トラックはlambdaから静的関数を呼ばず、明示ループで直列化する。
+	var enemies_out: Array = []
+	for track in enemy_tracks:
+		enemies_out.append(_frames_to_array(track))
 	return {
 		"player": _frames_to_array(player_frames),
-		"enemy": _frames_to_array(enemy_frames),
+		"enemies": enemies_out,
 		"impacts": impacts.map(func(x: Impact) -> Array:
+			return [x.time, x.point.x, x.point.y]),
+		"wall_impacts": wall_impacts.map(func(x: Impact) -> Array:
 			return [x.time, x.point.x, x.point.y]),
 		"outcome": int(outcome),
 		"finish_time": finish_time,
@@ -106,11 +119,18 @@ func to_dict() -> Dictionary:
 static func from_dict(d: Dictionary) -> BattleResult:
 	var r := BattleResult.new()
 	r.player_frames = _frames_from_array(d["player"])
-	r.enemy_frames = _frames_from_array(d["enemy"])
+	var tracks: Array = []
+	for raw_track in d["enemies"]:
+		tracks.append(_frames_from_array(raw_track))
+	r.enemy_tracks = tracks
 	var impacts_: Array[Impact] = []
 	for x in d["impacts"]:
 		impacts_.append(Impact.new(x[0], Vector2(x[1], x[2])))
 	r.impacts = impacts_
+	var wall_impacts_: Array[Impact] = []
+	for x in d["wall_impacts"]:
+		wall_impacts_.append(Impact.new(x[0], Vector2(x[1], x[2])))
+	r.wall_impacts = wall_impacts_
 	r.outcome = d["outcome"]
 	r.finish_time = d["finish_time"]
 	r.time_step = d["time_step"]

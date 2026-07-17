@@ -21,7 +21,7 @@ func _request() -> BattleRequest:
 	var r := BattleRequest.new()
 	r.player = BattleRequest.Launch.new(SpinnerStats.default_player(), Vector2(2, 8), Vector2(6, -6))
 	var enemy := EnemyRoster.of_level(1)[0]
-	r.enemy = BattleRequest.Launch.new(enemy.stats, Vector2(8, 2), Vector2(-3, 4))
+	r.enemies = [BattleRequest.Launch.new(enemy.stats, Vector2(8, 2), Vector2(-3, 4))]
 	return r
 
 
@@ -42,7 +42,7 @@ func _test_invariants_catch_bad_results(check: Callable) -> void:
 
 	# アリーナ脱出
 	bad = _healthy_result(request)
-	bad.enemy_frames[2] = BattleResult.Snapshot.new(Vector2(30.0, 5.0), Vector2.ZERO, 5.0)
+	bad.enemy_tracks[0][2] = BattleResult.Snapshot.new(Vector2(30.0, 5.0), Vector2.ZERO, 5.0)
 	check.call(
 		not PlaytestInvariants.check(request, bad).is_empty(),
 		"検査器: アリーナ脱出を拾う"
@@ -67,7 +67,7 @@ func _test_invariants_catch_bad_results(check: Callable) -> void:
 
 	# フレーム数の不一致
 	bad = _healthy_result(request)
-	bad.enemy_frames.pop_back()
+	bad.enemy_tracks[0].pop_back()
 	check.call(
 		not PlaytestInvariants.check(request, bad).is_empty(),
 		"検査器: フレーム数の不一致を拾う"
@@ -85,19 +85,20 @@ func _test_invariants_pass_healthy_result(check: Callable) -> void:
 
 func _test_battle_sim_deterministic(check: Callable) -> void:
 	var enemy := EnemyRoster.of_level(2)[0]
+	var enemies: Array[EnemyData] = [enemy]
 	var stats := SpinnerStats.default_player()
 
-	var a := BattleSim.play_one(42, enemy, LaunchPolicy.Kind.INTERCEPT, stats)
-	var b := BattleSim.play_one(42, enemy, LaunchPolicy.Kind.INTERCEPT, stats)
+	var a := BattleSim.play_one(42, enemies, LaunchPolicy.Kind.INTERCEPT, stats)
+	var b := BattleSim.play_one(42, enemies, LaunchPolicy.Kind.INTERCEPT, stats)
 	check.call(
 		JSON.stringify(a) == JSON.stringify(b),
 		"battle_sim: 同じシードなら同じレコード"
 	)
 
-	for key in ["seed", "level", "policy", "win", "finish_time", "impacts"]:
+	for key in ["seed", "level", "count", "policy", "win", "finish_time", "impacts"]:
 		check.call(a.has(key), "battle_sim: レコードに %s がある" % key)
 
-	var c := BattleSim.play_one(43, enemy, LaunchPolicy.Kind.INTERCEPT, stats)
+	var c := BattleSim.play_one(43, enemies, LaunchPolicy.Kind.INTERCEPT, stats)
 	check.call(
 		JSON.stringify(a) != JSON.stringify(c),
 		"battle_sim: シードが違えば別の戦いになる"
