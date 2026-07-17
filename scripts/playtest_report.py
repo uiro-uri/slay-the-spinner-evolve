@@ -252,6 +252,49 @@ def run_tables(runs, out):
     out.append("")
 
 
+def death_cause_table(runs, out):
+    # ラン中の各戦闘のうち「敵が敗北した」もの(＝プレイヤーの勝ち)を、敵の死因で
+    # 分ける。単体と乱戦(複数体)を分けるのは、乱戦メンバーがrps÷頭数で耐久を
+    # 割られており、混ぜると下限が守れているか見えなくなるため。
+    # これは情報提供。アラート(終了コード)には配線しない。Lv1は設計上ズタズタに
+    # される側なので、一撃死メトリクスで鳴らすと誤報になる。
+    rows = {}  # (level, is_swarm) -> counters
+    for r in runs:
+        for b in r.get("battles", []):
+            if b.get("loser") != "enemy":
+                continue
+            key = (b["level"], b.get("count", 1) > 1)
+            c = rows.setdefault(key, {"n": 0, "drain": 0, "wall": 0, "decay": 0,
+                                      "oneshot": 0, "hits": []})
+            c["n"] += 1
+            cause = b.get("death_cause", "decay")
+            if cause in ("drain", "wall", "decay"):
+                c[cause] += 1
+            if b.get("fatal_hit_index", 0) == 1:
+                c["oneshot"] += 1
+            if cause == "drain":
+                c["hits"].append(b.get("hits_taken", 0))
+    if not rows:
+        return
+
+    out.append("## 死因の内訳 (敵の敗北, レベル×編成)\n")
+    out.append("敵がどう力尽きたか。**1衝突で決着**が「衝突1回で終わる」割合。"
+               "乱戦メンバーはrps÷頭数で耐久が割れるので単体と分ける。\n")
+    out.append("| Lv | 編成 | n | 削り / 壁 / 自然減衰 | 1衝突で決着 | 削り死のhits中央値 |")
+    out.append("|---|---|---|---|---|---|")
+    for level in range(1, 6):
+        for is_swarm in (False, True):
+            c = rows.get((level, is_swarm))
+            if not c or c["n"] == 0:
+                continue
+            comp = "乱戦" if is_swarm else "単体"
+            split = (f"{pct(c['drain'], c['n'])} / {pct(c['wall'], c['n'])} "
+                     f"/ {pct(c['decay'], c['n'])}")
+            out.append(f"| {level} | {comp} | {c['n']} | {split} "
+                       f"| {pct(c['oneshot'], c['n'])} | {median(c['hits']):.0f} |")
+    out.append("")
+
+
 def violations_table(battles, runs, out):
     bad = [b for b in battles if "violations" in b]
     for r in runs:
@@ -284,6 +327,7 @@ def main() -> int:
         sweep_tables(battles, out)
     if runs:
         run_tables(runs, out)
+        death_cause_table(runs, out)
     violated = violations_table(battles, runs, out)
     print("\n".join(out))
     # 呼び出し側(playtest.sh)が気づけるよう終了コードにも出す。

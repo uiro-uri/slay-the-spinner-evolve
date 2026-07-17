@@ -70,6 +70,12 @@ static func play_one(
 			"win": record["win"],
 			"finish_time": record["finish_time"],
 			"rps_before": stats.rps,
+			"mass_before": stats.mass,
+			"radius_before": stats.radius,
+			"death_cause": record.get("death_cause", "none"),
+			"loser": record.get("loser", "none"),
+			"fatal_hit_index": record.get("fatal_hit_index", 0),
+			"hits_taken": record.get("hits_taken", 0),
 		})
 		if record.has("violations"):
 			battles[battles.size() - 1]["violations"] = record["violations"]
