@@ -20,6 +20,7 @@ func run(check: Callable) -> void:
 	_test_alpha_shape(check)
 	_test_alpha_monotonic_and_bounded(check)
 	_test_alpha_zero_duration(check)
+	_test_should_fade(check)
 
 
 ## rps がしきい値以下になる最初のフレームの時刻を返すこと。
@@ -124,4 +125,31 @@ func _test_alpha_zero_duration(check: Callable) -> void:
 	check.call(
 		is_equal_approx(a, 0.0) and not is_nan(a),
 		"不透明度: duration=0 でもNaNにならずdelayで0へ落ちる"
+	)
+
+
+## 決着でどのコマをフェードさせるか。力尽き かつ まだ見えているコマだけ。
+func _test_should_fade(check: Callable) -> void:
+	# 力尽き(rps<=閾値)かつ可視 → 消す(勝者に倒された敵/敗北した自コマ)。
+	check.call(
+		EnemyFadeout.should_fade(0.0, THRESHOLD, 1.0),
+		"決着フェード: 力尽きて見えているコマは消す"
+	)
+
+	# 生存(rps>閾値) → 消さない(勝者は回ったまま残す)。
+	check.call(
+		not EnemyFadeout.should_fade(1.0, THRESHOLD, 1.0),
+		"決着フェード: 生き残ったコマ(勝者)は消さない"
+	)
+
+	# 既に消えている(乱戦で戦闘中にフェード済み) → 対象外。
+	check.call(
+		not EnemyFadeout.should_fade(0.0, THRESHOLD, 0.0),
+		"決着フェード: 既に消え切った敵は触らない(可視EPS以下)"
+	)
+
+	# しきい値ちょうども力尽きとみなす(<=)。
+	check.call(
+		EnemyFadeout.should_fade(THRESHOLD, THRESHOLD, 1.0),
+		"決着フェード: しきい値ちょうども力尽き扱い"
 	)

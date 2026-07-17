@@ -83,11 +83,11 @@ const BAR_ROW_H := 60.0
 ## ズームを元へ引き戻すのにかける秒数。finish_delayの内数。
 @export_range(0.05, 3.0, 0.1) var finish_zoom_release: float = 0.5
 
-## 乱戦で倒れた敵が、rpsを尽かしてから消え始めるまでの待機(秒)。この間は暗転した姿で残る。
-## 敵が1体だけの戦闘では消さない(決着後に暗くして残す既存挙動のまま)。
+## 力尽きたコマが、消え始めるまでの待機(秒)。この間は最後の姿のまま残す。
+## 乱戦の戦闘中に倒れた敵にも、決着で力尽きたコマ(敗者・引き分けの両者)にも同じ尺を使う。
 @export_range(0.0, 5.0, 0.05) var enemy_fadeout_delay: float = EnemyFadeout.DEFAULT_DELAY
 
-## 乱戦で倒れた敵のフェードにかける秒数。
+## 力尽きたコマのフェードにかける秒数。
 @export_range(0.0, 5.0, 0.05) var enemy_fadeout_duration: float = EnemyFadeout.DEFAULT_DURATION
 
 ## 敵の初期状態。M3でマップから選ばれた敵に差し替える。
@@ -589,26 +589,50 @@ func _finish() -> void:
 	_apply_frame(_result.finish_time)
 
 	var player_won := _result.player_won()
-	_player.defeated = not player_won
-	# 敵は最終フレームの回転で個別に判定する。負け戦でも生き残った敵は
-	# 光ったまま残り、乱戦で誰が倒れたかが絵で分かる。
-	for enemy in _enemies:
-		enemy.defeated = enemy.rps <= lose_threshold
 
 	match _result.outcome:
 		BattleResult.Outcome.DRAW:
 			_message.text = "BATTLE_DRAW"
-			# 引き分けは全員力尽きている。
-			_player.defeated = true
-			for enemy in _enemies:
-				enemy.defeated = true
 		BattleResult.Outcome.PLAYER_WIN:
 			_message.text = "BATTLE_WIN"
 		_:
 			_message.text = "BATTLE_LOSE"
 
+	# 力尽きたコマは即グレーアウトさせず、最後の姿を一拍見せてからフェードで消す。
+	var fade := _start_defeated_fadeout()
+
 	await _linger_then_reset_view()
+	# フェードが余韻より長くチューニングされていても切れないよう、残っていれば待つ。
+	if fade != null and fade.is_valid() and fade.is_running():
+		await fade.finished
 	finished.emit(player_won)
+
+
+## 決着で力尽きたコマ(敗者、引き分けなら両者)を、最後の姿のまま enemy_fadeout_delay 待って
+## から enemy_fadeout_duration かけて消す。コマとHPバーを揃えて落とす。勝者は rps が残るので
+## 対象外(回ったまま残る)。乱戦で戦闘中に既に消えた敵も、不透明度が尽きているので触らない。
+## 対象が無ければ null を返す。
+func _start_defeated_fadeout() -> Tween:
+	var items: Array[CanvasItem] = []
+	if EnemyFadeout.should_fade(_player.rps, lose_threshold, _player.modulate.a):
+		# 乱戦最終フレームの暗転を打ち消し、明るい最後の姿から消す(プレイヤーは暗転しないが揃える)。
+		_player.defeated = false
+		items.append(_player)
+		items.append(_player_bar)
+	for i in _enemies.size():
+		if EnemyFadeout.should_fade(_enemies[i].rps, lose_threshold, _enemies[i].modulate.a):
+			_enemies[i].defeated = false
+			items.append(_enemies[i])
+			items.append(_enemy_bars[i])
+
+	if items.is_empty():
+		return null
+
+	# 全員まとめて delay 待ってから同時にフェード。tween.finished は delay+duration で立つ。
+	var tween := create_tween().set_parallel(true)
+	for item in items:
+		tween.tween_property(item, "modulate:a", 0.0, enemy_fadeout_duration).set_delay(enemy_fadeout_delay)
+	return tween
 
 
 ## 決着の余韻。演出があったときはズームしたまま少し見せてから、カメラを本来の
