@@ -11,6 +11,9 @@ GAMEOVER_CONTINUE,Continue,コンティニュー
 GAMEOVER_GIVE_UP,Give Up,あきらめる
 GAMEOVER_CONTINUES_LEFT,Continues left: {0},残りコンティニュー: {0}
 MAP_CHOOSE_NEXT,Choose your path,進む先を選べ
+MAP_ACQUIRED_HEADING,Your Build,取得済みアップグレード
+MAP_NO_UPGRADES,No parts yet,まだありません
+PART_COUNT_SUFFIX," ×{0}"," ×{0}"
 ENEMY_1_1,Chipling,コマ小僧
 ENEMY_1_2,Needlet,ニードレット
 ENEMY_2_1,Rambull,ランブル

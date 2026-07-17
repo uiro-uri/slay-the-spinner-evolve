@@ -24,3 +24,30 @@ grow_horizontal = 2
 theme_override_font_sizes/font_size = 24
 text = "MAP_CHOOSE_NEXT"
 horizontal_alignment = 1
+
+[node name="AcquiredPanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 60.0
+offset_right = 316.0
+offset_bottom = 680.0
+
+[node name="VBox" type="VBoxContainer" parent="AcquiredPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Heading" type="Label" parent="AcquiredPanel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "MAP_ACQUIRED_HEADING"
+
+[node name="Scroll" type="ScrollContainer" parent="AcquiredPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="List" type="VBoxContainer" parent="AcquiredPanel/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8

@@ -10,9 +10,6 @@ signal part_chosen(part: CustomPart)
 
 const CHOICE_COUNT := 3
 
-## 金色のレアカードは地が明るいので、文字を暗くしないと読めない。
-const RARE_TEXT_COLOR := Color(0.15, 0.12, 0.0)
-
 @onready var _cards: HBoxContainer = $CenterContainer/VBoxContainer/Cards
 
 var _shine := 0.0
@@ -33,7 +30,7 @@ func _build_card(part: CustomPart) -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(220, 260)
 	if is_rare:
-		panel.add_theme_stylebox_override("panel", _rare_stylebox())
+		panel.add_theme_stylebox_override("panel", CustomPart.rare_stylebox())
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
@@ -60,7 +57,7 @@ func _build_card(part: CustomPart) -> Control:
 		tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(tag)
 		for label in [title, text, tag]:
-			label.add_theme_color_override("font_color", RARE_TEXT_COLOR)
+			label.add_theme_color_override("font_color", CustomPart.RARE_TEXT_COLOR)
 
 	var button := Button.new()
 	button.text = "REWARD_SELECT"
@@ -68,20 +65,6 @@ func _build_card(part: CustomPart) -> Control:
 	box.add_child(button)
 
 	return panel
-
-
-func _rare_stylebox() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("ffcc00")
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 12
-	style.content_margin_right = 12
-	style.content_margin_top = 12
-	style.content_margin_bottom = 12
-	return style
 
 
 func _process(delta: float) -> void:

@@ -19,6 +19,10 @@ enum Rarity { COMMON, RARE }
 
 enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 
+## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
+## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
+const RARE_TEXT_COLOR := Color(0.15, 0.12, 0.0)
+
 ## 効果の説明に使う翻訳キー。倍率と上限を埋め込む。
 const _STAT_KEYS := {
 	Stat.MASS: "PART_EFFECT_MASS",
@@ -64,6 +68,21 @@ func apply_to(stats: SpinnerStats) -> void:
 	if cap > 0.0:
 		value = minf(value, cap)
 	_write(stats, value)
+
+
+## レアカードの金色スタイルボックス。報酬選択とマップ一覧で共有する。
+static func rare_stylebox() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("ffcc00")
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 12
+	style.content_margin_bottom = 12
+	return style
 
 
 ## 実際の値から説明文を組み立てる。手書きしないので数値と食い違わない。
