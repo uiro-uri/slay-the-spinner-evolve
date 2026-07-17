@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scenes/battle/Battle.gd" id="1_battle"]
 [ext_resource type="Script" path="res://scenes/battle/Arena.gd" id="2_arena"]
@@ -22,6 +22,27 @@ radius = 0.5
 friction = 0.98
 restitution = 1.0
 rps = 15.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_bar_bg"]
+bg_color = Color(0.101961, 0.101961, 0.12549, 0.6)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_player_fill"]
+bg_color = Color(0.204, 0.596, 0.859, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_enemy_fill"]
+bg_color = Color(0.906, 0.298, 0.235, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [node name="Battle" type="Node2D"]
 script = ExtResource("1_battle")
@@ -71,6 +92,8 @@ theme_override_constants/separation = 6
 [node name="PlayerBar" type="ProgressBar" parent="UI/Bars"]
 custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
+theme_override_styles/background = SubResource("StyleBox_bar_bg")
+theme_override_styles/fill = SubResource("StyleBox_player_fill")
 max_value = 15.0
 value = 15.0
 show_percentage = false
@@ -78,6 +101,8 @@ show_percentage = false
 [node name="EnemyBar" type="ProgressBar" parent="UI/Bars"]
 custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
+theme_override_styles/background = SubResource("StyleBox_bar_bg")
+theme_override_styles/fill = SubResource("StyleBox_enemy_fill")
 max_value = 15.0
 value = 15.0
 show_percentage = false
