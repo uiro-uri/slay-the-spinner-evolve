@@ -1,1 +1,21 @@
 .idea
+
+# Python (archived Flask prototype)
+.venv/
+__pycache__/
+*.pyc
+
+# Godot
+godot/.godot/
+*.pck
+*.wasm
+*.x86_64
+*.exe
+
+# 書き出し成果物。godot/配下に置くとGodotがres://配下として再スキャンし、
+# 書き出したPNG等をプロジェクトの資産として取り込んでしまうため、
+# プロジェクト外(リポジトリ直下)へ出す。
+/build/
+
+# translations/*.csv から決定的に再生成される（.csv と .csv.import はコミットする）
+*.translation

@@ -1,0 +1,42 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes to a script
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Slay the Spinner"
+run/main_scene="res://scenes/main/Main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+GameState="*res://autoloads/GameState.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[gui]
+
+; Godot標準フォントは日本語グリフを持たず豆腐(□)になるため、
+; 日英を1書体で賄えるNoto Sans JP(SIL OFL 1.1)を既定にする。
+theme/custom_font="res://assets/fonts/NotoSansJP-VF.otf"
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://translations/strings.en.translation", "res://translations/strings.ja.translation")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
