@@ -14,6 +14,7 @@ func run(check: Callable) -> void:
 	_test_serialization_round_trip(check)
 	_test_terminates(check)
 	_test_frames_and_time(check)
+	_test_wall_impacts(check)
 	_test_sampling(check)
 	_test_outcome(check)
 
@@ -51,6 +52,9 @@ func _test_deterministic(check: Callable) -> void:
 		"解決: 同じ入力なら同じフレーム数 (%d / %d)" % [a.player_frames.size(), b.player_frames.size()]
 	)
 	check.call(a.impacts.size() == b.impacts.size(), "解決: 同じ入力なら同じ衝突回数")
+	check.call(
+		a.wall_impacts.size() == b.wall_impacts.size(), "解決: 同じ入力なら同じ壁衝突回数"
+	)
 
 	# 軌跡が1フレームも違わないこと
 	var worst := 0.0
@@ -86,6 +90,12 @@ func _test_serialization_round_trip(check: Callable) -> void:
 		result_revived.impacts.size() == a.impacts.size(),
 		"結果: dictを通しても衝突回数が変わらない (%d / %d)" % [
 			result_revived.impacts.size(), a.impacts.size()
+		]
+	)
+	check.call(
+		result_revived.wall_impacts.size() == a.wall_impacts.size(),
+		"結果: dictを通しても壁衝突回数が変わらない (%d / %d)" % [
+			result_revived.wall_impacts.size(), a.wall_impacts.size()
 		]
 	)
 	var worst := 0.0
@@ -159,6 +169,32 @@ func _test_frames_and_time(check: Callable) -> void:
 		check.call(
 			impact.time >= 0.0 and impact.time <= result.finish_time,
 			"解決: 衝突時刻が戦闘中に収まる (%.3f)" % impact.time
+		)
+
+
+## 壁への衝突が記録されること。再生側(Battle.gd)が控えめな衝撃波を出すのに使う。
+func _test_wall_impacts(check: Callable) -> void:
+	# 壁際から壁へ真っ直ぐ撃つ。すり鉢の傾斜が中央へ引き戻すより先に必ず当たるよう、
+	# 壁のすぐ内側から速く撃つ。敵は反対側で静止させ、コマ同士では当たらないようにする。
+	var r := BattleRequest.new()
+	r.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 15.0), Vector2(0.8, 5), Vector2(-8, 0))
+	r.enemy = BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(9, 5), Vector2.ZERO)
+
+	var result := BattleResolver.resolve(r)
+
+	check.call(
+		result.wall_impacts.size() > 0,
+		"解決: 壁衝突が記録されている (%d回)" % result.wall_impacts.size()
+	)
+	var bounds := Arena.BOUNDS.grow(1.0)
+	for impact in result.wall_impacts:
+		check.call(
+			impact.time >= 0.0 and impact.time <= result.finish_time,
+			"解決: 壁衝突時刻が戦闘中に収まる (%.3f)" % impact.time
+		)
+		check.call(
+			bounds.has_point(impact.point),
+			"解決: 壁衝突の接触点がアリーナ付近にある (%s)" % impact.point
 		)
 
 

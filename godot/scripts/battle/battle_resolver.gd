@@ -49,8 +49,8 @@ static func resolve(request: BattleRequest) -> BattleResult:
 		_integrate(player, center, request, dt)
 		_integrate(enemy, center, request, dt)
 		_resolve_disc_collision(player, enemy, request, t, result)
-		_resolve_walls(player, walls, request)
-		_resolve_walls(enemy, walls, request)
+		_resolve_walls(player, walls, request, t, result)
+		_resolve_walls(enemy, walls, request, t, result)
 		_apply_natural_decay(player, request, dt)
 		_apply_natural_decay(enemy, request, dt)
 
@@ -140,12 +140,19 @@ static func _resolve_disc_collision(
 	enemy.rps = maxf(enemy.rps - enemy_drain, 0.0)
 
 
-static func _resolve_walls(s: State, walls: Array[ArenaWall], req: BattleRequest) -> void:
+static func _resolve_walls(
+	s: State, walls: Array[ArenaWall], req: BattleRequest, t: float, result: BattleResult
+) -> void:
 	for wall in walls:
 		if not SpinnerPhysics.wall_hit(
 			wall.point, wall.normal, s.position, s.velocity, s.stats.radius
 		):
 			continue
+		# 接触点。法線は内向きなので、中心から壁側へ半径分ずらすとコマの縁＝
+		# 壁面上の当たった点になる。位置は反射で変わらない(変わるのは速度だけ)。
+		result.wall_impacts.append(
+			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
+		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
 		s.rps *= req.wall_damping
 

@@ -51,6 +51,21 @@ const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark
 ## Battle.tscn単体で走らせたときの敵の発射速度。本編ではEnemyDataから来る。
 @export_range(0.5, 30.0, 0.1) var fallback_enemy_speed: float = 4.0
 
+@export_group("壁エフェクト")
+
+## 壁に当たった時の衝撃波。コマ同士(CollisionSpark既定)より小さく・短く・薄くして
+## 控えめにする。色は壁(Arena.WALL_COLOR)に寄せ、当たった感を壁と結びつける。
+## 手触りで詰める前提なので値はInspectorから触れるようにしてある。
+
+## 広がりきる半径(ユニット)。コマ同士は2.4。
+@export_range(0.2, 20.0, 0.1) var wall_spark_radius: float = 0.9
+
+## 消えるまでの秒数。コマ同士は0.45。
+@export_range(0.05, 3.0, 0.05) var wall_spark_duration: float = 0.3
+
+## 出た瞬間の色。壁色を薄くしたもの。消える時は同色のままalpha 0へ抜ける。
+@export var wall_spark_color: Color = Color("d98cd9", 0.5)
+
 @export_group("調整用")
 
 ## ドラッグを待たずに即開始する。このシーンだけをF5で走らせて挙動を見る用。
@@ -81,6 +96,9 @@ var _playback_time: float = 0.0
 
 ## まだ出していない衝突イベントの位置。時刻が来たら順に衝撃波を出す。
 var _next_impact: int = 0
+
+## 壁への衝突も同様に、時刻が追いついた順に控えめな衝撃波を出す。
+var _next_wall_impact: int = 0
 
 
 func _ready() -> void:
@@ -188,6 +206,7 @@ func play(result: BattleResult) -> void:
 	_result = result
 	_playback_time = 0.0
 	_next_impact = 0
+	_next_wall_impact = 0
 
 	_player.reset_spin()
 	_enemy.reset_spin()
@@ -203,6 +222,7 @@ func _physics_process(delta: float) -> void:
 	_playback_time += delta
 	_apply_frame(_playback_time)
 	_emit_due_impacts(_playback_time)
+	_emit_due_wall_impacts(_playback_time)
 
 	if _playback_time >= _result.finish_time:
 		_finish()
@@ -231,6 +251,17 @@ func _emit_due_impacts(t: float) -> void:
 		_next_impact += 1
 
 
+## 壁への衝突も同じ要領で、時刻が来たところで控えめな衝撃波を出す。
+## コマ同士とは別のカーソルで独立に進むだけで、互いに干渉しない。
+func _emit_due_wall_impacts(t: float) -> void:
+	while (
+		_next_wall_impact < _result.wall_impacts.size()
+		and _result.wall_impacts[_next_wall_impact].time <= t
+	):
+		_spawn_wall_spark(_result.wall_impacts[_next_wall_impact].point)
+		_next_wall_impact += 1
+
+
 func _update_bars() -> void:
 	_player_bar.max_value = _max_rps
 	_enemy_bar.max_value = _max_rps
@@ -242,6 +273,18 @@ func _update_bars() -> void:
 func _spawn_spark(at: Vector2) -> void:
 	var spark := COLLISION_SPARK.instantiate()
 	spark.position = at
+	$ArenaRoot.add_child(spark)
+
+
+## 壁用の控えめな衝撃波。同じCollisionSparkを、小さく・短く・壁色に寄せた値で使い回す。
+func _spawn_wall_spark(at: Vector2) -> void:
+	var spark := COLLISION_SPARK.instantiate()
+	spark.position = at
+	spark.max_radius = wall_spark_radius
+	spark.duration = wall_spark_duration
+	spark.start_color = wall_spark_color
+	# 終わりは同じ色のまま透明へ抜ける。コマ同士のような色相の変化はさせない。
+	spark.end_color = Color(wall_spark_color.r, wall_spark_color.g, wall_spark_color.b, 0.0)
 	$ArenaRoot.add_child(spark)
 
 
