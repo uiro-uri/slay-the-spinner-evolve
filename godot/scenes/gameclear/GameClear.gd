@@ -26,8 +26,9 @@ const MAX_COLUMNS := 3
 func setup(acquired_ids: Array[int], continues_left: int) -> void:
 	_parts_label.text = format_parts(acquired_ids.size())
 	_continues_label.text = format_continues(continues_left)
+	# 締めのサマリなので効果説明は省き、名前だけを詰めて並べる(show_description=false)。
 	# 行(＝集約後のパーツ種数)に合わせて列数を決めてから並べる。
-	var rows := AcquiredUpgradeList.populate(_acquired_list, acquired_ids)
+	var rows := AcquiredUpgradeList.populate(_acquired_list, acquired_ids, false)
 	_acquired_list.columns = maxi(1, mini(rows, MAX_COLUMNS))
 
 
