@@ -25,7 +25,10 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ##    適用はGameState.apply_partが担う（CustomPartは純ResourceのままGameStateを参照しない）。
 ##  - GHOST: 開始直後の一定時間だけ敵との衝突を無効化する時間効果。無敵時間はBattleが
 ##    戦闘へ渡す（CustomPartCatalog.total_ghost_seconds）。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST }
+## MOMENTUM: 摩擦(速度減衰)と回転減衰率の両方を multiplier 倍にする「勢い維持」効果。
+## 単一ステータス倍率では摩擦しか触れず戦績がほぼ0だったので、回転減衰にも効かせる。
+## cap は spin_decay の下限(これ以上は減らさない=青天井/無限HP化を防ぐ)。
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -119,7 +122,32 @@ static func make_ghost(
 	return part
 
 
+## 勢い維持札を作る。摩擦とspin_decayの両方を multiplier 倍にする。
+## spin_decay_floor_ は spin_decay の下限（重ねても回転減衰をこれ以下にはしない）。
+static func make_momentum(
+	id_: int, title_key_: String, rarity_: Rarity,
+	multiplier_: float, spin_decay_floor_: float = 0.0
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.MOMENTUM
+	part.multiplier = multiplier_
+	part.cap = spin_decay_floor_
+	return part
+
+
 func apply_to(stats: SpinnerStats) -> void:
+	# 勢い維持(MOMENTUM): 摩擦と回転減衰の両方を下げる。spin_decayはcapを下限に
+	# クランプして、重ねても回転減衰がゼロ(=無限に回る)にならないようにする。
+	if effect == Effect.MOMENTUM:
+		stats.friction *= multiplier
+		var decayed := stats.spin_decay * multiplier
+		if cap > 0.0:
+			decayed = maxf(decayed, cap)
+		stats.spin_decay = decayed
+		return
 	# 非ステータスの札(残機・ゴースト)はコマの性能を一切いじらない。残機はGameState.
 	# apply_partが、ゴーストの無敵時間はBattleが処理する。
 	if effect != Effect.STAT_MULTIPLY:
@@ -153,6 +181,9 @@ func describe() -> String:
 	# ゴーストは倍率を持たないので、無敵秒数を埋めた専用の説明を返す。
 	if effect == Effect.GHOST:
 		return tr("PART_EFFECT_GHOST").format([_trim(ghost_seconds)])
+	# 勢い維持は摩擦と回転減衰の両方に効く。倍率を埋めた専用の説明を返す。
+	if effect == Effect.MOMENTUM:
+		return tr("PART_EFFECT_MOMENTUM").format([_trim(multiplier)])
 	var text: String = tr(_STAT_KEYS[stat]).format([_trim(multiplier)])
 	if cap > 0.0:
 		text += tr("PART_EFFECT_CAP").format([_trim(cap)])

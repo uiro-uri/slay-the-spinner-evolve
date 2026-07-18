@@ -47,6 +47,10 @@ const MASS_CAP := 8.0
 ## 「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
 const RPS_CAP := 40.0
 
+## Full Steam Aheadのspin_decay下限。重ねてもこれ以下には回転減衰を下げない。
+## 0.4なら自然減衰は最大でも通常の40%まで（無限に回るのを防ぐ）。
+const FULL_STEAM_FLOOR := 0.4
+
 ## ゴースト1枚あたりの無敵秒数。基準は開始後2秒間で、複数取得で線形に延長する
 ## (2枚=4秒、3枚=6秒…)。無敵時間の知識をここに閉じ込め、画面(Battle)も
 ## シミュ(RunSim)も同じ値を参照する。
@@ -70,14 +74,13 @@ static func all() -> Array[CustomPart]:
 			CustomPart.Stat.RADIUS, 1.25, RADIUS_CAP),
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
 			CustomPart.Stat.MASS, 1.6, MASS_CAP),
-		# プロトタイプはdecayを1へ近づけていたが、simulation.pyのdecayは
-		# 「進行方向と逆にかかる減速度」なので、1へ近づけるほど遅くなる。
-		# 「Full Steam Ahead(速度減衰を改善)」という名前と逆の効果だった。
-		# 使われていないrun_simulationのdecay=0.99引数から見て、昔は
-		# vel *= decay (大きいほど良い)で、定数減速に変えた際にパーツ側の
-		# 意味が取り残されたと思われる。名前どおり速くなるよう摩擦を減らす。
-		CustomPart.make(5, "PART_FULL_STEAM_AHEAD", CustomPart.Rarity.COMMON,
-			CustomPart.Stat.FRICTION, 0.85),
+		# Full Steam Ahead: 勢いを保つ札。摩擦(速度減衰)だけを下げていた頃は
+		# 戦績がほぼ0の死に札だった(摩擦は勝敗にほとんど効かない)。名前どおり
+		# 「勢いを保つ」よう、摩擦と回転減衰率(自然にRPSが落ちる速さ)の両方を
+		# 下げるMOMENTUM効果にした。spin_decayの下限FULL_STEAM_FLOORで、重ねても
+		# 回転減衰がゼロ(無限に回る)にならないようにする。倍率は計測で調整。
+		CustomPart.make_momentum(5, "PART_FULL_STEAM_AHEAD", CustomPart.Rarity.COMMON,
+			0.8, FULL_STEAM_FLOOR),
 		CustomPart.make(6, "PART_RAGE_REFLECTION", CustomPart.Rarity.COMMON,
 			CustomPart.Stat.RESTITUTION, 1.1, RESTITUTION_CAP),
 		CustomPart.make(7, "PART_SPIN_ENGINE", CustomPart.Rarity.RARE,

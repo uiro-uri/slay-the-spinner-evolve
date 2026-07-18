@@ -39,14 +39,29 @@ func _test_apply(check: Callable) -> void:
 	CustomPart.make(0, "T", CustomPart.Rarity.COMMON, CustomPart.Stat.RADIUS, 2.0).apply_to(s)
 	check.call(is_equal_approx(s.radius, 1.0), "パーツ: 直径が倍になる (%.3f)" % s.radius)
 
-	# 名前どおり「速くなる」＝摩擦が減ること。プロトタイプはここが逆で、
-	# 速度減衰を改善すると称して実際は遅くなっていた。
-	var before := _stats().friction
+	# 名前どおり「勢いを保つ」＝摩擦(速度減衰)と回転減衰の両方が減ること。
+	# 摩擦だけ下げていた頃は戦績ほぼ0の死に札だったので、回転減衰にも効かせた。
+	var before_friction := _stats().friction
+	var before_decay := _stats().spin_decay
 	s = _stats()
 	CustomPartCatalog.by_id(5).apply_to(s)
 	check.call(
-		s.friction < before,
-		"パーツ: Full Steam Aheadで摩擦が減る＝速くなる (%.3f -> %.3f)" % [before, s.friction]
+		s.friction < before_friction,
+		"パーツ: Full Steam Aheadで摩擦が減る (%.3f -> %.3f)" % [before_friction, s.friction]
+	)
+	check.call(
+		s.spin_decay < before_decay,
+		"パーツ: Full Steam Aheadで回転減衰も減る (%.3f -> %.3f)" % [before_decay, s.spin_decay]
+	)
+	# spin_decayは下限FULL_STEAM_FLOORでクランプ(重ねても無限には回らない)。
+	s = _stats()
+	for i in 12:
+		CustomPartCatalog.by_id(5).apply_to(s)
+	check.call(
+		s.spin_decay >= CustomPartCatalog.FULL_STEAM_FLOOR - EPS,
+		"パーツ: Full Steamのspin_decayが下限%.2fで止まる (%.3f)" % [
+			CustomPartCatalog.FULL_STEAM_FLOOR, s.spin_decay
+		]
 	)
 
 	# 掛け算なので繰り返し取ると積み上がる
@@ -127,6 +142,15 @@ func _test_description_matches_effect(check: Callable) -> void:
 			check.call(
 				text.contains(CustomPart._trim(part.ghost_seconds)),
 				"パーツ%d(%s): 説明に無敵秒数が出ている (%s)" % [part.id, part.title_key, text]
+			)
+			continue
+
+		# 勢い維持は摩擦と回転減衰の両方に効く単行の説明。倍率が出ていること
+		# だけ確かめる(capはspin_decayの下限であって表示する上限ではない)。
+		if part.effect == CustomPart.Effect.MOMENTUM:
+			check.call(
+				text.contains(CustomPart._trim(part.multiplier)),
+				"パーツ%d(%s): 勢い維持の説明に倍率が出ている (%s)" % [part.id, part.title_key, text]
 			)
 			continue
 

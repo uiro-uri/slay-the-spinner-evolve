@@ -33,6 +33,7 @@ class Launch:
 			"friction": stats.friction,
 			"restitution": stats.restitution,
 			"rps": stats.rps,
+			"spin_decay": stats.spin_decay,
 			"pos": [position.x, position.y],
 			"vel": [velocity.x, velocity.y],
 		}
@@ -44,6 +45,8 @@ class Launch:
 		stats_.friction = d["friction"]
 		stats_.restitution = d["restitution"]
 		stats_.rps = d["rps"]
+		# 旧いJSONにはspin_decayが無いので、既定1.0で読む（往復の後方互換）。
+		stats_.spin_decay = d.get("spin_decay", 1.0)
 		return Launch.new(
 			stats_,
 			Vector2(d["pos"][0], d["pos"][1]),

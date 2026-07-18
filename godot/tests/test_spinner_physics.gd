@@ -32,6 +32,7 @@ func run(check: Callable) -> void:
 	_test_elastic_formula_momentum(check)
 	_test_elastic_formula_energy(check)
 	_test_elastic_separates(check)
+	_test_elastic_restitution(check)
 	_test_spin_drain(check)
 	_test_spin_kick(check)
 	_test_wall(check)
@@ -154,6 +155,34 @@ func _test_elastic_separates(check: Callable) -> void:
 		overlapped[0] == Vector2(1, 0) and overlapped[1] == Vector2(-1, 0),
 		"弾性衝突: 完全に重なった時は変化なし(0除算しない)"
 	)
+
+
+## 反発係数を敵衝突にも効かせる引数(Rage Reflectionの想定)。
+## e=1で従来の完全弾性と一致し、e<1で分離速度が落ちる（非弾性）。
+func _test_elastic_restitution(check: Callable) -> void:
+	var pos_a := Vector2(0, 0); var pos_b := Vector2(0.9, 0)
+	var vel_a := Vector2(1, 0); var vel_b := Vector2(-1, 0)
+
+	# 引数なし(既定e=1)と e=1.0 明示が一致すること。
+	var default_e := SpinnerPhysics.elastic_velocities(pos_a, vel_a, 1.0, pos_b, vel_b, 1.0)
+	var explicit_1 := SpinnerPhysics.elastic_velocities(pos_a, vel_a, 1.0, pos_b, vel_b, 1.0, 1.0)
+	check.call(
+		default_e[0].is_equal_approx(explicit_1[0]) and default_e[1].is_equal_approx(explicit_1[1]),
+		"反発係数: e=1は従来の完全弾性と一致"
+	)
+
+	# 正面衝突の分離速度: e=1 > e=0.5 > e=0。単調に落ちる。
+	var sep_1 := (explicit_1[0] - explicit_1[1]).dot(pos_a - pos_b)
+	var half := SpinnerPhysics.elastic_velocities(pos_a, vel_a, 1.0, pos_b, vel_b, 1.0, 0.5)
+	var sep_half := (half[0] - half[1]).dot(pos_a - pos_b)
+	var zero := SpinnerPhysics.elastic_velocities(pos_a, vel_a, 1.0, pos_b, vel_b, 1.0, 0.0)
+	var sep_zero := (zero[0] - zero[1]).dot(pos_a - pos_b)
+	check.call(sep_1 > sep_half + EPS, "反発係数: e<1は分離速度が小さい (%.3f > %.3f)" % [sep_1, sep_half])
+	check.call(sep_half > sep_zero - EPS and sep_zero < EPS + 0.0,
+		"反発係数: e=0は法線方向に一体化(分離ゼロ) (%.3f)" % sep_zero)
+	# 分離速度が反発係数に比例する（e=0.5はe=1のほぼ半分）。
+	check.call(absf(sep_half - sep_1 * 0.5) < EPS,
+		"反発係数: 分離速度がeに比例 (%.3f vs %.3f)" % [sep_half, sep_1 * 0.5])
 
 
 func _test_spin_drain(check: Callable) -> void:
