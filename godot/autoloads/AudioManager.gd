@@ -21,6 +21,13 @@ const POOL_SIZE := 8
 const SE_BUS := "SE"
 const BGM_BUS := "BGM"
 
+## 全体音量の対象バス(Master)。SEも将来のBGMもまとめて効かせるため Master をいじる。
+const MASTER_BUS_INDEX := 0
+
+## スライダー0付近を無音とみなすしきい値。これ未満はミュート扱い(linear_to_db が
+## 0で-infに落ちるのを避ける)。
+const MUTE_THRESHOLD := 0.0001
+
 ## キー→素材。配列のときは鳴らすたびランダムに1つ選び、単調な繰り返しを避ける。
 ## パスは import 済みの ogg。存在しないキーで play() しても握りつぶす。
 const CLIPS := {
@@ -116,10 +123,53 @@ func play(key: String) -> void:
 		return
 	var choices: Array = _streams[key]
 	var stream: AudioStream = choices[_rng.randi_range(0, choices.size() - 1)]
+	_play_stream(stream)
+
+
+## 音源パスを直接1回鳴らす。サウンドテストが素材を1つずつ試聴するのに使う
+## (ゲーム側は必ずキー参照の play() を通すこと)。読めなければ握りつぶす。
+func play_path(path: String) -> void:
+	if path == "":
+		return
+	var stream := load(path) as AudioStream
+	if stream == null:
+		push_warning("AudioManager: SEを読み込めない: %s" % path)
+		return
+	_play_stream(stream)
+
+
+## プールから次のプレイヤーを取り、stream を鳴らす。play()/play_path() 共通。
+## _ready 前(プール未構築)に呼ばれても落ちないよう保険。
+func _play_stream(stream: AudioStream) -> void:
+	if _pool.is_empty():
+		return
 	var player := _pool[_pool_next]
 	_pool_next = (_pool_next + 1) % _pool.size()
 	player.stream = stream
 	player.play()
+
+
+## --- 全体音量 ---
+##
+## Master バスを直接いじるので SE も将来の BGM もまとめて効く。autoload なので
+## 設定は1ラン中ずっと保たれる(セーブはしない=GameStateと同じ流儀)。
+
+## 全体音量をセットする。value は 0.0(無音)〜1.0(原音)の線形値。
+## しきい値未満はミュート、それ以外は線形→dB変換して Master バスへ。
+func set_master_volume_linear(value: float) -> void:
+	var clamped := clampf(value, 0.0, 1.0)
+	if clamped < MUTE_THRESHOLD:
+		AudioServer.set_bus_mute(MASTER_BUS_INDEX, true)
+	else:
+		AudioServer.set_bus_mute(MASTER_BUS_INDEX, false)
+		AudioServer.set_bus_volume_db(MASTER_BUS_INDEX, linear_to_db(clamped))
+
+
+## 現在の全体音量を線形値(0.0〜1.0)で返す。ミュート中は0。
+func get_master_volume_linear() -> float:
+	if AudioServer.is_bus_mute(MASTER_BUS_INDEX):
+		return 0.0
+	return clampf(db_to_linear(AudioServer.get_bus_volume_db(MASTER_BUS_INDEX)), 0.0, 1.0)
 
 
 ## --- 回転音 ---

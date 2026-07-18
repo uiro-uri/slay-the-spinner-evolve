@@ -63,11 +63,28 @@ AudioManager.start_charge() / update_charge(ratio) / stop_charge()
 衝突音は再生と同じ `BattleResult.impacts`／`wall_impacts` に同期させている（物理ステップ
 ではない）。回転音・チャージ音の音量・ピッチは `AudioLevels` の `const` で調整できる。
 
+## サウンドテスト・全体音量
+
+タイトル画面下部の小さなボタンから開くサウンドテスト画面（`scenes/soundtest/`）で、
+配置済みの効果音素材を1つずつ鳴らして確かめられる。ゲーム側が鳴らすのは
+`AudioManager` のキー（`impact` 等は複数素材からランダム）だが、サウンドテストは
+**素材ファイルを1つずつ**試聴したいので、素材一覧を持つ `scripts/core/sound_catalog.gd`
+（`SoundCatalog`、純粋データ）を回して `AudioManager.play_path()` で鳴らす。未採用の候補
+ジングルもここで聴ける。素材を足す／差し替えるときは `SoundCatalog.ENTRIES` を更新する。
+
+同画面上部の全体音量スライダーは `AudioManager.set_master_volume_linear()` /
+`get_master_volume_linear()` を通じて **Master バス**を直接いじる（SEも将来のBGMもまとめて
+効く）。0付近でミュート。autoload なので設定は1ラン中保たれる（セーブはしない）。
+
 ## テスト
 
 `AudioLevels` の純粋関数を `godot/tests/test_audio_levels.gd` で検証する（`EXPECTED_TESTS` に
 `audio` を登録済み）。数値そのものではなく、調整で崩れない性質だけを見る: rps／引き量での
 単調性、`lose_threshold` 以下・`ratio=0` での無音、範囲クランプ、reference=0 での安全性。
+
+`SoundCatalog` の整合性（件数・キー一意・全パスが実在する OggVorbis）とサウンドテストの
+翻訳キー、全体音量の set/get 往復は `godot/tests/test_sound_test.gd` で検証する
+（`EXPECTED_TESTS` に `soundtest` を登録済み）。パスの打ち間違いはここで落ちる。
 
 `ToneSynth` と `AudioManager` の再生自体は音声出力の無いヘッドレスでは評価できないので
 テストしない。代わりにトーンは開始要求があるまで再生しない作りにし、テスト中は音源が

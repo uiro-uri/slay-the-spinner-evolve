@@ -11,6 +11,7 @@ const BATTLE_SCENE: PackedScene = preload("res://scenes/battle/Battle.tscn")
 const REWARD_SCENE: PackedScene = preload("res://scenes/reward/RewardScreen.tscn")
 const GAMEOVER_SCENE: PackedScene = preload("res://scenes/gameover/GameOver.tscn")
 const GAMECLEAR_SCENE: PackedScene = preload("res://scenes/gameclear/GameClear.tscn")
+const SOUNDTEST_SCENE: PackedScene = preload("res://scenes/soundtest/SoundTest.tscn")
 
 @onready var _screen_holder: Node = $ScreenHolder
 
@@ -22,6 +23,13 @@ func _ready() -> void:
 func goto_title() -> void:
 	var title := _swap_screen(TITLE_SCENE)
 	title.start_requested.connect(_on_start_requested)
+	title.sound_test_requested.connect(goto_sound_test)
+
+
+## タイトルから開くサウンドテスト。戻るでタイトルへ返す。
+func goto_sound_test() -> void:
+	var sound_test := _swap_screen(SOUNDTEST_SCENE)
+	sound_test.back_requested.connect(goto_title)
 
 
 func _on_start_requested() -> void:
