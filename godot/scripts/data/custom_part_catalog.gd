@@ -48,10 +48,11 @@ const MASS_CAP := 8.0
 const RPS_CAP := 40.0
 
 ## Rage Reflectionが1枚あたり上げる壁rps保持量と、その上限。
-## 壁を完全無損失(1.0)まで許すとラン単位で無敵化した(計測で+59ptクリア率)ため、
-## 上限を低く抑える。step0.1・上限0.3なら壁rps喪失を最大3割減らす穏当な札。
-const RAGE_WALL_KEEP_STEP := 0.1
-const RAGE_WALL_KEEP_MAX := 0.3
+## wall_keepは非線形で、1.0(完全無損失)付近で無敵化する(計測で+59ptクリア率)。
+## 上限0.3では効果が薄く(単発+1pt)、0.5で明確に正になりつつ無敵化は避けられる。
+## step0.17・上限0.5で、3枚で壁rps喪失を半減する。
+const RAGE_WALL_KEEP_STEP := 0.17
+const RAGE_WALL_KEEP_MAX := 0.5
 
 ## Full Steam Aheadのspin_decay下限。重ねてもこれ以下には回転減衰を下げない。
 ## 0.4なら自然減衰は最大でも通常の40%まで（無限に回るのを防ぐ）。
