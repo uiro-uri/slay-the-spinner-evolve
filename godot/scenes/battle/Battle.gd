@@ -106,6 +106,10 @@ const BAR_ROW_H := 60.0
 ## 大きいほど読みにくくなる。
 @export_range(0.0, 90.0, 5.0) var enemy_spread_deg: float = 30.0
 
+## 発射前の初期表示で、敵をプレイヤーや他の敵からこれだけ離して出す余白(ユニット)。
+## コマの縁同士がこの分だけ空く。予告の揺れ(表示のみ、±0.22)ぶんも吸えるよう少し大きめ。
+@export_range(0.0, 3.0, 0.05) var spawn_clearance: float = 0.6
+
 ## Battle.tscn単体で走らせたときの敵の発射速度。本編ではEnemyDataから来る。
 @export_range(0.5, 30.0, 0.1) var fallback_enemy_speed: float = 4.0
 
@@ -330,9 +334,20 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	_bars.add_child(bar)
 
 	var speed := data.launch_speed if data != null else fallback_enemy_speed
+
+	# 発射前の表示が重ならないよう、プレイヤーの初期位置と既に決めた敵の位置を
+	# 除け所として渡す。min_gapはコマの縁同士がspawn_clearanceだけ空く距離。
+	# 相手半径はプレイヤー・既出の敵で違うので、一番大きい相手半径で見積もる。
+	var avoid: Array[Vector2] = [_player.position]
+	var opponent_radius := _player.stats.radius
+	for other in _enemies:
+		avoid.append(other.position)
+		opponent_radius = maxf(opponent_radius, other.stats.radius)
+	var min_gap := opponent_radius + disc.stats.radius + spawn_clearance
+
 	var plan := EnemySpawn.plan(
 		_center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
-		disc.stats.radius, _inradius()
+		disc.stats.radius, _inradius(), avoid, min_gap
 	)
 	disc.position = plan.position
 	disc.velocity = Vector2.ZERO
