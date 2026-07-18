@@ -21,6 +21,41 @@ func run(check: Callable) -> void:
 	_test_aim_triangle(check)
 	_test_telegraph_visible(check)
 	_test_fits_inside_arena(check)
+	_test_avoids_keepout(check)
+
+
+## 発射前の初期表示が重ならないよう、avoidに渡した点からmin_gap以上離れて出ること。
+##
+## プレイヤーが出現リングのすぐ上に静止していると、ランダムな角度次第で敵がその上に
+## 出て見た目が重なる。avoid/min_gapを渡すと、そこを避けた角度を選び直す。
+func _test_avoids_keepout(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+
+	# リング上のある一点を避け所にする。そこからmin_gap以内には出ないこと。
+	var keepout := CENTER + Vector2.RIGHT.rotated(2.3) * RING
+	var min_gap := 1.5
+	var avoid: Array[Vector2] = [keepout]
+	var worst := INF
+	for trial in TRIALS:
+		rng.seed = trial
+		var plan := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng, 0.0, 5.0, avoid, min_gap)
+		worst = minf(worst, plan.position.distance_to(keepout))
+	check.call(
+		worst >= min_gap - EPS,
+		"敵の出現: 除け所からmin_gap以上離れて出る (最小距離 %.3f >= %.2f)" % [worst, min_gap]
+	)
+
+	# avoidが空なら従来どおり初回の角度が出る(後方互換で決定性が変わらない)。
+	var rng_a := RandomNumberGenerator.new()
+	rng_a.seed = 7
+	var plain := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_a)
+	var rng_b := RandomNumberGenerator.new()
+	rng_b.seed = 7
+	var empty := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_b, 0.0, 5.0, [], 1.5)
+	check.call(
+		plain.position.is_equal_approx(empty.position),
+		"敵の出現: 除け所が無ければ従来と同じ結果(後方互換)"
+	)
 
 
 ## どの敵もコマ全体がアリーナに収まった状態で出ること。
