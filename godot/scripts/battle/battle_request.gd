@@ -69,8 +69,8 @@ var obstacles: Array[Vector3] = []
 ## ステージの傾斜と、ぶつかり合いの調整値。Battle.tscnの@exportから来る。
 var stage_strength: float = 4.9
 var stage_shape: SpinnerPhysics.StageShape = SpinnerPhysics.StageShape.DISH
-var violence: float = 0.08
-var spin_kick_scale: float = 1.0
+var violence: float = 0.04
+var spin_kick_scale: float = 2.0
 var natural_damping: float = 1.0
 var wall_damping: float = 0.75
 var lose_threshold: float = 0.03
