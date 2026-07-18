@@ -47,9 +47,11 @@ const MASS_CAP := 8.0
 ## 「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
 const RPS_CAP := 40.0
 
-## Rage Reflectionが1枚あたり上げる壁rps保持量。0.34なら3枚で壁ほぼ無損失。
-## 反発up単独は計測で正になりにくいので、こちら側で確実に正へ持っていく。
-const RAGE_WALL_KEEP_STEP := 0.34
+## Rage Reflectionが1枚あたり上げる壁rps保持量と、その上限。
+## 壁を完全無損失(1.0)まで許すとラン単位で無敵化した(計測で+59ptクリア率)ため、
+## 上限を低く抑える。step0.1・上限0.2なら壁rps喪失を最大2割減らすだけの穏当な札。
+const RAGE_WALL_KEEP_STEP := 0.1
+const RAGE_WALL_KEEP_MAX := 0.2
 
 ## Full Steam Aheadのspin_decay下限。重ねてもこれ以下には回転減衰を下げない。
 ## 0.4なら自然減衰は最大でも通常の40%まで（無限に回るのを防ぐ）。
@@ -90,7 +92,7 @@ static func all() -> Array[CustomPart]:
 		# 自分の壁rps喪失を減らす複合札。反発upだけでは計測で負(跳ね回って壁で
 		# rpsを失う)だったので、wall_keepで壁ダメージを減らして確実に正にする。
 		CustomPart.make_rage(6, "PART_RAGE_REFLECTION", CustomPart.Rarity.COMMON,
-			1.1, RESTITUTION_CAP, RAGE_WALL_KEEP_STEP),
+			1.1, RESTITUTION_CAP, RAGE_WALL_KEEP_STEP, RAGE_WALL_KEEP_MAX),
 		CustomPart.make(7, "PART_SPIN_ENGINE", CustomPart.Rarity.RARE,
 			CustomPart.Stat.RPS, 1.25, RPS_CAP),
 		# 残機を5へ引き上げるレア札。コマの性能ではなくコンティニュー回数

@@ -85,8 +85,11 @@ const _STAT_NAMES := {
 ## 合計時間(=枚数×これ)はCustomPartCatalog.total_ghost_secondsが出す。
 @export var ghost_seconds: float = 0.0
 
-## RAGE札が1枚あたり加算する壁rps保持量(wall_keepへ加算、上限1.0)。
+## RAGE札が1枚あたり加算する壁rps保持量(wall_keepへ加算)。
 @export var wall_keep_step: float = 0.0
+
+## RAGE札のwall_keep上限。壁を完全無損失(1.0)にすると無敵化するので1未満で頭打ち。
+@export var wall_keep_max: float = 1.0
 
 
 static func make(
@@ -149,7 +152,8 @@ static func make_momentum(
 ## 壁rps保持を wall_keep_step_ ぶん上げる複合札。
 static func make_rage(
 	id_: int, title_key_: String, rarity_: Rarity,
-	restitution_mult_: float, restitution_cap_: float, wall_keep_step_: float
+	restitution_mult_: float, restitution_cap_: float,
+	wall_keep_step_: float, wall_keep_max_: float
 ) -> CustomPart:
 	var part := CustomPart.new()
 	part.id = id_
@@ -159,6 +163,7 @@ static func make_rage(
 	part.multiplier = restitution_mult_
 	part.cap = restitution_cap_
 	part.wall_keep_step = wall_keep_step_
+	part.wall_keep_max = wall_keep_max_
 	return part
 
 
@@ -178,7 +183,9 @@ func apply_to(stats: SpinnerStats) -> void:
 		if cap > 0.0:
 			rest = minf(rest, cap)
 		stats.restitution = rest
-		stats.wall_keep = minf(stats.wall_keep + wall_keep_step, 1.0)
+		# 壁rps保持はwall_keep_maxで頭打ち。1.0(完全無損失)まで許すと重ねがけで
+		# 壁ダメージ皆無＝ほぼ無敵になり、ラン単位で壊れる(計測で+59pt)ため。
+		stats.wall_keep = minf(stats.wall_keep + wall_keep_step, wall_keep_max)
 		return
 	# 非ステータスの札(残機・ゴースト)はコマの性能を一切いじらない。残機はGameState.
 	# apply_partが、ゴーストの無敵時間はBattleが処理する。

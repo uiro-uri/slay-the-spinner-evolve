@@ -413,7 +413,8 @@ func _test_rage(check: Callable) -> void:
 	check.call(s.restitution > before_rest, "怒りの反射: 反発が上がる (%.3f -> %.3f)" % [before_rest, s.restitution])
 	check.call(s.wall_keep > before_keep, "怒りの反射: 壁rps保持が上がる (%.3f -> %.3f)" % [before_keep, s.wall_keep])
 
-	# 反発はRESTITUTION_CAP(1.0)を超えない。壁rps保持は1.0を超えない。
+	# 反発はRESTITUTION_CAP(1.0)を超えない。壁rps保持はRAGE_WALL_KEEP_MAXで頭打ち
+	# (1.0=完全無損失まで許すと無敵化するため低く抑える)。
 	s = _stats()
 	for i in 10:
 		rage.apply_to(s)
@@ -421,8 +422,18 @@ func _test_rage(check: Callable) -> void:
 		s.restitution <= CustomPartCatalog.RESTITUTION_CAP + EPS,
 		"怒りの反射: 反発が上限%.1fで止まる (%.3f)" % [CustomPartCatalog.RESTITUTION_CAP, s.restitution]
 	)
-	check.call(s.wall_keep <= 1.0 + EPS, "怒りの反射: 壁rps保持が1.0で止まる (%.3f)" % s.wall_keep)
-	check.call(s.wall_keep >= 1.0 - EPS, "怒りの反射: 重ねがけで壁rps保持が1.0へ届く (%.3f)" % s.wall_keep)
+	check.call(
+		s.wall_keep <= CustomPartCatalog.RAGE_WALL_KEEP_MAX + EPS,
+		"怒りの反射: 壁rps保持が上限%.2fで止まる (%.3f)" % [CustomPartCatalog.RAGE_WALL_KEEP_MAX, s.wall_keep]
+	)
+	check.call(
+		s.wall_keep >= CustomPartCatalog.RAGE_WALL_KEEP_MAX - EPS,
+		"怒りの反射: 重ねがけで壁rps保持が上限へ届く (%.3f)" % s.wall_keep
+	)
+	check.call(
+		CustomPartCatalog.RAGE_WALL_KEEP_MAX < 1.0,
+		"怒りの反射: 壁rps保持の上限は1.0未満(完全無損失=無敵化を防ぐ) (%.2f)" % CustomPartCatalog.RAGE_WALL_KEEP_MAX
+	)
 
 
 func _test_set_lives(check: Callable) -> void:
