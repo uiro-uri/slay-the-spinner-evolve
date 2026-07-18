@@ -19,3 +19,8 @@ godot/.godot/
 
 # translations/*.csv から決定的に再生成される（.csv と .csv.import はコミットする）
 *.translation
+
+# Claude Code のユーザーローカル物は共有しない。
+# .claude/commands/ の共有コマンドは明示的に add してコミットする。
+.claude/settings.local.json
+.claude/worktrees/
