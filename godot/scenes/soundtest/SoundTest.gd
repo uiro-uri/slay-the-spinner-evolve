@@ -22,14 +22,12 @@ func _ready() -> void:
 	_build_list()
 
 
-## SoundCatalog をカテゴリごとに回して、見出し+素材ごとのボタンを積む。
+## SoundCatalog をカテゴリごとに回して見出し+素材ごとのボタンを積み、
+## 最後に合成音(複数素材の旋律=クリアファンファーレ)のセクションを足す。
 func _build_list() -> void:
 	var grouped := SoundCatalog.by_category()
 	for category in grouped:
-		var heading := Label.new()
-		heading.text = _category_key(category)
-		heading.add_theme_font_size_override("font_size", 24)
-		_list.add_child(heading)
+		_add_heading(_category_key(category))
 		for entry in grouped[category]:
 			var button := Button.new()
 			# 素材ファイル名をそのまま出す(訳キーは作らない)。自動翻訳で拾われないよう固定。
@@ -38,6 +36,21 @@ func _build_list() -> void:
 			var path: String = entry["path"]
 			button.pressed.connect(func() -> void: AudioManager.play_path(path))
 			_list.add_child(button)
+
+	# 素材1ファイルではなく旋律を鳴らすもの。ゲーム中の演出をそのまま試聴できる。
+	_add_heading("SOUNDTEST_CAT_FANFARE")
+	var fanfare := Button.new()
+	fanfare.text = "SOUNDTEST_CLEAR_FANFARE"
+	fanfare.pressed.connect(func() -> void: AudioManager.play_clear_fanfare())
+	_list.add_child(fanfare)
+
+
+## カテゴリ見出しの Label を1つ積む。
+func _add_heading(text_key: String) -> void:
+	var heading := Label.new()
+	heading.text = text_key
+	heading.add_theme_font_size_override("font_size", 24)
+	_list.add_child(heading)
 
 
 ## カテゴリ名(サブフォルダ名)を翻訳キーに変換する。SOUNDTEST_CAT_LAUNCH など。

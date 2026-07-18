@@ -141,7 +141,10 @@ func _test_clear_fanfare(check: Callable) -> void:
 
 func _test_translations(check: Callable) -> void:
 	TranslationServer.set_locale("ja")
-	var chrome_keys := ["TITLE_SOUND_TEST", "SOUNDTEST_TITLE", "SOUNDTEST_VOLUME", "SOUNDTEST_BACK"]
+	var chrome_keys := [
+		"TITLE_SOUND_TEST", "SOUNDTEST_TITLE", "SOUNDTEST_VOLUME", "SOUNDTEST_BACK",
+		"SOUNDTEST_CAT_FANFARE", "SOUNDTEST_CLEAR_FANFARE",
+	]
 	for category in EXPECTED_CATEGORIES:
 		chrome_keys.append("SOUNDTEST_CAT_%s" % category.to_upper())
 	var untranslated: Array[String] = []
