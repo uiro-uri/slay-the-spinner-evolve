@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest"
 ]
 
 
@@ -58,6 +58,9 @@ func _init() -> void:
 
 	print("== acquired ==")
 	_test_acquired()
+
+	print("== acquiredlist ==")
+	_test_acquired_list()
 
 	print("== spawn ==")
 	_test_spawn()
@@ -252,6 +255,12 @@ func _test_acquired() -> void:
 	var suite = load("res://tests/test_acquired_upgrades.gd").new()
 	suite.run(_check)
 	_done("acquired")
+
+
+func _test_acquired_list() -> void:
+	var suite = load("res://tests/test_acquired_upgrade_list.gd").new()
+	suite.run(_check)
+	_done("acquiredlist")
 
 
 func _test_spawn() -> void:

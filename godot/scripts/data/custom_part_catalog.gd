@@ -6,11 +6,22 @@ extends RefCounted
 ##
 ## 数値はプロトタイプを出発点にしているだけで、手触りで調整する前提。
 
-## レアリティごとの当たりやすさ。commonはrareの5倍出る。
+## レアリティごとの当たりやすさ。commonはrareの5倍出る(レベル1時)。
+## COMMONの重みは固定で、RAREの重みだけ敵レベルで上げる(rare_weight_for_level)。
 const WEIGHTS := {
 	CustomPart.Rarity.COMMON: 5,
 	CustomPart.Rarity.RARE: 1,
 }
+
+## RAREの重みを敵レベル(1..5)で増やす。深く進むほどレアが出やすい王道の設計。
+## レベル1は現行どおり重み1(COMMON 5 : RARE 1)。以降レベルごとに+1し、MAXで頭打ち。
+const RARE_WEIGHT_MIN := 1
+const RARE_WEIGHT_MAX := 4
+
+
+## 敵レベル(1..5)→RAREの抽選重み。範囲外はクランプする。
+static func rare_weight_for_level(level: int) -> int:
+	return clampi(RARE_WEIGHT_MIN + (level - 1), RARE_WEIGHT_MIN, RARE_WEIGHT_MAX)
 
 ## 報酬として一度に見せる枚数。画面(Main)もシミュレーション(RunSim)も
 ## これを参照する。別々に持つと乖離するため。
@@ -56,7 +67,7 @@ const GHOST_SECONDS_PER_STACK := 2.0
 static func all() -> Array[CustomPart]:
 	return [
 		CustomPart.make(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
-			CustomPart.Stat.RADIUS, 1.35, RADIUS_CAP),
+			CustomPart.Stat.RADIUS, 1.25, RADIUS_CAP),
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
 			CustomPart.Stat.MASS, 1.6, MASS_CAP),
 		# プロトタイプはdecayを1へ近づけていたが、simulation.pyのdecayは
@@ -71,9 +82,12 @@ static func all() -> Array[CustomPart]:
 			CustomPart.Stat.RESTITUTION, 1.1, RESTITUTION_CAP),
 		CustomPart.make(7, "PART_SPIN_ENGINE", CustomPart.Rarity.RARE,
 			CustomPart.Stat.RPS, 1.25, RPS_CAP),
+		# 残機を5へ引き上げるレア札。コマの性能ではなくコンティニュー回数
+		# (GameState.continues_left、初期3)を底上げする。下げはしない(apply_partのmaxi)。
+		CustomPart.make_set_lives(8, "PART_SPARE_CORE", CustomPart.Rarity.RARE, 5),
 		# ゴースト: 開始後GHOST_SECONDS_PER_STACK秒だけ敵との衝突を無効化する。
 		# ステータスは変えず、重ねて取るほど無敵時間が伸びる(線形)。
-		CustomPart.make_ghost(8, "PART_GHOST", CustomPart.Rarity.COMMON,
+		CustomPart.make_ghost(9, "PART_GHOST", CustomPart.Rarity.COMMON,
 			GHOST_SECONDS_PER_STACK),
 	]
 
@@ -91,7 +105,7 @@ static func total_ghost_seconds(ids: Array[int]) -> float:
 	var total := 0.0
 	for id in ids:
 		var part := by_id(id)
-		if part != null and part.effect_kind == CustomPart.EffectKind.GHOST:
+		if part != null and part.effect == CustomPart.Effect.GHOST:
 			total += part.ghost_seconds
 	return total
 
@@ -122,7 +136,9 @@ static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
 ## プロトタイプはk=3で引き直しては重複が消えるまでやり直していた(しかも
 ## 引数nを無視して常に3個)。ここは選んだものを母集団から取り除きながら
 ## 順に引くので、引き直しが要らず個数も指定どおりになる。
-static func pick_choices(count: int, rng: RandomNumberGenerator = null) -> Array[CustomPart]:
+## levelは倒した敵のレベル(1..5)。高いほどRAREが出やすい。省略時はレベル1相当
+## (現行の重み)で、既存の呼び出し・テストの挙動を保つ。
+static func pick_choices(count: int, rng: RandomNumberGenerator = null, level: int = 1) -> Array[CustomPart]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
@@ -130,19 +146,25 @@ static func pick_choices(count: int, rng: RandomNumberGenerator = null) -> Array
 	var pool := all()
 	var chosen: Array[CustomPart] = []
 	for i in mini(count, pool.size()):
-		var index := _weighted_index(pool, rng)
+		var index := _weighted_index(pool, rng, level)
 		chosen.append(pool[index])
 		pool.remove_at(index)
 	return chosen
 
 
-static func _weighted_index(pool: Array[CustomPart], rng: RandomNumberGenerator) -> int:
+static func _weight_for(part: CustomPart, level: int) -> int:
+	if part.rarity == CustomPart.Rarity.RARE:
+		return rare_weight_for_level(level)
+	return WEIGHTS[part.rarity]
+
+
+static func _weighted_index(pool: Array[CustomPart], rng: RandomNumberGenerator, level: int = 1) -> int:
 	var total := 0
 	for part in pool:
-		total += WEIGHTS[part.rarity]
+		total += _weight_for(part, level)
 	var roll := rng.randi_range(0, total - 1)
 	for i in pool.size():
-		roll -= WEIGHTS[pool[i].rarity]
+		roll -= _weight_for(pool[i], level)
 		if roll < 0:
 			return i
 	return pool.size() - 1

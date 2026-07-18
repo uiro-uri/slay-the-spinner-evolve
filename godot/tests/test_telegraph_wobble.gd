@@ -20,6 +20,7 @@ func run(check: Callable) -> void:
 	_test_starts_at_truth(check)
 	_test_zero_amplitude(check)
 	_test_launch_unaffected(check)
+	_test_level_scales_amplitude(check)
 	_test_aim_clamped_to_arena(check)
 
 
@@ -161,6 +162,54 @@ func _test_launch_unaffected(check: Callable) -> void:
 		"揺らぎ: 出した直後は確定値と一致する"
 	)
 	t.free()
+
+
+## 敵レベルが高いほど予告が大きくブレること。弱い敵は読みやすく、強い敵は
+## 読みにくくする調整。倍率が単調に増え、実際の表示の振れ幅も増えることを見る。
+func _test_level_scales_amplitude(check: Callable) -> void:
+	check.call(
+		TelegraphWobble.level_scale(1) < TelegraphWobble.level_scale(5),
+		"揺らぎ: 高レベルほど揺れ幅の倍率が大きい (%.3f < %.3f)" % [
+			TelegraphWobble.level_scale(1), TelegraphWobble.level_scale(5)
+		]
+	)
+
+	# レベルが上がると倍率が減らない(単調)
+	var prev := TelegraphWobble.level_scale(1)
+	var monotonic := true
+	for lv in range(2, 6):
+		var s := TelegraphWobble.level_scale(lv)
+		if s < prev - EPS:
+			monotonic = false
+		prev = s
+	check.call(monotonic, "揺らぎ: レベルが上がると揺れ幅倍率が減らない")
+
+	# 範囲外はクランプ(レベル0はレベル1、レベル9はレベル5と同じ)
+	check.call(
+		is_equal_approx(TelegraphWobble.level_scale(0), TelegraphWobble.level_scale(1))
+		and is_equal_approx(TelegraphWobble.level_scale(9), TelegraphWobble.level_scale(5)),
+		"揺らぎ: レベルは範囲外でクランプされる"
+	)
+
+	# 実際の予告表示の振れ幅がレベルで増えること
+	var low := _max_deviation(1)
+	var high := _max_deviation(5)
+	check.call(
+		high > low + EPS,
+		"揺らぎ: レベル5の予告はレベル1より大きくブレる (%.3f < %.3f)" % [low, high]
+	)
+
+
+## そのレベルの予告を一定時間動かし、確定値からの表示ずれの最大を返す。
+func _max_deviation(level: int) -> float:
+	var t := _telegraph()
+	t.apply_level(level)
+	var worst := 0.0
+	for i in 600:
+		t._process(1.0 / 60.0)
+		worst = maxf(worst, t.display_position().distance_to(TRUE_POS))
+	t.free()
+	return worst
 
 
 ## 発射地点がアリーナの外へ出ないこと。

@@ -53,6 +53,7 @@ PART_EFFECT_FRICTION,Friction ×{0},摩擦 ×{0}
 PART_EFFECT_RESTITUTION,Bounce ×{0},反発 ×{0}
 PART_EFFECT_RPS,Spin ×{0},回転 ×{0}
 PART_EFFECT_CAP," (max {0})",（上限 {0}）
+PART_EFFECT_SET_LIVES,Lives set to {0},残機を{0}にする
 PART_EFFECT_GHOST,No enemy collision for first {0}s,開始{0}秒間 敵をすり抜ける
 PART_NOTE_MASS_UP,Takes less spin loss on hits and knocks foes back harder,衝突で削られる回転が減り、相手をより弾く
 PART_NOTE_MASS_DOWN,Takes more spin loss on hits and knocks foes back weaker,衝突で削られる回転が増え、相手を弾きにくい
@@ -69,4 +70,5 @@ PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
 PART_FULL_STEAM_AHEAD,Full Steam Ahead,フルスロットル
 PART_RAGE_REFLECTION,Rage Reflection,レイジリフレクション
 PART_SPIN_ENGINE,Spin Engine,スピンエンジン
+PART_SPARE_CORE,Spare Core,スペアコア
 PART_GHOST,Ghost,ゴースト

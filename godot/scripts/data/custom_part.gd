@@ -19,10 +19,13 @@ enum Rarity { COMMON, RARE }
 
 enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 
-## 効果の種類。既存の札は全部「ステータスに定数を掛ける」(STAT_MULTIPLIER)だが、
-## ゴーストは開始直後の一定時間だけ敵との衝突を無効化する時間効果で、SpinnerStats
-## のどの値にも乗らない。倍率モデルに無理やり畳まず種類で分ける。
-enum EffectKind { STAT_MULTIPLIER, GHOST }
+## 効果の種類。既存の札は全部STAT_MULTIPLY（あるステータスに定数を掛ける）。
+## STAT_MULTIPLY以外は非ステータス効果で、SpinnerStatsのどの値にも乗らない:
+##  - SET_LIVES: コマの性能ではなくランの残機(GameState.continues_left)を触る。
+##    適用はGameState.apply_partが担う（CustomPartは純ResourceのままGameStateを参照しない）。
+##  - GHOST: 開始直後の一定時間だけ敵との衝突を無効化する時間効果。無敵時間はBattleが
+##    戦闘へ渡す（CustomPartCatalog.total_ghost_seconds）。
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -56,10 +59,10 @@ const _STAT_NAMES := {
 
 @export var rarity: Rarity = Rarity.COMMON
 
-## 効果の種類。既定はステータス倍率。
-@export var effect_kind: EffectKind = EffectKind.STAT_MULTIPLIER
+## 効果の種類。デフォルトはステータス倍率。
+@export var effect: Effect = Effect.STAT_MULTIPLY
 
-## どのステータスに掛けるか。effect_kindがSTAT_MULTIPLIERのときだけ意味を持つ。
+## どのステータスに掛けるか。effectがSTAT_MULTIPLYのときだけ意味を持つ。
 @export var stat: Stat = Stat.MASS
 
 ## 掛ける倍率。1未満なら下げる効果。
@@ -68,7 +71,10 @@ const _STAT_NAMES := {
 ## 上限。0以下なら上限なし。
 @export var cap: float = 0.0
 
-## ゴースト1枚あたりの無敵秒数。effect_kindがGHOSTのときだけ意味を持つ。
+## SET_LIVESで引き上げる残機。他の札では0（GameState.apply_partのmaxiが無害になる）。
+@export var lives: int = 0
+
+## ゴースト1枚あたりの無敵秒数。effectがGHOSTのときだけ意味を持つ。
 ## 合計時間(=枚数×これ)はCustomPartCatalog.total_ghost_secondsが出す。
 @export var ghost_seconds: float = 0.0
 
@@ -87,6 +93,19 @@ static func make(
 	return part
 
 
+## 残機を引き上げる札を作る。ステータスには触らないので stat/multiplier/cap は既定のまま。
+static func make_set_lives(
+	id_: int, title_key_: String, rarity_: Rarity, lives_: int
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.SET_LIVES
+	part.lives = lives_
+	return part
+
+
 ## ゴースト札を作る。ステータスは変えず、開始後seconds_秒だけ敵との衝突を消す。
 static func make_ghost(
 	id_: int, title_key_: String, rarity_: Rarity, seconds_: float
@@ -95,15 +114,15 @@ static func make_ghost(
 	part.id = id_
 	part.title_key = title_key_
 	part.rarity = rarity_
-	part.effect_kind = EffectKind.GHOST
+	part.effect = Effect.GHOST
 	part.ghost_seconds = seconds_
 	return part
 
 
 func apply_to(stats: SpinnerStats) -> void:
-	# ゴーストはステータスを一切変えない。効果は戦闘の衝突判定側(BattleRequest.
-	# ghost_duration)で処理する。
-	if effect_kind != EffectKind.STAT_MULTIPLIER:
+	# 非ステータスの札(残機・ゴースト)はコマの性能を一切いじらない。残機はGameState.
+	# apply_partが、ゴーストの無敵時間はBattleが処理する。
+	if effect != Effect.STAT_MULTIPLY:
 		return
 	var value := _read(stats) * multiplier
 	if cap > 0.0:
@@ -129,8 +148,10 @@ static func rare_stylebox() -> StyleBoxFlat:
 ## 実際の値から説明文を組み立てる。手書きしないので数値と食い違わない。
 ## 1行目は「質量 ×1.6（上限 8）」の生の倍率、2行目に実際の挙動を一言。
 func describe() -> String:
+	if effect == Effect.SET_LIVES:
+		return tr("PART_EFFECT_SET_LIVES").format([lives])
 	# ゴーストは倍率を持たないので、無敵秒数を埋めた専用の説明を返す。
-	if effect_kind == EffectKind.GHOST:
+	if effect == Effect.GHOST:
 		return tr("PART_EFFECT_GHOST").format([_trim(ghost_seconds)])
 	var text: String = tr(_STAT_KEYS[stat]).format([_trim(multiplier)])
 	if cap > 0.0:

@@ -13,8 +13,10 @@ func run(check: Callable) -> void:
 	_test_description_matches_effect(check)
 	_test_selection(check)
 	_test_rarity_weighting(check)
+	_test_rarity_by_level(check)
 	_test_titles_translated(check)
 	_test_no_debuffs(check)
+	_test_set_lives(check)
 	_test_ghost(check)
 
 
@@ -109,8 +111,19 @@ func _test_description_matches_effect(check: Callable) -> void:
 			check.call(false, "パーツ%d: 効果の訳がない (%s)" % [part.id, text])
 			continue
 
+		# 残機札は倍率でも注記でもなく、引き上げ先の残機を出す単行の説明。
+		# 倍率・上限・注記・改行の検査はステータス札向けなので飛ばす。
+		if part.effect == CustomPart.Effect.SET_LIVES:
+			check.call(
+				text.contains(str(part.lives)),
+				"パーツ%d(%s): 残機の説明に数値が出ている (%s に %d)" % [
+					part.id, part.title_key, text, part.lives
+				]
+			)
+			continue
+
 		# ゴーストは倍率を持たない。説明に無敵秒数が出ていることだけ確かめる。
-		if part.effect_kind == CustomPart.EffectKind.GHOST:
+		if part.effect == CustomPart.Effect.GHOST:
 			check.call(
 				text.contains(CustomPart._trim(part.ghost_seconds)),
 				"パーツ%d(%s): 説明に無敵秒数が出ている (%s)" % [part.id, part.title_key, text]
@@ -212,6 +225,34 @@ func _test_rarity_weighting(check: Callable) -> void:
 	check.call(rare_hits > 0, "パーツ抽選: レアもちゃんと出る (%d回)" % rare_hits)
 
 
+## 倒した敵のレベルが高いほどレアが出やすいこと。厳密な比率ではなく向きだけ見る。
+func _test_rarity_by_level(check: Callable) -> void:
+	var low_rares := _count_rares(1)
+	var high_rares := _count_rares(5)
+	check.call(
+		high_rares > low_rares,
+		"パーツ抽選: 高レベルほどレアが出やすい (lv1=%d lv5=%d)" % [low_rares, high_rares]
+	)
+	check.call(
+		CustomPartCatalog.rare_weight_for_level(1) < CustomPartCatalog.rare_weight_for_level(5),
+		"パーツ抽選: RAREの重みは高レベルで増える (%d < %d)" % [
+			CustomPartCatalog.rare_weight_for_level(1), CustomPartCatalog.rare_weight_for_level(5)
+		]
+	)
+
+
+## そのレベルで1枚引きをTRIALS回して、レアを引いた回数を返す。
+func _count_rares(level: int) -> int:
+	var rng := RandomNumberGenerator.new()
+	var rares := 0
+	for trial in TRIALS:
+		rng.seed = trial + 9000
+		for part in CustomPartCatalog.pick_choices(1, rng, level):
+			if part.rarity == CustomPart.Rarity.RARE:
+				rares += 1
+	return rares
+
+
 func _test_titles_translated(check: Callable) -> void:
 	TranslationServer.set_locale("ja")
 	var untranslated: Array[String] = []
@@ -268,10 +309,10 @@ func _test_no_debuffs(check: Callable) -> void:
 
 ## ゴースト札。ステータスは変えず、無敵時間だけを枚数に比例して伸ばす。
 func _test_ghost(check: Callable) -> void:
-	var ghost := CustomPartCatalog.by_id(8)
-	check.call(ghost != null, "ゴースト: カタログにID8がある")
+	var ghost := CustomPartCatalog.by_id(9)
+	check.call(ghost != null, "ゴースト: カタログにID9がある")
 	check.call(
-		ghost.effect_kind == CustomPart.EffectKind.GHOST,
+		ghost.effect == CustomPart.Effect.GHOST,
 		"ゴースト: 効果種別がGHOST"
 	)
 
@@ -302,14 +343,85 @@ func _test_ghost(check: Callable) -> void:
 		"ゴースト: 未取得なら0秒"
 	)
 	check.call(
-		is_equal_approx(CustomPartCatalog.total_ghost_seconds([8] as Array[int]), per),
-		"ゴースト: 1枚で%.1f秒 (%.2f)" % [per, CustomPartCatalog.total_ghost_seconds([8] as Array[int])]
+		is_equal_approx(CustomPartCatalog.total_ghost_seconds([9] as Array[int]), per),
+		"ゴースト: 1枚で%.1f秒 (%.2f)" % [per, CustomPartCatalog.total_ghost_seconds([9] as Array[int])]
 	)
 	check.call(
-		is_equal_approx(CustomPartCatalog.total_ghost_seconds([8, 8] as Array[int]), per * 2.0),
+		is_equal_approx(CustomPartCatalog.total_ghost_seconds([9, 9] as Array[int]), per * 2.0),
 		"ゴースト: 2枚で%.1f秒 (線形延長)" % [per * 2.0]
 	)
+	# ステータス札(ID2)も残機札(ID8)もゴーストではないので無敵時間に数えない。
 	check.call(
-		is_equal_approx(CustomPartCatalog.total_ghost_seconds([2, 8] as Array[int]), per),
-		"ゴースト: ステータス札(ID2)は無敵時間に数えない"
+		is_equal_approx(CustomPartCatalog.total_ghost_seconds([2, 8, 9] as Array[int]), per),
+		"ゴースト: 非ゴースト札(ID2/ID8)は無敵時間に数えない"
 	)
+
+
+## 残機を引き上げる札(スペアコア)の検証。コマの性能には触らず、GameState.apply_partで
+## コンティニュー回数を底上げする。上書きではなくmaxiなので既に多ければ下げない。
+##
+## GameStateはオートロードだが、--scriptランナーではツリーに載らず参照できないので、
+## ここではスクリプトを直接new()した独立インスタンスで検証する（グローバルも汚さない）。
+const GameStateScript := preload("res://autoloads/GameState.gd")
+
+
+func _test_set_lives(check: Callable) -> void:
+	var part := CustomPart.make_set_lives(8, "PART_SPARE_CORE", CustomPart.Rarity.RARE, 5)
+	check.call(part.effect == CustomPart.Effect.SET_LIVES, "残機札: 効果種別がSET_LIVES")
+	check.call(part.lives == 5, "残機札: 引き上げ先が5 (%d)" % part.lives)
+
+	# コマの性能には一切触らない。倍率/上限を非1に汚してもSET_LIVESなら書き込まない
+	# ＝apply_toのガードが効いていることの検証（倍率が既定1.0だと恒等で素通りしてしまう）。
+	var tampered := CustomPart.make_set_lives(8, "PART_SPARE_CORE", CustomPart.Rarity.RARE, 5)
+	tampered.multiplier = 2.0
+	tampered.cap = 99.0
+	var s := _stats()
+	var base := _stats()
+	tampered.apply_to(s)
+	check.call(
+		is_equal_approx(s.mass, base.mass) and is_equal_approx(s.radius, base.radius)
+		and is_equal_approx(s.friction, base.friction)
+		and is_equal_approx(s.restitution, base.restitution)
+		and is_equal_approx(s.rps, base.rps),
+		"残機札: ステータスを一切変えない (mass=%.3f radius=%.3f rps=%.3f)" % [s.mass, s.radius, s.rps]
+	)
+
+	# 説明に引き上げ先の数値が出る（en/jaとも）。
+	TranslationServer.set_locale("en")
+	check.call(part.describe().contains("5"), "残機札: 説明(en)に5が出る (%s)" % part.describe())
+	TranslationServer.set_locale("ja")
+	check.call(part.describe().contains("5"), "残機札: 説明(ja)に5が出る (%s)" % part.describe())
+
+	var gs: Node = GameStateScript.new()
+
+	# apply_partで残機が引き上がり、取得IDに残る。
+	gs.reset_run()
+	check.call(
+		gs.continues_left == GameStateScript.MAX_CONTINUES,
+		"残機札: 適用前は初期コンティニュー数 (%d)" % gs.continues_left
+	)
+	gs.apply_part(part)
+	check.call(gs.continues_left == 5, "残機札: 適用後は残機5 (%d)" % gs.continues_left)
+	check.call(gs.acquired_part_ids.has(8), "残機札: 取得IDに8が残る")
+
+	# 底上げのみ。既に5超なら下げない（上書き実装なら5へ下がって落ちる）。
+	gs.continues_left = 7
+	gs.apply_part(part)
+	check.call(gs.continues_left == 7, "残機札: 既に多ければ下げない (%d)" % gs.continues_left)
+
+	# ステータス札はapply_partでも残機を動かさない（lives=0）が、性能は上がる。
+	gs.reset_run()
+	var before_rps: float = gs.player_stats.rps
+	var stat_part: CustomPart = CustomPartCatalog.by_id(7)  # Spin Engine (rps×1.25)
+	gs.apply_part(stat_part)
+	check.call(
+		gs.continues_left == GameStateScript.MAX_CONTINUES,
+		"残機札: ステータス札は残機を変えない (%d)" % gs.continues_left
+	)
+	check.call(
+		gs.player_stats.rps > before_rps,
+		"残機札: ステータス札はちゃんと性能を上げる (%.2f -> %.2f)" % [before_rps, gs.player_stats.rps]
+	)
+
+	gs.free()
+	TranslationServer.set_locale("ja")
