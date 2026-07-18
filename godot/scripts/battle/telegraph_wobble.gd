@@ -32,6 +32,19 @@ const FREQ_Y := Vector2(1.3, 2.1)
 const FREQ_ANGLE := Vector2(0.8, 1.9)
 const FREQ_LENGTH := Vector2(1.1, 2.4)
 
+## 敵レベル(1..5)に対する揺れ幅の倍率。強い敵ほど予告が大きくブレて読みにくく、
+## 弱い敵ほど読みやすい。レベル1で MIN、レベル5で MAX まで線形に上げる。
+## DEFAULT_*_AMPLITUDE を基準にこの倍率を掛ける。手触りで調整するつまみ。
+const LEVEL_MIN_SCALE := 0.6
+const LEVEL_MAX_SCALE := 1.6
+const MAX_LEVEL := 5
+
+
+## 敵レベル(1..5)→揺れ幅の倍率。範囲外はクランプする。
+static func level_scale(level: int) -> float:
+	var t := clampf(float(level - 1) / float(MAX_LEVEL - 1), 0.0, 1.0)
+	return lerpf(LEVEL_MIN_SCALE, LEVEL_MAX_SCALE, t)
+
 
 ## -1〜1の滑らかな揺らぎ。
 ##

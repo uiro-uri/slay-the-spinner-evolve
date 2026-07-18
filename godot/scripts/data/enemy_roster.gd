@@ -13,6 +13,13 @@ extends RefCounted
 const MIN_GROUP_TOUGHNESS := 4.5
 
 
+## 敵の見た目・当たり判定の大きさ(半径)を一律で縮める倍率。盤面を見やすくする
+## ためのバランス調整で、表の設計値はそのまま残し、生成時にこれを掛ける。
+## 半径は物理にも効く(硬さ=質量×半径²、寿命=rps÷半径)ので、いじったら
+## scripts/playtest.sh で勝率を測り直すこと。
+const SIZE_SCALE := 0.75
+
+
 ## 段(1..9)に対する敵レベル(1..5)。ゴール(段9)がレベル5のボスになる。
 ## プロトタイプに「エネミーが強くなる周期が変だったので修正（ボスがレベル5に
 ## なるようにしたい）」というコミットがあり、この式に落ち着いている。
@@ -168,7 +175,7 @@ static func _enemy(
 ) -> EnemyData:
 	var stats := SpinnerStats.new()
 	stats.mass = mass
-	stats.radius = radius
+	stats.radius = radius * SIZE_SCALE
 	stats.friction = friction
 	stats.restitution = restitution
 	stats.rps = rps

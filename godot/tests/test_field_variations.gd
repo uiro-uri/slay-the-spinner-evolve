@@ -18,6 +18,7 @@ func run(check: Callable) -> void:
 	_test_inradius(check)
 	_test_clamp_inside_circle(check)
 	_test_roster(check)
+	_test_boss_octagon(check)
 	_test_localization(check)
 	_test_serialization(check)
 
@@ -154,6 +155,27 @@ func _test_roster(check: Callable) -> void:
 	check.call(strength_ok, "土俵抽選: 傾斜の強さは非負")
 	check.call(in_bounds, "土俵抽選: 障害物は土俵内に収まる")
 	check.call(ring_ok, "土俵抽選: 障害物は出現リングと重ならない")
+
+
+## ボス段(レベル5)の土俵は必ず八角形闘技場で固定されること。決戦の特別感。
+## ボス以外の段は従来どおりランダム(形が固定されない)ことも合わせて見る。
+func _test_boss_octagon(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var all_octa := true
+	for i in range(20):
+		rng.seed = i
+		var field: FieldData = FieldRoster.pick_for_step(MapTree.STEP_GOAL, rng)
+		if field.wall_shape != ArenaWall.WallShape.OCTAGON:
+			all_octa = false
+	check.call(all_octa, "土俵抽選: ボス段は必ず八角形闘技場")
+
+	# ボス以外(段1)は形が固定されず、複数の形が出る。
+	var shapes := {}
+	for i in range(60):
+		rng.seed = i + 100
+		var field: FieldData = FieldRoster.pick_for_step(1, rng)
+		shapes[field.wall_shape] = true
+	check.call(shapes.size() > 1, "土俵抽選: ボス以外は形が固定されない (%d種)" % shapes.size())
 
 
 func _test_localization(check: Callable) -> void:

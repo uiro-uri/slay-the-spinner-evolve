@@ -6,11 +6,22 @@ extends RefCounted
 ##
 ## 数値はプロトタイプを出発点にしているだけで、手触りで調整する前提。
 
-## レアリティごとの当たりやすさ。commonはrareの5倍出る。
+## レアリティごとの当たりやすさ。commonはrareの5倍出る(レベル1時)。
+## COMMONの重みは固定で、RAREの重みだけ敵レベルで上げる(rare_weight_for_level)。
 const WEIGHTS := {
 	CustomPart.Rarity.COMMON: 5,
 	CustomPart.Rarity.RARE: 1,
 }
+
+## RAREの重みを敵レベル(1..5)で増やす。深く進むほどレアが出やすい王道の設計。
+## レベル1は現行どおり重み1(COMMON 5 : RARE 1)。以降レベルごとに+1し、MAXで頭打ち。
+const RARE_WEIGHT_MIN := 1
+const RARE_WEIGHT_MAX := 4
+
+
+## 敵レベル(1..5)→RAREの抽選重み。範囲外はクランプする。
+static func rare_weight_for_level(level: int) -> int:
+	return clampi(RARE_WEIGHT_MIN + (level - 1), RARE_WEIGHT_MIN, RARE_WEIGHT_MAX)
 
 ## 報酬として一度に見せる枚数。画面(Main)もシミュレーション(RunSim)も
 ## これを参照する。別々に持つと乖離するため。
@@ -51,7 +62,7 @@ const RPS_CAP := 40.0
 static func all() -> Array[CustomPart]:
 	return [
 		CustomPart.make(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
-			CustomPart.Stat.RADIUS, 1.35, RADIUS_CAP),
+			CustomPart.Stat.RADIUS, 1.25, RADIUS_CAP),
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
 			CustomPart.Stat.MASS, 1.6, MASS_CAP),
 		# プロトタイプはdecayを1へ近づけていたが、simulation.pyのdecayは
@@ -105,7 +116,9 @@ static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
 ## プロトタイプはk=3で引き直しては重複が消えるまでやり直していた(しかも
 ## 引数nを無視して常に3個)。ここは選んだものを母集団から取り除きながら
 ## 順に引くので、引き直しが要らず個数も指定どおりになる。
-static func pick_choices(count: int, rng: RandomNumberGenerator = null) -> Array[CustomPart]:
+## levelは倒した敵のレベル(1..5)。高いほどRAREが出やすい。省略時はレベル1相当
+## (現行の重み)で、既存の呼び出し・テストの挙動を保つ。
+static func pick_choices(count: int, rng: RandomNumberGenerator = null, level: int = 1) -> Array[CustomPart]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
@@ -113,19 +126,25 @@ static func pick_choices(count: int, rng: RandomNumberGenerator = null) -> Array
 	var pool := all()
 	var chosen: Array[CustomPart] = []
 	for i in mini(count, pool.size()):
-		var index := _weighted_index(pool, rng)
+		var index := _weighted_index(pool, rng, level)
 		chosen.append(pool[index])
 		pool.remove_at(index)
 	return chosen
 
 
-static func _weighted_index(pool: Array[CustomPart], rng: RandomNumberGenerator) -> int:
+static func _weight_for(part: CustomPart, level: int) -> int:
+	if part.rarity == CustomPart.Rarity.RARE:
+		return rare_weight_for_level(level)
+	return WEIGHTS[part.rarity]
+
+
+static func _weighted_index(pool: Array[CustomPart], rng: RandomNumberGenerator, level: int = 1) -> int:
 	var total := 0
 	for part in pool:
-		total += WEIGHTS[part.rarity]
+		total += _weight_for(part, level)
 	var roll := rng.randi_range(0, total - 1)
 	for i in pool.size():
-		roll -= WEIGHTS[pool[i].rarity]
+		roll -= _weight_for(pool[i], level)
 		if roll < 0:
 			return i
 	return pool.size() - 1

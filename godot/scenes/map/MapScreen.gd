@@ -157,59 +157,10 @@ func _on_node_unhover(coord: Vector2i) -> void:
 		_hovered_coord = NO_HOVER
 
 
-## このランで取得済みのパーツ一覧を組み直す。集約はカタログの純関数に任せる。
+## このランで取得済みのパーツ一覧を組み直す。組み立てはクリア画面と共有する
+## AcquiredUpgradeList に任せる(集約はさらにその先のカタログ純関数)。
 func _rebuild_acquired() -> void:
-	for child in _acquired_list.get_children():
-		_acquired_list.remove_child(child)
-		child.queue_free()
-
-	var entries := CustomPartCatalog.aggregate_acquired(GameState.acquired_part_ids)
-	if entries.is_empty():
-		var empty := Label.new()
-		empty.text = "MAP_NO_UPGRADES"  # キー＝自動翻訳
-		_acquired_list.add_child(empty)
-		return
-
-	for entry in entries:
-		_acquired_list.add_child(_build_row(entry["part"], entry["count"]))
-
-
-## 取得済みパーツ1件分の行。報酬カード(RewardScreen._build_card)の縮約版。
-## 選択ボタンや明滅はなく、名前＋効果を静的に見せるだけ。
-func _build_row(part: CustomPart, count: int) -> Control:
-	var is_rare := part.rarity == CustomPart.Rarity.RARE
-
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if is_rare:
-		panel.add_theme_stylebox_override("panel", CustomPart.rare_stylebox())
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	panel.add_child(box)
-
-	var title := Label.new()
-	# 個数がある時だけ「×2」を付ける。1個ならキーのまま渡して自動翻訳に任せる。
-	if count > 1:
-		title.text = tr(part.title_key) + tr("PART_COUNT_SUFFIX").format([count])
-	else:
-		title.text = part.title_key
-	title.add_theme_font_size_override("font_size", 16)
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(title)
-
-	# 説明文はパーツの実データから生成される（custom_part.gd:describe）ので嘘にならない。
-	var text := Label.new()
-	text.text = part.describe()
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(text)
-
-	if is_rare:
-		# 金色の地は明るいので文字を暗くしないと読めない。報酬カードと同じ扱い。
-		for label in [title, text]:
-			label.add_theme_color_override("font_color", CustomPart.RARE_TEXT_COLOR)
-
-	return panel
+	AcquiredUpgradeList.populate(_acquired_list, GameState.acquired_part_ids)
 
 
 func _to_pixel(coord: Vector2i) -> Vector2:

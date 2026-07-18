@@ -318,6 +318,9 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	_enemy_discs_root.add_child(disc)
 
 	var telegraph := EnemyTelegraph.new()
+	# 強い敵ほど予告が大きくブレて読みにくくする。
+	if data != null:
+		telegraph.apply_level(data.level)
 	_enemy_telegraphs_root.add_child(telegraph)
 
 	# HPバーの見た目はプレイヤーバー(Battle.tscnで設定)に合わせる。背景は共有し、

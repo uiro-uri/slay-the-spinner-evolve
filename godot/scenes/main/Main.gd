@@ -77,7 +77,7 @@ func _on_battle_finished(player_won: bool) -> void:
 func goto_gameclear() -> void:
 	var gameclear := _swap_screen(GAMECLEAR_SCENE)
 	gameclear.to_title_requested.connect(_on_gameclear_to_title)
-	gameclear.setup(GameState.acquired_part_ids.size(), GameState.continues_left)
+	gameclear.setup(GameState.acquired_part_ids, GameState.continues_left)
 	# クリアの締めにファンファーレ。戦闘の勝利ジングルは決着後の余韻中に鳴り終えており、
 	# クリア画面は決着から finish_delay 秒ほど後に出るので重ならない。
 	AudioManager.play_clear_fanfare()
@@ -114,7 +114,9 @@ func _on_give_up_requested() -> void:
 func goto_reward() -> void:
 	var reward := _swap_screen(REWARD_SCENE)
 	reward.part_chosen.connect(_on_part_chosen)
-	reward.setup(CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES))
+	# 今倒した段のレベルほどレアが出やすい。current_step()は段選択時と同じ値。
+	var level := EnemyRoster.level_for_step(GameState.map_tree.current_step())
+	reward.setup(CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, null, level))
 
 
 func _on_part_chosen(part: CustomPart) -> void:

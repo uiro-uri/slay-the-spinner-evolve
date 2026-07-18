@@ -42,14 +42,25 @@ static func all() -> Array[FieldData]:
 	]
 
 
-## その段の土俵を1つ選ぶ。全フィールド一様。
+## その段の土俵を1つ選ぶ。ボス(レベル5)は八角形闘技場で固定、それ以外は全フィールド一様。
 static func pick_for_step(step: int, rng: RandomNumberGenerator = null) -> FieldData:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
+	# 決戦の舞台は八角形の闘技場で固定して特別感を出す。
+	if EnemyRoster.level_for_step(step) >= 5:
+		return _octagon()
 	var candidates := all()
 	if candidates.is_empty():
 		push_error("FieldRoster: 出せる土俵がない")
 		return null
-	# stepは今は使わないが、将来段ごとに難度を変える余地を残して受けておく。
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
+
+
+## ボス用の八角形闘技場(FIELD_ARENA)を返す。
+static func _octagon() -> FieldData:
+	for field in all():
+		if field.title_key == "FIELD_ARENA":
+			return field
+	push_error("FieldRoster: FIELD_ARENAが見つからない")
+	return all()[0]

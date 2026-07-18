@@ -47,6 +47,11 @@ extends Node2D
 ## 揺れの速さ。
 @export_range(0.1, 10.0, 0.1) var wobble_speed: float = TelegraphWobble.DEFAULT_SPEED
 
+## 敵レベルによる揺れ幅の倍率。位置/向き/長さの各振幅にまとめて掛かる。
+## apply_level()で設定する。基準の@export値は保持し、二重適用を避けるため
+## ここで倍率だけ持つ。
+var wobble_level_scale: float = 1.0
+
 ## 発射で撃たれる確定値。揺らさない。
 var _origin: Vector2 = Vector2.ZERO
 var _velocity: Vector2 = Vector2.ZERO
@@ -72,6 +77,11 @@ func hide_plan() -> void:
 	queue_redraw()
 
 
+## 敵レベル(1..5)に応じて揺れ幅の倍率を決める。強い敵ほど大きくブレる。
+func apply_level(level: int) -> void:
+	wobble_level_scale = TelegraphWobble.level_scale(level)
+
+
 func _process(delta: float) -> void:
 	if not _showing:
 		return
@@ -83,13 +93,17 @@ func _process(delta: float) -> void:
 ## 今この瞬間に見せている位置。確定値の周りを漂う。
 ## コマもここへ置くので、三角形の頂点とコマがずれない。
 func display_position() -> Vector2:
-	return TelegraphWobble.position_at(_origin, _wobble_time, wobble_position, wobble_speed)
+	return TelegraphWobble.position_at(
+		_origin, _wobble_time, wobble_position * wobble_level_scale, wobble_speed
+	)
 
 
 ## 今この瞬間に見せている速度。向きと大きさが揺れる。
 func display_velocity() -> Vector2:
 	return TelegraphWobble.velocity_at(
-		_velocity, _wobble_time, wobble_angle_deg, wobble_length, wobble_speed
+		_velocity, _wobble_time,
+		wobble_angle_deg * wobble_level_scale, wobble_length * wobble_level_scale,
+		wobble_speed
 	)
 
 

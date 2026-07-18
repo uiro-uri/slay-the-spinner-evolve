@@ -13,6 +13,7 @@ func run(check: Callable) -> void:
 	_test_description_matches_effect(check)
 	_test_selection(check)
 	_test_rarity_weighting(check)
+	_test_rarity_by_level(check)
 	_test_titles_translated(check)
 	_test_no_debuffs(check)
 	_test_set_lives(check)
@@ -213,6 +214,34 @@ func _test_rarity_weighting(check: Callable) -> void:
 		"パーツ抽選: レアはcommonより出にくい (rare=%d common=%d)" % [rare_hits, common_hits]
 	)
 	check.call(rare_hits > 0, "パーツ抽選: レアもちゃんと出る (%d回)" % rare_hits)
+
+
+## 倒した敵のレベルが高いほどレアが出やすいこと。厳密な比率ではなく向きだけ見る。
+func _test_rarity_by_level(check: Callable) -> void:
+	var low_rares := _count_rares(1)
+	var high_rares := _count_rares(5)
+	check.call(
+		high_rares > low_rares,
+		"パーツ抽選: 高レベルほどレアが出やすい (lv1=%d lv5=%d)" % [low_rares, high_rares]
+	)
+	check.call(
+		CustomPartCatalog.rare_weight_for_level(1) < CustomPartCatalog.rare_weight_for_level(5),
+		"パーツ抽選: RAREの重みは高レベルで増える (%d < %d)" % [
+			CustomPartCatalog.rare_weight_for_level(1), CustomPartCatalog.rare_weight_for_level(5)
+		]
+	)
+
+
+## そのレベルで1枚引きをTRIALS回して、レアを引いた回数を返す。
+func _count_rares(level: int) -> int:
+	var rng := RandomNumberGenerator.new()
+	var rares := 0
+	for trial in TRIALS:
+		rng.seed = trial + 9000
+		for part in CustomPartCatalog.pick_choices(1, rng, level):
+			if part.rarity == CustomPart.Rarity.RARE:
+				rares += 1
+	return rares
 
 
 func _test_titles_translated(check: Callable) -> void:
