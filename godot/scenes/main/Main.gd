@@ -119,8 +119,7 @@ func goto_reward() -> void:
 
 func _on_part_chosen(part: CustomPart) -> void:
 	AudioManager.play("ui_confirm")
-	part.apply_to(GameState.player_stats)
-	GameState.acquired_part_ids.append(part.id)
+	GameState.apply_part(part)
 	goto_map()
 
 

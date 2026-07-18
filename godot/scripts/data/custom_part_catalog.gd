@@ -66,6 +66,9 @@ static func all() -> Array[CustomPart]:
 			CustomPart.Stat.RESTITUTION, 1.1, RESTITUTION_CAP),
 		CustomPart.make(7, "PART_SPIN_ENGINE", CustomPart.Rarity.RARE,
 			CustomPart.Stat.RPS, 1.25, RPS_CAP),
+		# 残機を5へ引き上げるレア札。コマの性能ではなくコンティニュー回数
+		# (GameState.continues_left、初期3)を底上げする。下げはしない(apply_partのmaxi)。
+		CustomPart.make_set_lives(8, "PART_SPARE_CORE", CustomPart.Rarity.RARE, 5),
 	]
 
 

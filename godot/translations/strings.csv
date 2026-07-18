@@ -53,6 +53,7 @@ PART_EFFECT_FRICTION,Friction ×{0},摩擦 ×{0}
 PART_EFFECT_RESTITUTION,Bounce ×{0},反発 ×{0}
 PART_EFFECT_RPS,Spin ×{0},回転 ×{0}
 PART_EFFECT_CAP," (max {0})",（上限 {0}）
+PART_EFFECT_SET_LIVES,Lives set to {0},残機を{0}にする
 PART_NOTE_MASS_UP,Takes less spin loss on hits and knocks foes back harder,衝突で削られる回転が減り、相手をより弾く
 PART_NOTE_MASS_DOWN,Takes more spin loss on hits and knocks foes back weaker,衝突で削られる回転が増え、相手を弾きにくい
 PART_NOTE_RADIUS_UP,"Takes less spin loss per hit, but natural decay rises and it's easier to hit","衝突で削られる回転は減るが、自然減衰が上がり被弾しやすい"
@@ -68,3 +69,4 @@ PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
 PART_FULL_STEAM_AHEAD,Full Steam Ahead,フルスロットル
 PART_RAGE_REFLECTION,Rage Reflection,レイジリフレクション
 PART_SPIN_ENGINE,Spin Engine,スピンエンジン
+PART_SPARE_CORE,Spare Core,スペアコア

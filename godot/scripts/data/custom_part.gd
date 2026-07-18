@@ -19,6 +19,12 @@ enum Rarity { COMMON, RARE }
 
 enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 
+## 効果の種類。既存の札は全部STAT_MULTIPLY（あるステータスに定数を掛ける）。
+## SET_LIVESだけはコマの性能ではなくランの残機(GameState.continues_left)を触る、
+## 唯一の非ステータス効果。適用はGameState.apply_partが担う（CustomPartは純Resource
+## のままGameStateを参照しない）。
+enum Effect { STAT_MULTIPLY, SET_LIVES }
+
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
 const RARE_TEXT_COLOR := Palette.TEXT_ON_LIGHT
@@ -51,6 +57,9 @@ const _STAT_NAMES := {
 
 @export var rarity: Rarity = Rarity.COMMON
 
+## 効果の種類。デフォルトはステータス倍率。
+@export var effect: Effect = Effect.STAT_MULTIPLY
+
 ## どのステータスに掛けるか。
 @export var stat: Stat = Stat.MASS
 
@@ -59,6 +68,10 @@ const _STAT_NAMES := {
 
 ## 上限。0以下なら上限なし。
 @export var cap: float = 0.0
+
+## SET_LIVESで引き上げる残機。STAT_MULTIPLYの札では0（GameState.apply_partの
+## maxiが無害になる）。
+@export var lives: int = 0
 
 
 static func make(
@@ -75,7 +88,23 @@ static func make(
 	return part
 
 
+## 残機を引き上げる札を作る。ステータスには触らないので stat/multiplier/cap は既定のまま。
+static func make_set_lives(
+	id_: int, title_key_: String, rarity_: Rarity, lives_: int
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.SET_LIVES
+	part.lives = lives_
+	return part
+
+
 func apply_to(stats: SpinnerStats) -> void:
+	# 残機の札はコマの性能を一切いじらない。残機の適用はGameState.apply_partが行う。
+	if effect != Effect.STAT_MULTIPLY:
+		return
 	var value := _read(stats) * multiplier
 	if cap > 0.0:
 		value = minf(value, cap)
@@ -100,6 +129,8 @@ static func rare_stylebox() -> StyleBoxFlat:
 ## 実際の値から説明文を組み立てる。手書きしないので数値と食い違わない。
 ## 1行目は「質量 ×1.6（上限 8）」の生の倍率、2行目に実際の挙動を一言。
 func describe() -> String:
+	if effect == Effect.SET_LIVES:
+		return tr("PART_EFFECT_SET_LIVES").format([lives])
 	var text: String = tr(_STAT_KEYS[stat]).format([_trim(multiplier)])
 	if cap > 0.0:
 		text += tr("PART_EFFECT_CAP").format([_trim(cap)])

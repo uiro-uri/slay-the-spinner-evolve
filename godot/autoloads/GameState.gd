@@ -37,6 +37,15 @@ func reset_run() -> void:
 	continues_left = MAX_CONTINUES
 
 
+## 選んだパーツをランに適用する。ステータス強化と残機の引き上げ、取得記録をまとめる。
+## 残機はmaxiで底上げのみ（既に多ければ下げない＝報酬は全部プラス）。ステータス札は
+## lives=0なのでmaxiは無害。
+func apply_part(part: CustomPart) -> void:
+	part.apply_to(player_stats)
+	continues_left = maxi(continues_left, part.lives)
+	acquired_part_ids.append(part.id)
+
+
 ## コンティニューを1回消費する。残0なら何もせずfalse。
 func use_continue() -> bool:
 	if continues_left <= 0:

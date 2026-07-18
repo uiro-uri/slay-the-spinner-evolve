@@ -89,7 +89,9 @@ static func play_one(
 			won_all = true
 			break
 
-		# 勝利報酬。Main._on_part_chosenと同じ適用。
+		# 勝利報酬。Main._on_part_chosen(GameState.apply_part)と同じステータス適用。
+		# 残機(continues)はここでは模擬しない（初回敗北でbreakするため）ので、
+		# 残機札はsim上no-op＝toughnessが動かず「賢い」方策は選ばない。
 		var choices := CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, rng)
 		var part := _choose_part(choices, reward_policy, rng, stats)
 		part.apply_to(stats)

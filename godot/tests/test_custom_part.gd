@@ -15,6 +15,7 @@ func run(check: Callable) -> void:
 	_test_rarity_weighting(check)
 	_test_titles_translated(check)
 	_test_no_debuffs(check)
+	_test_set_lives(check)
 
 
 func _stats() -> SpinnerStats:
@@ -106,6 +107,17 @@ func _test_description_matches_effect(check: Callable) -> void:
 		# 説明にキーがそのまま出ていない＝訳がある
 		if text.contains("PART_EFFECT"):
 			check.call(false, "パーツ%d: 効果の訳がない (%s)" % [part.id, text])
+			continue
+
+		# 残機札は倍率でも注記でもなく、引き上げ先の残機を出す単行の説明。
+		# 倍率・上限・注記・改行の検査はステータス札向けなので飛ばす。
+		if part.effect == CustomPart.Effect.SET_LIVES:
+			check.call(
+				text.contains(str(part.lives)),
+				"パーツ%d(%s): 残機の説明に数値が出ている (%s に %d)" % [
+					part.id, part.title_key, text, part.lives
+				]
+			)
 			continue
 
 		# 説明に書かれた倍率が、実際に適用される倍率と一致すること
@@ -255,3 +267,73 @@ func _test_no_debuffs(check: Callable) -> void:
 		CustomPartCatalog.RESTITUTION_CAP <= 1.0,
 		"反発の上限が1.0以下 (%.2f)。超えると壁で加速して発散する" % CustomPartCatalog.RESTITUTION_CAP
 	)
+
+
+## 残機を引き上げる札(スペアコア)の検証。コマの性能には触らず、GameState.apply_partで
+## コンティニュー回数を底上げする。上書きではなくmaxiなので既に多ければ下げない。
+##
+## GameStateはオートロードだが、--scriptランナーではツリーに載らず参照できないので、
+## ここではスクリプトを直接new()した独立インスタンスで検証する（グローバルも汚さない）。
+const GameStateScript := preload("res://autoloads/GameState.gd")
+
+
+func _test_set_lives(check: Callable) -> void:
+	var part := CustomPart.make_set_lives(8, "PART_SPARE_CORE", CustomPart.Rarity.RARE, 5)
+	check.call(part.effect == CustomPart.Effect.SET_LIVES, "残機札: 効果種別がSET_LIVES")
+	check.call(part.lives == 5, "残機札: 引き上げ先が5 (%d)" % part.lives)
+
+	# コマの性能には一切触らない。倍率/上限を非1に汚してもSET_LIVESなら書き込まない
+	# ＝apply_toのガードが効いていることの検証（倍率が既定1.0だと恒等で素通りしてしまう）。
+	var tampered := CustomPart.make_set_lives(8, "PART_SPARE_CORE", CustomPart.Rarity.RARE, 5)
+	tampered.multiplier = 2.0
+	tampered.cap = 99.0
+	var s := _stats()
+	var base := _stats()
+	tampered.apply_to(s)
+	check.call(
+		is_equal_approx(s.mass, base.mass) and is_equal_approx(s.radius, base.radius)
+		and is_equal_approx(s.friction, base.friction)
+		and is_equal_approx(s.restitution, base.restitution)
+		and is_equal_approx(s.rps, base.rps),
+		"残機札: ステータスを一切変えない (mass=%.3f radius=%.3f rps=%.3f)" % [s.mass, s.radius, s.rps]
+	)
+
+	# 説明に引き上げ先の数値が出る（en/jaとも）。
+	TranslationServer.set_locale("en")
+	check.call(part.describe().contains("5"), "残機札: 説明(en)に5が出る (%s)" % part.describe())
+	TranslationServer.set_locale("ja")
+	check.call(part.describe().contains("5"), "残機札: 説明(ja)に5が出る (%s)" % part.describe())
+
+	var gs: Node = GameStateScript.new()
+
+	# apply_partで残機が引き上がり、取得IDに残る。
+	gs.reset_run()
+	check.call(
+		gs.continues_left == GameStateScript.MAX_CONTINUES,
+		"残機札: 適用前は初期コンティニュー数 (%d)" % gs.continues_left
+	)
+	gs.apply_part(part)
+	check.call(gs.continues_left == 5, "残機札: 適用後は残機5 (%d)" % gs.continues_left)
+	check.call(gs.acquired_part_ids.has(8), "残機札: 取得IDに8が残る")
+
+	# 底上げのみ。既に5超なら下げない（上書き実装なら5へ下がって落ちる）。
+	gs.continues_left = 7
+	gs.apply_part(part)
+	check.call(gs.continues_left == 7, "残機札: 既に多ければ下げない (%d)" % gs.continues_left)
+
+	# ステータス札はapply_partでも残機を動かさない（lives=0）が、性能は上がる。
+	gs.reset_run()
+	var before_rps: float = gs.player_stats.rps
+	var stat_part: CustomPart = CustomPartCatalog.by_id(7)  # Spin Engine (rps×1.25)
+	gs.apply_part(stat_part)
+	check.call(
+		gs.continues_left == GameStateScript.MAX_CONTINUES,
+		"残機札: ステータス札は残機を変えない (%d)" % gs.continues_left
+	)
+	check.call(
+		gs.player_stats.rps > before_rps,
+		"残機札: ステータス札はちゃんと性能を上げる (%.2f -> %.2f)" % [before_rps, gs.player_stats.rps]
+	)
+
+	gs.free()
+	TranslationServer.set_locale("ja")
