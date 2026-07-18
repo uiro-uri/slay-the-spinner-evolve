@@ -155,9 +155,15 @@ static func _resolve_disc_collision(
 	var a_speed := a.velocity.length()
 	var b_speed := b.velocity.length()
 
+	# コマ同士の衝突の反発係数は両者restitutionの積。低い方に引きずられ、
+	# プレイヤーの基礎restitution(0.75)ぶんだけ非弾性になる。Rage Reflectionで
+	# restitutionが上がると弾性が戻り、当たったとき勢いを保って弾け返る。
+	# e>1は壁と同様に発散するので[0,1]にクランプ（敵は現状1.0だが防御的に）。
+	var pair_restitution := clampf(a.stats.restitution * b.stats.restitution, 0.0, 1.0)
 	var bounced := SpinnerPhysics.elastic_velocities(
 		a.position, a.velocity, a.stats.mass,
-		b.position, b.velocity, b.stats.mass
+		b.position, b.velocity, b.stats.mass,
+		pair_restitution
 	)
 	a.velocity = bounced[0]
 	b.velocity = bounced[1]
@@ -207,7 +213,7 @@ static func _resolve_walls(
 			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
-		s.rps *= req.wall_damping
+		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
 
 
 ## 障害物(固定円)との衝突。壁と同型で、法線が中心からの放射方向になるだけ。
@@ -227,11 +233,15 @@ static func _resolve_obstacles(
 			BattleResult.Impact.new(t, s.position - normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
-		s.rps *= req.wall_damping
+		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
 
 
 static func _apply_natural_decay(s: State, req: BattleRequest, dt: float) -> void:
+	# 減衰率は土俵のnatural_dampingにコマ自身のspin_decay倍率を掛ける。
+	# Full Steam Aheadがspin_decayを下げると、ゆっくり回転を失う＝長く回る。
 	s.rps = maxf(
-		s.rps - SpinnerPhysics.natural_spin_decay(s.stats.radius, req.natural_damping, dt),
+		s.rps - SpinnerPhysics.natural_spin_decay(
+			s.stats.radius, req.natural_damping * s.stats.spin_decay, dt
+		),
 		0.0
 	)

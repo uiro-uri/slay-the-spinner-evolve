@@ -26,6 +26,14 @@ extends Resource
 ## 回転数(rotations per second)。これが尽きた方が負け。
 @export_range(0.0, 40.0, 0.5) var rps: float = 15.0
 
+## 自然回転減衰(natural_spin_decay)にかかる自分ぶんの倍率。1.0で従来どおり。
+## 1未満で回転を失いにくくなる＝長く回り続ける。Full Steam Aheadが下げる。
+@export_range(0.1, 2.0, 0.01) var spin_decay: float = 1.0
+
+## 壁・障害物にぶつかったときのrps喪失を減らす度合い。0で従来どおり、1で無損失。
+## 実効ダンピングを1.0(無損失)へこの割合だけ寄せる。Rage Reflectionが上げる。
+@export_range(0.0, 1.0, 0.01) var wall_keep: float = 0.0
+
 
 func duplicate_stats() -> SpinnerStats:
 	var copy := SpinnerStats.new()
@@ -34,6 +42,8 @@ func duplicate_stats() -> SpinnerStats:
 	copy.friction = friction
 	copy.restitution = restitution
 	copy.rps = rps
+	copy.spin_decay = spin_decay
+	copy.wall_keep = wall_keep
 	return copy
 
 

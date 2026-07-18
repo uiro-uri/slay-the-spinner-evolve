@@ -4,6 +4,7 @@
 #
 #   scripts/playtest.sh                 標準セット(戦闘＋ラン)
 #   scripts/playtest.sh --sweep         スイープ(すり鉢/円錐 × violence)も回す
+#   scripts/playtest.sh --parts         単独パーツ強化の因果計測(force-part)も回す
 #   scripts/playtest.sh --quick         セル当たりの試行を1/10に(動作確認用)
 #
 # セルごとに1つのgodotプロセスを起こし、nproc並列でばら撒く。シード範囲が
@@ -20,11 +21,15 @@ VENV="$HOME/.cache/slay-the-spinner/venv"
 
 BATTLES_PER_CELL=500
 RUNS_PER_CELL=300
+# 単独パーツ計測はラン単位の勝率差を読むので、ノイズを抑えるべく多めに回す。
+EXP_RUNS_PER_CELL=2000
 SWEEP=0
+PARTS=0
 for arg in "$@"; do
   case "$arg" in
     --sweep) SWEEP=1 ;;
-    --quick) BATTLES_PER_CELL=50; RUNS_PER_CELL=30 ;;
+    --parts) PARTS=1 ;;
+    --quick) BATTLES_PER_CELL=50; RUNS_PER_CELL=30; EXP_RUNS_PER_CELL=200 ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
@@ -71,6 +76,23 @@ for policy in random intercept; do
     seed_base=$((seed_base + 100000))
   done
 done
+
+# 単独パーツ強化の因果計測: baseline(非強制greedy) と force-part=<id> を同条件で
+# 回し、ラン全体のクリア率とボス段勝率の差を見る。greedyが構造的に選ばないSET_LIVES/
+# GHOST(id8/9)も測れる。腕はrandom(下界)とintercept(上界寄り)の帯で読む。
+if [[ $PARTS -eq 1 ]]; then
+  for policy in random intercept; do
+    # baseline: 強制なし(greedy選好)。同じseed_baseから振って比較を揃える。
+    out="$OUT_DIR/data/exp_${policy}_base.jsonl"
+    echo "$GODOT_BIN --headless --path $REPO_ROOT/godot --script res://playtest/playtest_main.gd -- --mode=run --seed-start=$seed_base --count=$EXP_RUNS_PER_CELL --policy=$policy --reward=greedy --out=$out" >>"$jobs_file"
+    seed_base=$((seed_base + 100000))
+    for pid in 2 3 5 6 7 8 9; do
+      out="$OUT_DIR/data/exp_${policy}_p${pid}.jsonl"
+      echo "$GODOT_BIN --headless --path $REPO_ROOT/godot --script res://playtest/playtest_main.gd -- --mode=run --seed-start=$seed_base --count=$EXP_RUNS_PER_CELL --policy=$policy --reward=forced --force-part=$pid --out=$out" >>"$jobs_file"
+      seed_base=$((seed_base + 100000))
+    done
+  done
+fi
 
 # スイープ: 形状 × violence (発射はintercept固定で条件だけ比較する)
 if [[ $SWEEP -eq 1 ]]; then

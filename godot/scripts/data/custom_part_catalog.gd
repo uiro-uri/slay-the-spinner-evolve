@@ -47,6 +47,17 @@ const MASS_CAP := 8.0
 ## 「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
 const RPS_CAP := 40.0
 
+## Rage Reflectionが1枚あたり上げる壁rps保持量と、その上限。
+## wall_keepは非線形で、1.0(完全無損失)付近で無敵化する(計測で+59ptクリア率)。
+## 上限0.3では効果が薄く(単発+1pt)、0.5で明確に正になりつつ無敵化は避けられる。
+## step0.17・上限0.5で、3枚で壁rps喪失を半減する。
+const RAGE_WALL_KEEP_STEP := 0.17
+const RAGE_WALL_KEEP_MAX := 0.5
+
+## Full Steam Aheadのspin_decay下限。重ねてもこれ以下には回転減衰を下げない。
+## 0.4なら自然減衰は最大でも通常の40%まで（無限に回るのを防ぐ）。
+const FULL_STEAM_FLOOR := 0.4
+
 ## ゴースト1枚あたりの無敵秒数。基準は開始後2秒間で、複数取得で線形に延長する
 ## (2枚=4秒、3枚=6秒…)。無敵時間の知識をここに閉じ込め、画面(Battle)も
 ## シミュ(RunSim)も同じ値を参照する。
@@ -68,18 +79,23 @@ static func all() -> Array[CustomPart]:
 	return [
 		CustomPart.make(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
 			CustomPart.Stat.RADIUS, 1.25, RADIUS_CAP),
+		# 質量×1.5。改修前は最強札(×1.6)だったので微減。ボスは自滅(spin_decay=0.6)を
+		# 抑えたぶん削りで倒す設計になっており、greedyの主火力である質量を削るとボスは
+		# 硬くなる。uiroの判断でボス難化を許容(残機で緩和)し、札の突出を抑える方を採った。
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
-			CustomPart.Stat.MASS, 1.6, MASS_CAP),
-		# プロトタイプはdecayを1へ近づけていたが、simulation.pyのdecayは
-		# 「進行方向と逆にかかる減速度」なので、1へ近づけるほど遅くなる。
-		# 「Full Steam Ahead(速度減衰を改善)」という名前と逆の効果だった。
-		# 使われていないrun_simulationのdecay=0.99引数から見て、昔は
-		# vel *= decay (大きいほど良い)で、定数減速に変えた際にパーツ側の
-		# 意味が取り残されたと思われる。名前どおり速くなるよう摩擦を減らす。
-		CustomPart.make(5, "PART_FULL_STEAM_AHEAD", CustomPart.Rarity.COMMON,
-			CustomPart.Stat.FRICTION, 0.85),
-		CustomPart.make(6, "PART_RAGE_REFLECTION", CustomPart.Rarity.COMMON,
-			CustomPart.Stat.RESTITUTION, 1.1, RESTITUTION_CAP),
+			CustomPart.Stat.MASS, 1.5, MASS_CAP),
+		# Full Steam Ahead: 勢いを保つ札。摩擦(速度減衰)だけを下げていた頃は
+		# 戦績がほぼ0の死に札だった(摩擦は勝敗にほとんど効かない)。名前どおり
+		# 「勢いを保つ」よう、摩擦と回転減衰率(自然にRPSが落ちる速さ)の両方を
+		# 下げるMOMENTUM効果にした。spin_decayの下限FULL_STEAM_FLOORで、重ねても
+		# 回転減衰がゼロ(無限に回る)にならないようにする。倍率は計測で調整。
+		CustomPart.make_momentum(5, "PART_FULL_STEAM_AHEAD", CustomPart.Rarity.COMMON,
+			0.8, FULL_STEAM_FLOOR),
+		# Rage Reflection: 反発up(相手を壁へ押し込む攻撃用途・スキル天井)に加え、
+		# 自分の壁rps喪失を減らす複合札。反発upだけでは計測で負(跳ね回って壁で
+		# rpsを失う)だったので、wall_keepで壁ダメージを減らして確実に正にする。
+		CustomPart.make_rage(6, "PART_RAGE_REFLECTION", CustomPart.Rarity.COMMON,
+			1.1, RESTITUTION_CAP, RAGE_WALL_KEEP_STEP, RAGE_WALL_KEEP_MAX),
 		CustomPart.make(7, "PART_SPIN_ENGINE", CustomPart.Rarity.RARE,
 			CustomPart.Stat.RPS, 1.25, RPS_CAP),
 		# 残機を5へ引き上げるレア札。コマの性能ではなくコンティニュー回数

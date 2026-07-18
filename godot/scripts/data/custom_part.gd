@@ -25,7 +25,14 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ##    適用はGameState.apply_partが担う（CustomPartは純ResourceのままGameStateを参照しない）。
 ##  - GHOST: 開始直後の一定時間だけ敵との衝突を無効化する時間効果。無敵時間はBattleが
 ##    戦闘へ渡す（CustomPartCatalog.total_ghost_seconds）。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST }
+## MOMENTUM: 摩擦(速度減衰)と回転減衰率の両方を multiplier 倍にする「勢い維持」効果。
+## 単一ステータス倍率では摩擦しか触れず戦績がほぼ0だったので、回転減衰にも効かせる。
+## cap は spin_decay の下限(これ以上は減らさない=青天井/無限HP化を防ぐ)。
+##
+## RAGE: 反発(restitution)を multiplier 倍(cap上限)にしつつ、壁でのrps喪失を
+## 減らす(wall_keepを wall_keep_step ぶん加算、上限1.0)複合効果。反発upは相手を
+## 壁へ押し込む攻撃用途として残しつつ、wall_keepで自分の壁ダメージを減らす。
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -78,6 +85,12 @@ const _STAT_NAMES := {
 ## 合計時間(=枚数×これ)はCustomPartCatalog.total_ghost_secondsが出す。
 @export var ghost_seconds: float = 0.0
 
+## RAGE札が1枚あたり加算する壁rps保持量(wall_keepへ加算)。
+@export var wall_keep_step: float = 0.0
+
+## RAGE札のwall_keep上限。壁を完全無損失(1.0)にすると無敵化するので1未満で頭打ち。
+@export var wall_keep_max: float = 1.0
+
 
 static func make(
 	id_: int, title_key_: String, rarity_: Rarity, stat_: Stat,
@@ -119,7 +132,61 @@ static func make_ghost(
 	return part
 
 
+## 勢い維持札を作る。摩擦とspin_decayの両方を multiplier 倍にする。
+## spin_decay_floor_ は spin_decay の下限（重ねても回転減衰をこれ以下にはしない）。
+static func make_momentum(
+	id_: int, title_key_: String, rarity_: Rarity,
+	multiplier_: float, spin_decay_floor_: float = 0.0
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.MOMENTUM
+	part.multiplier = multiplier_
+	part.cap = spin_decay_floor_
+	return part
+
+
+## 怒りの反射札を作る。反発を restitution_mult 倍(restitution_cap上限)にしつつ、
+## 壁rps保持を wall_keep_step_ ぶん上げる複合札。
+static func make_rage(
+	id_: int, title_key_: String, rarity_: Rarity,
+	restitution_mult_: float, restitution_cap_: float,
+	wall_keep_step_: float, wall_keep_max_: float
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.RAGE
+	part.multiplier = restitution_mult_
+	part.cap = restitution_cap_
+	part.wall_keep_step = wall_keep_step_
+	part.wall_keep_max = wall_keep_max_
+	return part
+
+
 func apply_to(stats: SpinnerStats) -> void:
+	# 勢い維持(MOMENTUM): 摩擦と回転減衰の両方を下げる。spin_decayはcapを下限に
+	# クランプして、重ねても回転減衰がゼロ(=無限に回る)にならないようにする。
+	if effect == Effect.MOMENTUM:
+		stats.friction *= multiplier
+		var decayed := stats.spin_decay * multiplier
+		if cap > 0.0:
+			decayed = maxf(decayed, cap)
+		stats.spin_decay = decayed
+		return
+	# 怒りの反射(RAGE): 反発を上げつつ(cap上限)、壁rps喪失を減らす(wall_keep加算)。
+	if effect == Effect.RAGE:
+		var rest := stats.restitution * multiplier
+		if cap > 0.0:
+			rest = minf(rest, cap)
+		stats.restitution = rest
+		# 壁rps保持はwall_keep_maxで頭打ち。1.0(完全無損失)まで許すと重ねがけで
+		# 壁ダメージ皆無＝ほぼ無敵になり、ラン単位で壊れる(計測で+59pt)ため。
+		stats.wall_keep = minf(stats.wall_keep + wall_keep_step, wall_keep_max)
+		return
 	# 非ステータスの札(残機・ゴースト)はコマの性能を一切いじらない。残機はGameState.
 	# apply_partが、ゴーストの無敵時間はBattleが処理する。
 	if effect != Effect.STAT_MULTIPLY:
@@ -153,6 +220,12 @@ func describe() -> String:
 	# ゴーストは倍率を持たないので、無敵秒数を埋めた専用の説明を返す。
 	if effect == Effect.GHOST:
 		return tr("PART_EFFECT_GHOST").format([_trim(ghost_seconds)])
+	# 勢い維持は摩擦と回転減衰の両方に効く。倍率を埋めた専用の説明を返す。
+	if effect == Effect.MOMENTUM:
+		return tr("PART_EFFECT_MOMENTUM").format([_trim(multiplier)])
+	# 怒りの反射は反発倍率と壁rps保持の複合。両方を埋めた専用の説明を返す。
+	if effect == Effect.RAGE:
+		return tr("PART_EFFECT_RAGE").format([_trim(multiplier), _trim(cap)])
 	var text: String = tr(_STAT_KEYS[stat]).format([_trim(multiplier)])
 	if cap > 0.0:
 		text += tr("PART_EFFECT_CAP").format([_trim(cap)])

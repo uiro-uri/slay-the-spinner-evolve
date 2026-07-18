@@ -10,6 +10,10 @@ extends SceneTree
 ##     --mode=run --seed-start=0 --count=100 --policy=intercept \
 ##     --reward=greedy --out=/tmp/runs.jsonl
 ##
+##   単独強化の計測(FORCED): --reward=forced --force-part=<id> で、その札が
+##   3択に出るたび必ず取る。id8/id9(残機・ゴースト)もこれで測れる。
+##     ... --mode=run --reward=forced --force-part=3 ...
+##
 ## 1行1レコードのJSONLを書く。集計はscripts/playtest_report.pyがやる。
 ## シード範囲が同じなら出力も同じ(決定的)。並列化はシード範囲を分けて
 ## このプロセスを複数起動する(scripts/playtest.sh)。
@@ -67,8 +71,12 @@ func _init() -> void:
 				out.store_line(JSON.stringify(record))
 		"run":
 			var reward := RunSim.reward_by_name(args.get("reward", "random"))
+			# --force-part=<id> はFORCED方針で「出るたび必ず取る」札。単独強化の計測用。
+			var force_part_id := int(args.get("force-part", "0"))
 			for i in count:
-				var record := RunSim.play_one(seed_start + i, policy, reward, overrides)
+				var record := RunSim.play_one(
+					seed_start + i, policy, reward, overrides, force_part_id
+				)
 				for battle in record.get("battles", []):
 					if battle.has("violations"):
 						violations += 1

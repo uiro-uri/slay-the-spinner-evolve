@@ -43,6 +43,9 @@ def load(data_dir: Path):
     for path in sorted(data_dir.glob("*.jsonl")):
         for line in path.open():
             rec = json.loads(line)
+            # どのセル由来か記録する。単独パーツ計測(exp_*)を標準集計から
+            # 切り離すのに使う。
+            rec["_src"] = path.stem
             (runs if "battles" in rec else battles).append(rec)
     return battles, runs
 
@@ -314,20 +317,92 @@ def violations_table(battles, runs, out):
     return True
 
 
+## 単独パーツ計測(--parts)で使うidと名前の対応。GDScriptのカタログと合わせる。
+PART_NAMES = {
+    2: "GIANT_GROWTH (半径)", 3: "OVERENCUMBERED (質量)",
+    5: "FULL_STEAM_AHEAD (摩擦)", 6: "RAGE_REFLECTION (反発)",
+    7: "SPIN_ENGINE (RPS)", 8: "SPARE_CORE (残機)", 9: "GHOST (無敵)",
+}
+
+
+def _clear_and_boss(runs, boss_step):
+    """runs集合の (クリア率, ボス段の1戦あたり勝率, ラン数) を出す。"""
+    n = len(runs)
+    cleared = sum(r["cleared"] for r in runs)
+    b_att = b_win = 0
+    for r in runs:
+        for b in r["battles"]:
+            if b["step"] == boss_step:
+                b_att += 1
+                b_win += b["win"]
+    return cleared, n, b_win, b_att
+
+
+def part_effect_table(exp_runs, out):
+    """単独パーツ強化の因果効果。force-partセル(--parts)があるときだけ出す。
+
+    同条件のbaseline(強制なしgreedy)に対し、その札だけ出るたび必ず取ったランの
+    クリア率とボス段勝率がどれだけ動いたか。相関表(取った/取らない)と違い、
+    札の取得自体を実験操作しているので因果に近い。greedyが構造的に選ばない
+    SET_LIVES/GHOST(id8/9)もここで測れる。
+    """
+    if not exp_runs:
+        return
+    boss_step = max((b["step"] for r in exp_runs for b in r["battles"]), default=0)
+    policies = [p for p in POLICY_ORDER
+                if any(r["policy"] == p for r in exp_runs)]
+
+    out.append("## 単独パーツ強化の因果効果 (force-part)\n")
+    out.append(f"baseline=強制なしgreedy。各札を「出るたび必ず取る」ランと比較。"
+               f"ボス段=step{boss_step}の1戦あたり勝率。差はbaseline比(pt)。\n")
+    for policy in policies:
+        pol = [r for r in exp_runs if r["policy"] == policy]
+        base = [r for r in pol if r["reward_policy"] != "forced"]
+        if not base:
+            continue
+        bc, bn, bbw, bba = _clear_and_boss(base, boss_step)
+        base_clear = 100.0 * bc / bn if bn else 0.0
+        base_boss = 100.0 * bbw / bba if bba else 0.0
+        out.append(f"### 腕={policy}\n")
+        out.append(f"baseline: クリア率 {base_clear:.1f}% (n={bn}) / "
+                   f"ボス段勝率 {base_boss:.1f}% (n={bba})\n")
+        out.append("| パーツ | クリア率 | Δクリア | ボス段勝率 | Δボス |")
+        out.append("|---|---|---|---|---|")
+        forced = defaultdict(list)
+        for r in pol:
+            if r["reward_policy"] == "forced":
+                forced[r["force_part_id"]].append(r)
+        for pid in sorted(forced):
+            c, n, bw, ba = _clear_and_boss(forced[pid], boss_step)
+            clear = 100.0 * c / n if n else 0.0
+            boss = 100.0 * bw / ba if ba else 0.0
+            name = PART_NAMES.get(pid, f"id{pid}")
+            out.append(f"| {name} | {clear:.1f}% | {clear - base_clear:+.1f}pt "
+                       f"| {boss:.1f}% | {boss - base_boss:+.1f}pt |")
+        out.append("")
+
+
 def main() -> int:
     data_dir = Path(sys.argv[1])
     battles, runs = load(data_dir)
+    # 単独パーツ計測(exp_*)は2000ラン規模の実験なので、標準の集計・アラートには
+    # 混ぜず切り離す。標準の数字を--partsの有無で揺らさないため。
+    std_runs = [r for r in runs if not r["_src"].startswith("exp_")]
+    exp_runs = [r for r in runs if r["_src"].startswith("exp_")]
     out = [f"# テストプレイレポート\n",
-           f"戦闘 {len(battles)}件 / ラン {len(runs)}件\n"]
+           f"戦闘 {len(battles)}件 / ラン {len(std_runs)}件"
+           + (f" / 単独パーツ計測 {len(exp_runs)}件" if exp_runs else "") + "\n"]
 
     # アラートは先頭に置く。末尾だと読まれない。
-    alerted = alerts(runs, out) if runs else False
+    alerted = alerts(std_runs, out) if std_runs else False
     if battles:
         battle_tables(battles, out)
         sweep_tables(battles, out)
-    if runs:
-        run_tables(runs, out)
-        death_cause_table(runs, out)
+    if std_runs:
+        run_tables(std_runs, out)
+        death_cause_table(std_runs, out)
+    part_effect_table(exp_runs, out)
+    # 不変条件違反は全ラン(exp含む)から拾う。
     violated = violations_table(battles, runs, out)
     print("\n".join(out))
     # 呼び出し側(playtest.sh)が気づけるよう終了コードにも出す。

@@ -18,6 +18,7 @@ func run(check: Callable) -> void:
 	_test_no_debuffs(check)
 	_test_set_lives(check)
 	_test_ghost(check)
+	_test_rage(check)
 
 
 func _stats() -> SpinnerStats:
@@ -39,14 +40,29 @@ func _test_apply(check: Callable) -> void:
 	CustomPart.make(0, "T", CustomPart.Rarity.COMMON, CustomPart.Stat.RADIUS, 2.0).apply_to(s)
 	check.call(is_equal_approx(s.radius, 1.0), "パーツ: 直径が倍になる (%.3f)" % s.radius)
 
-	# 名前どおり「速くなる」＝摩擦が減ること。プロトタイプはここが逆で、
-	# 速度減衰を改善すると称して実際は遅くなっていた。
-	var before := _stats().friction
+	# 名前どおり「勢いを保つ」＝摩擦(速度減衰)と回転減衰の両方が減ること。
+	# 摩擦だけ下げていた頃は戦績ほぼ0の死に札だったので、回転減衰にも効かせた。
+	var before_friction := _stats().friction
+	var before_decay := _stats().spin_decay
 	s = _stats()
 	CustomPartCatalog.by_id(5).apply_to(s)
 	check.call(
-		s.friction < before,
-		"パーツ: Full Steam Aheadで摩擦が減る＝速くなる (%.3f -> %.3f)" % [before, s.friction]
+		s.friction < before_friction,
+		"パーツ: Full Steam Aheadで摩擦が減る (%.3f -> %.3f)" % [before_friction, s.friction]
+	)
+	check.call(
+		s.spin_decay < before_decay,
+		"パーツ: Full Steam Aheadで回転減衰も減る (%.3f -> %.3f)" % [before_decay, s.spin_decay]
+	)
+	# spin_decayは下限FULL_STEAM_FLOORでクランプ(重ねても無限には回らない)。
+	s = _stats()
+	for i in 12:
+		CustomPartCatalog.by_id(5).apply_to(s)
+	check.call(
+		s.spin_decay >= CustomPartCatalog.FULL_STEAM_FLOOR - EPS,
+		"パーツ: Full Steamのspin_decayが下限%.2fで止まる (%.3f)" % [
+			CustomPartCatalog.FULL_STEAM_FLOOR, s.spin_decay
+		]
 	)
 
 	# 掛け算なので繰り返し取ると積み上がる
@@ -127,6 +143,23 @@ func _test_description_matches_effect(check: Callable) -> void:
 			check.call(
 				text.contains(CustomPart._trim(part.ghost_seconds)),
 				"パーツ%d(%s): 説明に無敵秒数が出ている (%s)" % [part.id, part.title_key, text]
+			)
+			continue
+
+		# 勢い維持は摩擦と回転減衰の両方に効く単行の説明。倍率が出ていること
+		# だけ確かめる(capはspin_decayの下限であって表示する上限ではない)。
+		if part.effect == CustomPart.Effect.MOMENTUM:
+			check.call(
+				text.contains(CustomPart._trim(part.multiplier)),
+				"パーツ%d(%s): 勢い維持の説明に倍率が出ている (%s)" % [part.id, part.title_key, text]
+			)
+			continue
+
+		# 怒りの反射は反発倍率と壁rps保持の複合。反発倍率が出ていることを確かめる。
+		if part.effect == CustomPart.Effect.RAGE:
+			check.call(
+				text.contains(CustomPart._trim(part.multiplier)),
+				"パーツ%d(%s): 怒りの反射の説明に反発倍率が出ている (%s)" % [part.id, part.title_key, text]
 			)
 			continue
 
@@ -363,6 +396,44 @@ func _test_ghost(check: Callable) -> void:
 ## GameStateはオートロードだが、--scriptランナーではツリーに載らず参照できないので、
 ## ここではスクリプトを直接new()した独立インスタンスで検証する（グローバルも汚さない）。
 const GameStateScript := preload("res://autoloads/GameState.gd")
+
+
+## 怒りの反射(RAGE)札。反発を上げつつ(cap上限)、壁rps保持(wall_keep)も上げる複合。
+func _test_rage(check: Callable) -> void:
+	var rage := CustomPartCatalog.by_id(6)
+	check.call(rage.effect == CustomPart.Effect.RAGE, "怒りの反射: 効果種別がRAGE")
+
+	# 1枚で反発が上がり、壁rps保持も上がる（複合）。
+	# 実プレイの初期反発は0.75(上限1.0未満)なので、そこから上がることを見る。
+	var s := _stats()
+	s.restitution = 0.75
+	var before_rest := s.restitution
+	var before_keep := s.wall_keep
+	rage.apply_to(s)
+	check.call(s.restitution > before_rest, "怒りの反射: 反発が上がる (%.3f -> %.3f)" % [before_rest, s.restitution])
+	check.call(s.wall_keep > before_keep, "怒りの反射: 壁rps保持が上がる (%.3f -> %.3f)" % [before_keep, s.wall_keep])
+
+	# 反発はRESTITUTION_CAP(1.0)を超えない。壁rps保持はRAGE_WALL_KEEP_MAXで頭打ち
+	# (1.0=完全無損失まで許すと無敵化するため低く抑える)。
+	s = _stats()
+	for i in 10:
+		rage.apply_to(s)
+	check.call(
+		s.restitution <= CustomPartCatalog.RESTITUTION_CAP + EPS,
+		"怒りの反射: 反発が上限%.1fで止まる (%.3f)" % [CustomPartCatalog.RESTITUTION_CAP, s.restitution]
+	)
+	check.call(
+		s.wall_keep <= CustomPartCatalog.RAGE_WALL_KEEP_MAX + EPS,
+		"怒りの反射: 壁rps保持が上限%.2fで止まる (%.3f)" % [CustomPartCatalog.RAGE_WALL_KEEP_MAX, s.wall_keep]
+	)
+	check.call(
+		s.wall_keep >= CustomPartCatalog.RAGE_WALL_KEEP_MAX - EPS,
+		"怒りの反射: 重ねがけで壁rps保持が上限へ届く (%.3f)" % s.wall_keep
+	)
+	check.call(
+		CustomPartCatalog.RAGE_WALL_KEEP_MAX < 1.0,
+		"怒りの反射: 壁rps保持の上限は1.0未満(完全無損失=無敵化を防ぐ) (%.2f)" % CustomPartCatalog.RAGE_WALL_KEEP_MAX
+	)
 
 
 func _test_set_lives(check: Callable) -> void:

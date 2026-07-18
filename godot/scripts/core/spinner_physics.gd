@@ -63,10 +63,17 @@ static func is_colliding(
 	return (vel_a - vel_b).dot(pos_a - pos_b) < 0.0
 
 
-## 完全弾性衝突後の速度を [a, b] で返す。
+## 反発係数付き衝突後の速度を [a, b] で返す。
+##
+## restitution=1.0 で完全弾性衝突（従来の挙動と厳密一致）。1未満で非弾性になり、
+## 中心線方向の分離速度が e 倍に落ちる（e=0で法線方向に一体化）。一般化は
+## 弾性の係数 2 を (1+e) に置き換えるだけ。壁のrestitutionと同じ意味の係数を
+## コマ同士の衝突にも効かせるための引数（Rage Reflectionの想定）。
+## e>1は壁と同様に衝突ごとに加速して発散するので、呼び出し側で[0,1]にクランプする。
 static func elastic_velocities(
 	pos_a: Vector2, vel_a: Vector2, mass_a: float,
-	pos_b: Vector2, vel_b: Vector2, mass_b: float
+	pos_b: Vector2, vel_b: Vector2, mass_b: float,
+	restitution: float = 1.0
 ) -> Array[Vector2]:
 	var delta := pos_a - pos_b
 	var dist_sq := delta.length_squared()
@@ -75,10 +82,11 @@ static func elastic_velocities(
 		return [vel_a, vel_b]
 
 	var total_mass := mass_a + mass_b
-	# 中心線方向の相対速度成分だけを、質量比に応じて交換する。
+	# 中心線方向の相対速度成分だけを、質量比と反発係数に応じて交換する。
 	var impulse := (vel_a - vel_b).dot(delta) / dist_sq * delta
-	var new_a := vel_a - (2.0 * mass_b / total_mass) * impulse
-	var new_b := vel_b + (2.0 * mass_a / total_mass) * impulse
+	var factor := 1.0 + restitution
+	var new_a := vel_a - (factor * mass_b / total_mass) * impulse
+	var new_b := vel_b + (factor * mass_a / total_mass) * impulse
 	return [new_a, new_b]
 
 
@@ -115,6 +123,12 @@ static func wall_hit(
 ## 壁で反射した後の速度。restitutionで勢いが変わる。
 static func wall_bounce(vel: Vector2, wall_normal: Vector2, restitution: float) -> Vector2:
 	return vel.bounce(wall_normal) * restitution
+
+
+## 壁での実効rpsダンピング。wall_keep(0..1)のぶんだけ無損失(1.0)へ寄せる。
+## wall_keep=0で従来のbase、1で1.0(壁でrpsを失わない)。Rage Reflectionが上げる。
+static func effective_wall_damping(base: float, wall_keep: float) -> float:
+	return base + (1.0 - base) * clampf(wall_keep, 0.0, 1.0)
 
 
 ## 障害物(固定された円)にめり込んでいて、かつ障害物へ向かって進んでいるか。
