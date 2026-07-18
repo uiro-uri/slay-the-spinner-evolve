@@ -45,7 +45,8 @@ static func play_one(
 	policy: LaunchPolicy.Kind,
 	player_stats: SpinnerStats,
 	overrides: Overrides = null,
-	field: FieldData = null
+	field: FieldData = null,
+	ghost_duration: float = 0.0
 ) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
@@ -63,6 +64,8 @@ static func play_one(
 	request.stage_shape = field.stage_shape
 	if overrides != null:
 		overrides.apply(request)
+	# ゴーストの無敵時間。取得済み札から算出した値をRunSimが渡す。
+	request.ghost_duration = ghost_duration
 
 	# Battle._spawn_enemy と同じ手順で、各敵の出現を index順に決める。
 	var plans: Array[EnemySpawn.Plan] = []

@@ -19,6 +19,7 @@ func run(check: Callable) -> void:
 	_test_outcome(check)
 	_test_multi_enemy(check)
 	_test_dead_ignores_walls(check)
+	_test_ghost_disables_early_collision(check)
 
 
 func _stats(mass: float, radius: float, rps: float) -> SpinnerStats:
@@ -112,6 +113,27 @@ func _test_serialization_round_trip(check: Callable) -> void:
 			a.player_frames[i].position.distance_to(result_revived.player_frames[i].position)
 		)
 	check.call(worst < EPS, "結果: dictを通しても軌跡が変わらない (最大ずれ %.6f)" % worst)
+
+	# ghost_durationもdictに乗って往復すること。乗り忘れると無敵時間がサーバーへ
+	# 届かず、ローカルとサーバーで別の勝者が出る。
+	var ghosted := _request()
+	ghosted.ghost_duration = 1.5
+	check.call(
+		is_equal_approx(BattleRequest.from_dict(ghosted.to_dict()).ghost_duration, 1.5),
+		"リクエスト: ghost_durationがdict往復で保たれる (%.2f)" % [
+			BattleRequest.from_dict(ghosted.to_dict()).ghost_duration
+		]
+	)
+	# resolveは無敵時間を結果へ写し、結果もdict往復で保つ(再生はResultだけで完結する)。
+	var gres := BattleResolver.resolve(ghosted)
+	check.call(
+		is_equal_approx(gres.ghost_duration, 1.5),
+		"結果: resolveがghost_durationを結果へ写す (%.2f)" % gres.ghost_duration
+	)
+	check.call(
+		is_equal_approx(BattleResult.from_dict(gres.to_dict()).ghost_duration, 1.5),
+		"結果: ghost_durationがdict往復で保たれる"
+	)
 
 	# 実際にJSONへ通せること。文字列化できない値が混ざっていると
 	# サーバーへ送る段になって初めて気づくことになる。
@@ -360,4 +382,30 @@ func _test_dead_ignores_walls(check: Callable) -> void:
 	check.call(
 		dead_state.position.x > bounds.end.x + 1.0,
 		"死亡壁抜け: 落ちたコマは壁を素通りして場外へ抜ける (%s)" % dead_state.position
+	)
+
+
+## ゴーストの無敵時間。開始からghost_durationの間はプレイヤーと敵の衝突が消える。
+## 壁・障害物・敵同士には効かないので、ここではプレイヤー対敵1体の衝突だけを見る。
+func _test_ghost_disables_early_collision(check: Callable) -> void:
+	# 無敵なし: この初期条件は序盤で必ず当たる(_test_frames_and_timeと同じ配置)。
+	var base := BattleResolver.resolve(_request())
+	check.call(base.impacts.size() > 0, "ゴースト: 無敵なしなら衝突が起きる (%d回)" % base.impacts.size())
+	var window := 3.0
+	check.call(
+		base.impacts[0].time < window,
+		"ゴースト: 無敵なしの初弾は無敵時間より前に来る (%.3f < %.1f)" % [base.impacts[0].time, window]
+	)
+
+	# 無敵あり: 開始からwindow秒はプレイヤーと敵が当たらない。
+	var g := _request()
+	g.ghost_duration = window
+	var ghosted := BattleResolver.resolve(g)
+	var early := 0
+	for impact in ghosted.impacts:
+		if impact.time < window:
+			early += 1
+	check.call(
+		early == 0,
+		"ゴースト: 無敵時間中はプレイヤーと敵の衝突が記録されない (%d回)" % early
 	)

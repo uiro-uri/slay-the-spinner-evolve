@@ -86,6 +86,10 @@ var rps: float = 0.0
 ## 決着後に色を落とすためのフラグ。
 var defeated: bool = false
 
+## ゴースト(無敵)中か。真の間、本体を半透明シマーで描いて「敵をすり抜け中」を示す。
+## 見た目だけで、当たり判定はBattleResolverが無敵時間として別に処理する。
+var _ghosting: bool = false
+
 ## パーティクルの流れの位相に使う経過時刻。_processで進める。
 var _time: float = 0.0
 
@@ -130,11 +134,25 @@ func aura_ratio() -> float:
 	return 0.0 if defeated else tail_ratio()
 
 
+## ゴースト(無敵)中の表示を切り替える。再生側(Battle)が無敵時間の内外で呼ぶ。
+## オフに戻すときは実体化(modulateを白へ)して、以後_processが触らないようにする。
+func set_ghosting(on: bool) -> void:
+	if _ghosting == on:
+		return
+	_ghosting = on
+	if not on:
+		modulate = Color(1.0, 1.0, 1.0, 1.0)
+		queue_redraw()
+
+
 func _process(delta: float) -> void:
 	_time += delta
 	rotation += visual_rps() * TAU * delta
 	# 回転数は再生中に変わるので、重なり順も毎フレーム追従させる。
 	z_index = draw_order_z(rps)
+	# ゴースト中は半透明シマーで揺らす。数式はGhostVisual(純粋関数)が持つ。
+	if _ghosting:
+		modulate = GhostVisual.modulate(_time)
 	queue_redraw()
 
 

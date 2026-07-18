@@ -45,7 +45,7 @@ static func play_one(
 		return {"seed": seed_value, "error": "map_generation_failed"}
 
 	var battles: Array = []
-	var parts: Array = []
+	var parts: Array[int] = []
 	var won_all := false
 
 	while true:
@@ -61,8 +61,10 @@ static func play_one(
 		var node: MapTree.MapNode = tree.nodes[tree.current_coord]
 		var group := node.enemies
 		var field := node.field
+		# 取得済みのゴースト札から無敵時間を出して戦闘に渡す。Battle.build_requestと同じ。
+		var ghost_duration := CustomPartCatalog.total_ghost_seconds(parts)
 		var record := BattleSim.play_one(
-			rng.randi(), group, launch_policy, stats, overrides, field
+			rng.randi(), group, launch_policy, stats, overrides, field, ghost_duration
 		)
 		battles.append({
 			"step": tree.current_step(),

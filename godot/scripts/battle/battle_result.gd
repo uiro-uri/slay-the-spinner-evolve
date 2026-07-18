@@ -65,6 +65,11 @@ var time_step: float = 1.0 / 60.0
 ## 上限に達して打ち切ったか。真なら決着が付かないまま終わっている。
 var timed_out: bool = false
 
+## ゴーストの無敵時間(秒)。再生側がこの時刻までプレイヤーのコマを半透明シマーで
+## 描いて「すり抜け中」を見せる。入力(BattleRequest.ghost_duration)の写しだが、
+## 再生はResultだけで完結する(サーバーが返すのもこれ)ので結果側にも持たせる。
+var ghost_duration: float = 0.0
+
 
 func player_won() -> bool:
 	return outcome == Outcome.PLAYER_WIN
@@ -113,6 +118,7 @@ func to_dict() -> Dictionary:
 		"finish_time": finish_time,
 		"time_step": time_step,
 		"timed_out": timed_out,
+		"ghost_duration": ghost_duration,
 	}
 
 
@@ -135,6 +141,7 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.finish_time = d["finish_time"]
 	r.time_step = d["time_step"]
 	r.timed_out = d["timed_out"]
+	r.ghost_duration = d.get("ghost_duration", 0.0)
 	return r
 
 

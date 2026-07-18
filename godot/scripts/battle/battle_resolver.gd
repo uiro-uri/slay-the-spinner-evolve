@@ -36,6 +36,8 @@ class State:
 static func resolve(request: BattleRequest) -> BattleResult:
 	var result := BattleResult.new()
 	result.time_step = request.time_step
+	# 再生側の無敵表示のため、入力の無敵時間を結果へ写す。
+	result.ghost_duration = request.ghost_duration
 
 	var player := State.new(request.player)
 	var enemies: Array[State] = []
@@ -64,8 +66,11 @@ static func resolve(request: BattleRequest) -> BattleResult:
 		# (i<j)。落ちたコマ(alive=false)は削り合いに参加しない。順序を固定するのは
 		# 3体以上が同時に重なったときの逐次解決が順序依存になるため。決定性と
 		# シリアライズ往復の一致がこの順序に依存する。
+		# ゴーストの無敵時間中(t < ghost_duration)はプレイヤーと敵の衝突を解かない。
+		# tはステップ開始時刻(1ステップ目は0)。ghost_duration=0なら常に当たる。
+		# 敵同士の衝突(下)は無敵の対象外なのでそのまま解く。
 		for i in enemies.size():
-			if player.alive and enemies[i].alive:
+			if player.alive and enemies[i].alive and t >= request.ghost_duration:
 				_resolve_disc_collision(player, enemies[i], request, t, result)
 		for i in enemies.size():
 			for j in range(i + 1, enemies.size()):

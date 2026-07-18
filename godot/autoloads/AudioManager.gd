@@ -46,6 +46,11 @@ const CLIPS := {
 	],
 	"win": ["res://assets/audio/se/result/jingles_NES01.ogg"],
 	"lose": ["res://assets/audio/se/result/jingles_NES00.ogg"],
+	# ゴースト(無敵)の開始＝すり抜けON、終了＝実体化。素材は暫定のCC0効果音で、
+	# スイッチ音で「モード切替」、ピチカートで「実体化のポン」を当てている。感触は
+	# 差し替え前提(docs/se.md)。
+	"ghost_start": ["res://assets/audio/se/launch/switch_001.ogg"],
+	"ghost_end": ["res://assets/audio/se/result/jingles_PIZZI00.ogg"],
 }
 
 ## キー→読み込んだ AudioStream 配列。_ready で CLIPS から作る。読めなかったものは飛ばす。
