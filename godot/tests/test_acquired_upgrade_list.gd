@@ -18,12 +18,33 @@ func run(check: Callable) -> void:
 	_test_aggregates_into_rows(check)
 	_test_rare_row_is_highlighted(check)
 	_test_common_row_is_plain(check)
+	_test_description_toggle(check)
+
+
+func _test_description_toggle(check: Callable) -> void:
+	# 既定(説明あり)は名前＋効果の2ラベル、show_description=falseは名前だけの1ラベル。
+	var with_desc := AcquiredUpgradeList.build_row(CustomPartCatalog.by_id(2), 1)
+	var box_with := with_desc.get_child(0)
+	check.call(
+		box_with.get_child_count() == 2,
+		"説明ありの行は名前＋効果の2ラベル (%d)" % box_with.get_child_count()
+	)
+	with_desc.free()
+
+	var no_desc := AcquiredUpgradeList.build_row(CustomPartCatalog.by_id(2), 1, false)
+	var box_no := no_desc.get_child(0)
+	check.call(
+		box_no.get_child_count() == 1,
+		"説明なしの行は名前だけの1ラベル (%d)" % box_no.get_child_count()
+	)
+	no_desc.free()
 
 
 func _test_empty_shows_placeholder(check: Callable) -> void:
 	var list := VBoxContainer.new()
 	var ids: Array[int] = []
-	AcquiredUpgradeList.populate(list, ids)
+	var rows := AcquiredUpgradeList.populate(list, ids)
+	check.call(rows == 0, "空の取得IDは行数0を返す (%d)" % rows)
 	check.call(
 		list.get_child_count() == 1,
 		"空の取得IDは「なし」表示1件だけになる (%d)" % list.get_child_count()
@@ -38,7 +59,8 @@ func _test_aggregates_into_rows(check: Callable) -> void:
 	# id2 を2回、id5 を1回。集約で2行になる。
 	var list := VBoxContainer.new()
 	var ids: Array[int] = [2, 2, 5]
-	AcquiredUpgradeList.populate(list, ids)
+	var rows := AcquiredUpgradeList.populate(list, ids)
+	check.call(rows == 2, "集約後の行数2を返す (%d)" % rows)
 	check.call(
 		list.get_child_count() == 2,
 		"重複を畳んで2行になる (%d)" % list.get_child_count()
