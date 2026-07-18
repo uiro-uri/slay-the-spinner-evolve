@@ -11,6 +11,7 @@ const BATTLE_SCENE: PackedScene = preload("res://scenes/battle/Battle.tscn")
 const REWARD_SCENE: PackedScene = preload("res://scenes/reward/RewardScreen.tscn")
 const GAMEOVER_SCENE: PackedScene = preload("res://scenes/gameover/GameOver.tscn")
 const GAMECLEAR_SCENE: PackedScene = preload("res://scenes/gameclear/GameClear.tscn")
+const SOUNDTEST_SCENE: PackedScene = preload("res://scenes/soundtest/SoundTest.tscn")
 
 @onready var _screen_holder: Node = $ScreenHolder
 
@@ -22,6 +23,13 @@ func _ready() -> void:
 func goto_title() -> void:
 	var title := _swap_screen(TITLE_SCENE)
 	title.start_requested.connect(_on_start_requested)
+	title.sound_test_requested.connect(goto_sound_test)
+
+
+## タイトルから開くサウンドテスト。戻るでタイトルへ返す。
+func goto_sound_test() -> void:
+	var sound_test := _swap_screen(SOUNDTEST_SCENE)
+	sound_test.back_requested.connect(goto_title)
 
 
 func _on_start_requested() -> void:
@@ -70,6 +78,9 @@ func goto_gameclear() -> void:
 	var gameclear := _swap_screen(GAMECLEAR_SCENE)
 	gameclear.to_title_requested.connect(_on_gameclear_to_title)
 	gameclear.setup(GameState.acquired_part_ids.size(), GameState.continues_left)
+	# クリアの締めにファンファーレ。戦闘の勝利ジングルは決着後の余韻中に鳴り終えており、
+	# クリア画面は決着から finish_delay 秒ほど後に出るので重ならない。
+	AudioManager.play_clear_fanfare()
 
 
 func _on_gameclear_to_title() -> void:

@@ -21,6 +21,13 @@ const POOL_SIZE := 8
 const SE_BUS := "SE"
 const BGM_BUS := "BGM"
 
+## 全体音量の対象バス(Master)。SEも将来のBGMもまとめて効かせるため Master をいじる。
+const MASTER_BUS_INDEX := 0
+
+## スライダー0付近を無音とみなすしきい値。これ未満はミュート扱い(linear_to_db が
+## 0で-infに落ちるのを避ける)。
+const MUTE_THRESHOLD := 0.0001
+
 ## キー→素材。配列のときは鳴らすたびランダムに1つ選び、単調な繰り返しを避ける。
 ## パスは import 済みの ogg。存在しないキーで play() しても握りつぶす。
 const CLIPS := {
@@ -32,7 +39,6 @@ const CLIPS := {
 	"impact": [
 		"res://assets/audio/se/impact/impactMetal_medium_000.ogg",
 		"res://assets/audio/se/impact/impactMetal_heavy_000.ogg",
-		"res://assets/audio/se/impact/impactPlate_heavy_000.ogg",
 	],
 	"wall": [
 		"res://assets/audio/se/wall/impactWood_medium_000.ogg",
@@ -116,10 +122,118 @@ func play(key: String) -> void:
 		return
 	var choices: Array = _streams[key]
 	var stream: AudioStream = choices[_rng.randi_range(0, choices.size() - 1)]
+	_play_stream(stream)
+
+
+## 音源パスを直接1回鳴らす。サウンドテストが素材を1つずつ試聴するのに使う
+## (ゲーム側は必ずキー参照の play() を通すこと)。読めなければ握りつぶす。
+func play_path(path: String) -> void:
+	if path == "":
+		return
+	var stream := load(path) as AudioStream
+	if stream == null:
+		push_warning("AudioManager: SEを読み込めない: %s" % path)
+		return
+	_play_stream(stream)
+
+
+## プールから次のプレイヤーを取り、stream を鳴らす。play()/play_path() 共通。
+## pitch はピッチ倍率(1.0=原音)。ラウンドロビンで使い回すので毎回セットして
+## 前回の値が残らないようにする。_ready 前(プール未構築)に呼ばれても落ちないよう保険。
+func _play_stream(stream: AudioStream, pitch: float = 1.0) -> void:
+	if _pool.is_empty():
+		return
 	var player := _pool[_pool_next]
 	_pool_next = (_pool_next + 1) % _pool.size()
 	player.stream = stream
+	player.pitch_scale = pitch
 	player.play()
+
+
+## --- ゲームクリアのファンファーレ ---
+##
+## jingles_HIT を同音で三連打 → 一拍置いて → 長3度→5度→オクターブの上昇アルペジオで
+## 主音(オクターブ)に着地させる。「タタタ・（間）・タラッタ↑ター」。5度で止めると
+## ドミナントで開放的なままなので、オクターブまで上げて解決させる。
+## ゲームクリア画面が出たときに鳴らす。素材長は約0.28秒。
+##
+## 音程はピッチ倍率で作る(素材は単音)。純正律基準: 主音1、長3度5/4、完全5度3/2、
+## オクターブ2。倍率を上げるほど再生も速く短くなるので上の音ほど軽く弾む。
+
+const CLEAR_NOTE_PATH := "res://assets/audio/se/result/jingles_HIT00.ogg"
+
+## 音の間隔(秒)。素材長に近づけて一打ずつ粒立たせる。
+const CLEAR_HIT_INTERVAL := 0.3
+
+## 三連打の後、着地フレーズに入るまでの「一拍」の間(秒)。三連打の間隔より広くとる。
+const CLEAR_REST := 0.6
+
+## 締めの連打の間隔(秒)。アルペジオを8分とみなし、その半分=16分で刻む。
+const CLEAR_ROLL_INTERVAL := CLEAR_HIT_INTERVAL / 2.0
+
+## ピッチ倍率(純正律)。CLEAR_SEQUENCE で使う。
+const CLEAR_UNISON := 1.0        ## 主音(ド)
+const CLEAR_THIRD := 1.25        ## 長3度(ミ) 5/4
+const CLEAR_FIFTH_RATIO := 1.5   ## 完全5度(ソ) 3/2
+const CLEAR_OCTAVE := 2.0        ## オクターブ(ド↑) 着地音
+
+## クリア旋律。各音は (pitch: ピッチ倍率, gap: 次の音までの間[秒])。
+## 同音三連打で立ち上げ、一拍置いてから長3度→5度の上昇アルペジオ、締めはオクターブを
+## 16分(CLEAR_ROLL_INTERVAL)で連打して主音に着地する。最後の音は gap=0(後に続かない)。
+## 感触の調整はこの表とピッチ/間隔 const で行う(連打の数はオクターブ行の増減で変える)。
+const CLEAR_SEQUENCE: Array[Dictionary] = [
+	{"pitch": CLEAR_UNISON, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_UNISON, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_UNISON, "gap": CLEAR_REST},
+	{"pitch": CLEAR_THIRD, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_FIFTH_RATIO, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": CLEAR_ROLL_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": CLEAR_ROLL_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": CLEAR_ROLL_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": 0.0},
+]
+
+
+## ゲームクリアのファンファーレを鳴らす。CLEAR_SEQUENCE を順に、間を取りながら鳴らす。
+## プールを使うので音は重なりうる。ツリー外(テスト等)ではタイマーが取れないので
+## 最初の一打だけ鳴らして戻る(落とさない)。
+func play_clear_fanfare() -> void:
+	var note := load(CLEAR_NOTE_PATH) as AudioStream
+	if note == null:
+		push_warning("AudioManager: クリア音を読み込めない: %s" % CLEAR_NOTE_PATH)
+		return
+	var tree := get_tree()
+	for step in CLEAR_SEQUENCE:
+		_play_stream(note, step["pitch"])
+		var gap: float = step["gap"]
+		if gap <= 0.0:
+			continue
+		if tree == null:
+			return
+		await tree.create_timer(gap).timeout
+
+
+## --- 全体音量 ---
+##
+## Master バスを直接いじるので SE も将来の BGM もまとめて効く。autoload なので
+## 設定は1ラン中ずっと保たれる(セーブはしない=GameStateと同じ流儀)。
+
+## 全体音量をセットする。value は 0.0(無音)〜1.0(原音)の線形値。
+## しきい値未満はミュート、それ以外は線形→dB変換して Master バスへ。
+func set_master_volume_linear(value: float) -> void:
+	var clamped := clampf(value, 0.0, 1.0)
+	if clamped < MUTE_THRESHOLD:
+		AudioServer.set_bus_mute(MASTER_BUS_INDEX, true)
+	else:
+		AudioServer.set_bus_mute(MASTER_BUS_INDEX, false)
+		AudioServer.set_bus_volume_db(MASTER_BUS_INDEX, linear_to_db(clamped))
+
+
+## 現在の全体音量を線形値(0.0〜1.0)で返す。ミュート中は0。
+func get_master_volume_linear() -> float:
+	if AudioServer.is_bus_mute(MASTER_BUS_INDEX):
+		return 0.0
+	return clampf(db_to_linear(AudioServer.get_bus_volume_db(MASTER_BUS_INDEX)), 0.0, 1.0)
 
 
 ## --- 回転音 ---

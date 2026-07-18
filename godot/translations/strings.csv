@@ -1,7 +1,18 @@
 keys,en,ja
 TITLE_GAME_NAME,Slay the Spinner,Slay the Spinner
 TITLE_START,Game Start,ゲームスタート
+TITLE_SOUND_TEST,Sound Test,サウンドテスト
 LANGUAGE_TOGGLE,日本語,English
+SOUNDTEST_TITLE,Sound Test,サウンドテスト
+SOUNDTEST_VOLUME,Master Volume,全体音量
+SOUNDTEST_BACK,Back,戻る
+SOUNDTEST_CAT_LAUNCH,Launch,発射
+SOUNDTEST_CAT_IMPACT,Impact,衝突
+SOUNDTEST_CAT_WALL,Wall,壁
+SOUNDTEST_CAT_RESULT,Result,決着
+SOUNDTEST_CAT_UI,UI,UI
+SOUNDTEST_CAT_FANFARE,Fanfare,ファンファーレ
+SOUNDTEST_CLEAR_FANFARE,Game Clear,ゲームクリア
 BATTLE_DRAG_TO_SHOOT,Drag to Shoot!,引っ張って発射!
 BATTLE_WIN,You Win!,勝利!
 BATTLE_LOSE,You Lose...,敗北...
