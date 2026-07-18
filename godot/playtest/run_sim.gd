@@ -56,9 +56,11 @@ static func play_one(
 			break
 		tree.advance_to(nexts[rng.randi_range(0, nexts.size() - 1)])
 
-		# Main._on_node_chosen と同じ順で、その段の敵と土俵を決める。
-		var group := EnemyRoster.pick_group_for_step(tree.current_step(), rng)
-		var field := FieldRoster.pick_for_step(tree.current_step(), rng)
+		# Main._on_map_node_chosen と同じく、進んだノードに確定済みの遭遇を使う
+		# （マップ生成時に決まっている。実戦とシミュレーションの遭遇を一致させる）。
+		var node: MapTree.MapNode = tree.nodes[tree.current_coord]
+		var group := node.enemies
+		var field := node.field
 		var record := BattleSim.play_one(
 			rng.randi(), group, launch_policy, stats, overrides, field
 		)

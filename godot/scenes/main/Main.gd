@@ -36,15 +36,16 @@ func goto_map() -> void:
 	map.setup(GameState.map_tree)
 
 
-## 進む先を選んだら、その段にふさわしい敵グループ(1〜3体)と土俵を決めて戦闘へ。
+## 進む先を選んだら、そのノードに確定済みの敵グループ(1〜3体)と土俵を戦闘へ渡す。
+## ここでは再抽選しない（マップ生成時に決めた遭遇をそのまま使う＝表示と実戦が一致）。
 func _on_map_node_chosen(coord: Vector2i) -> void:
 	if not GameState.map_tree.advance_to(coord):
 		push_error("Main: 進めないノードが選ばれた: %s" % coord)
 		return
 	AudioManager.play("ui_select")
-	var step := GameState.map_tree.current_step()
-	GameState.pending_enemies = EnemyRoster.pick_group_for_step(step)
-	GameState.pending_field = FieldRoster.pick_for_step(step)
+	var node: MapTree.MapNode = GameState.map_tree.nodes[GameState.map_tree.current_coord]
+	GameState.pending_enemies = node.enemies
+	GameState.pending_field = node.field
 	goto_battle()
 
 

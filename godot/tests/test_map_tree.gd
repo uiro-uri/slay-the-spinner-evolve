@@ -14,6 +14,8 @@ func run(check: Callable) -> void:
 	_test_invariants(check)
 	_test_deterministic_with_seed(check)
 	_test_navigation(check)
+	_test_encounters(check)
+	_test_encounters_deterministic(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -186,3 +188,75 @@ func _test_navigation(check: Callable) -> void:
 
 	check.call(tree.is_goal(), "マップ移動: 辿っていくとゴールに着く (%d手)" % steps)
 	check.call(tree.next_coords().is_empty(), "マップ移動: ゴールから先はない")
+
+
+## 各ノードに遭遇（敵グループ＋土俵）が確定して持たされていること。盤面と敵は
+## クリック時に再抽選せず、ここから生成する（Main._on_map_node_chosen）。
+##  - スタート(段0)は戦闘なし → 敵空・土俵null
+##  - 段1以降は敵が1体以上、土俵が有効（名前つき）
+##  - ゴール(段9)はレベル5のボス単体
+## _assign_encounters を消す/段0にも付ける等の破壊でここが落ちる。
+func _test_encounters(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var failures: Array[String] = []
+
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			failures.append("seed=%d: 生成に失敗" % trial)
+			continue
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if coord.x == 0:
+				if node.has_encounter() or node.field != null:
+					failures.append("seed=%d: スタート%sに遭遇が付いている" % [trial, coord])
+			else:
+				if not node.has_encounter():
+					failures.append("seed=%d: 戦闘ノード%sに敵がいない" % [trial, coord])
+				elif node.field == null or node.field.title_key == "":
+					failures.append("seed=%d: 戦闘ノード%sの土俵が無効" % [trial, coord])
+
+		# ゴールはレベル5のボス単体。
+		var goal: MapTree.MapNode = tree.nodes[MapTree.GOAL_COORD]
+		if goal.enemy_count() != 1 or goal.level() != 5:
+			failures.append(
+				"seed=%d: ゴールがボス単体Lv5でない (数%d/Lv%d)" % [
+					trial, goal.enemy_count(), goal.level()
+				]
+			)
+
+	check.call(
+		failures.is_empty(),
+		"マップ遭遇: %d回すべて全ノードに正しい遭遇が付く%s" % [
+			TRIALS, "" if failures.is_empty() else " / 例: " + failures[0]
+		]
+	)
+
+
+## 同じシードなら遭遇まで一致すること。ノードごとに敵数・実レベル・土俵名を照合する。
+## 遭遇を非シードのRNGで引くとここが落ちる（表示と実戦の再現性が崩れる）。
+func _test_encounters_deterministic(check: Callable) -> void:
+	var rng_a := RandomNumberGenerator.new()
+	rng_a.seed = 999
+	var tree_a := MapTree.generate(rng_a)
+
+	var rng_b := RandomNumberGenerator.new()
+	rng_b.seed = 999
+	var tree_b := MapTree.generate(rng_b)
+
+	var same := tree_a != null and tree_b != null
+	if same:
+		for coord in tree_a.nodes:
+			var a: MapTree.MapNode = tree_a.nodes[coord]
+			var b: MapTree.MapNode = tree_b.nodes[coord]
+			if a.enemy_count() != b.enemy_count() or a.level() != b.level():
+				same = false
+				break
+			var a_field: String = a.field.title_key if a.field != null else ""
+			var b_field: String = b.field.title_key if b.field != null else ""
+			if a_field != b_field:
+				same = false
+				break
+
+	check.call(same, "マップ遭遇: 同じシードなら遭遇（敵数・レベル・土俵）も一致する")

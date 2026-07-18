@@ -28,8 +28,35 @@ class MapNode:
 	var coord: Vector2i
 	var arrows: Array[Arrow] = []
 
+	## このノードで戦う敵グループと土俵。マップ生成時に確定して持たせておく
+	## （盤面と敵はここから生成する。Mainはクリック時に再抽選しない）。
+	## スタート(段0)は戦闘が無いので空/null のまま。
+	var enemies: Array[EnemyData] = []
+	var field: FieldData = null
+
 	func _init(node_coord: Vector2i) -> void:
 		coord = node_coord
+
+	## 戦闘ノードか（スタートだけ false）。
+	func has_encounter() -> bool:
+		return not enemies.is_empty()
+
+	## このノードで戦う敵の数（乱戦なら2〜3）。
+	func enemy_count() -> int:
+		return enemies.size()
+
+	## 実際に戦う敵のレベル。乱戦は1段下のメンバーレベルになるので、
+	## 名目段レベルではなく実レベルを返して表示を嘘にしない。
+	func level() -> int:
+		if enemies.is_empty():
+			return 0
+		return enemies[0].level
+
+	## 土俵の外周形状。描画でノードの輪郭に使う。土俵未設定なら矩形扱い。
+	func wall_shape() -> ArenaWall.WallShape:
+		if field == null:
+			return ArenaWall.WallShape.RECT
+		return field.wall_shape
 
 	## この矢印を辿った先の座標。
 	func target_of(arrow: Arrow) -> Vector2i:
@@ -86,6 +113,8 @@ static func generate(rng: RandomNumberGenerator = null) -> MapTree:
 		var tree := MapTree.new()
 		tree._build(rng)
 		if tree._all_penultimate_reachable():
+			# 採用が確定した木にだけ遭遇を割り当てる（作り直した分は無駄に引かない）。
+			tree._assign_encounters(rng)
 			return tree
 
 	# ここに来るなら生成条件が壊れている。黙って壊れたマップを返さない。
@@ -116,6 +145,19 @@ func _build(rng: RandomNumberGenerator) -> void:
 
 	for step in range(1, 8):
 		_assign_arrows_for_step(step, rng)
+
+
+## 全戦闘ノード（段1以降）に敵グループと土俵を確定して持たせる。段ごとの抽選は
+## 既存の EnemyRoster / FieldRoster をそのまま使い、渡す rng は生成と同じものなので
+## 「同じシード＝同じ遭遇」が保たれる（盤面表示と実戦が必ず一致する）。
+## スタート(段0)は戦闘が無いので触らない。ゴール(段9)は EnemyRoster 側で単体ボスになる。
+func _assign_encounters(rng: RandomNumberGenerator) -> void:
+	for coord in nodes:
+		if coord.x == 0:
+			continue
+		var node: MapNode = nodes[coord]
+		node.enemies = EnemyRoster.pick_group_for_step(coord.x, rng)
+		node.field = FieldRoster.pick_for_step(coord.x, rng)
 
 
 func _assign_arrows_for_step(step: int, rng: RandomNumberGenerator) -> void:
