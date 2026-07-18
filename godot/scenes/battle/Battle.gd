@@ -47,10 +47,11 @@ const BAR_ROW_H := 60.0
 @export var stage_shape: SpinnerPhysics.StageShape = SpinnerPhysics.StageShape.DISH
 
 ## ぶつかり合いの激しさ。大きいほど1回の衝突で削れるRPSが増える。
-@export_range(0.0, 1.0, 0.01) var violence: float = 0.08
+@export_range(0.0, 1.0, 0.01) var violence: float = 0.04
 
 ## 削れたRPSがどれだけ弾き飛ばしに変わるか。
-@export_range(0.0, 5.0, 0.05) var spin_kick_scale: float = 1.0
+## violenceを半減したぶん、弾き合いの勢いは維持するため2倍にして相殺している。
+@export_range(0.0, 5.0, 0.05) var spin_kick_scale: float = 2.0
 
 ## 何もしなくても失われる回転(毎秒、半径に比例)。
 @export_range(0.0, 5.0, 0.05) var natural_damping: float = 1.0
