@@ -152,39 +152,58 @@ func _play_stream(stream: AudioStream, pitch: float = 1.0) -> void:
 
 ## --- ゲームクリアのファンファーレ ---
 ##
-## jingles_HIT を三連打 → 一拍置いて → 完全5度上(ピッチ×1.5)で締める。
-## 「タタタ・（間）・ター↑」。ゲームクリア画面が出たときに鳴らす。
-## 素材長は約0.28秒なので、間隔はそれに近づけて三打を粒立たせ、締めは一拍空ける。
+## jingles_HIT を同音で三連打 → 一拍置いて → 長3度→5度→オクターブの上昇アルペジオで
+## 主音(オクターブ)に着地させる。「タタタ・（間）・タラッタ↑ター」。5度で止めると
+## ドミナントで開放的なままなので、オクターブまで上げて解決させる。
+## ゲームクリア画面が出たときに鳴らす。素材長は約0.28秒。
+##
+## 音程はピッチ倍率で作る(素材は単音)。純正律基準: 主音1、長3度5/4、完全5度3/2、
+## オクターブ2。倍率を上げるほど再生も速く短くなるので上の音ほど軽く弾む。
 
 const CLEAR_NOTE_PATH := "res://assets/audio/se/result/jingles_HIT00.ogg"
 
-## 三連打の間隔(秒)。素材長に近づけて一打ずつ粒立たせる。
+## 音の間隔(秒)。素材長に近づけて一打ずつ粒立たせる。
 const CLEAR_HIT_INTERVAL := 0.3
 
-## 三打目から締めの5度までの間(秒)。「一拍置いて」の間。三打の間隔より広くとる。
+## 三連打の後、着地フレーズに入るまでの「一拍」の間(秒)。三連打の間隔より広くとる。
 const CLEAR_REST := 0.6
 
-## 締めのピッチ倍率。完全5度上=3/2。
-const CLEAR_FIFTH_RATIO := 1.5
+## ピッチ倍率(純正律)。CLEAR_SEQUENCE で使う。
+const CLEAR_UNISON := 1.0        ## 主音(ド)
+const CLEAR_THIRD := 1.25        ## 長3度(ミ) 5/4
+const CLEAR_FIFTH_RATIO := 1.5   ## 完全5度(ソ) 3/2
+const CLEAR_OCTAVE := 2.0        ## オクターブ(ド↑) 着地音
+
+## クリア旋律。各音は (pitch: ピッチ倍率, gap: 次の音までの間[秒])。
+## 同音三連打で立ち上げ、一拍置いてから上昇アルペジオでオクターブに着地する。
+## 最後の音は gap=0(後に続かない)。感触の調整はこの表とピッチ/間隔 const で行う。
+const CLEAR_SEQUENCE: Array[Dictionary] = [
+	{"pitch": CLEAR_UNISON, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_UNISON, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_UNISON, "gap": CLEAR_REST},
+	{"pitch": CLEAR_THIRD, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_FIFTH_RATIO, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": 0.0},
+]
 
 
-## ゲームクリアのファンファーレを鳴らす。プールを使って重ねる。ツリー外(テスト等)では
-## タイマーが取れないので最初の一打だけ鳴らして戻る(落とさない)。
+## ゲームクリアのファンファーレを鳴らす。CLEAR_SEQUENCE を順に、間を取りながら鳴らす。
+## プールを使うので音は重なりうる。ツリー外(テスト等)ではタイマーが取れないので
+## 最初の一打だけ鳴らして戻る(落とさない)。
 func play_clear_fanfare() -> void:
 	var note := load(CLEAR_NOTE_PATH) as AudioStream
 	if note == null:
 		push_warning("AudioManager: クリア音を読み込めない: %s" % CLEAR_NOTE_PATH)
 		return
 	var tree := get_tree()
-	_play_stream(note, 1.0)
-	if tree == null:
-		return
-	await tree.create_timer(CLEAR_HIT_INTERVAL).timeout
-	_play_stream(note, 1.0)
-	await tree.create_timer(CLEAR_HIT_INTERVAL).timeout
-	_play_stream(note, 1.0)
-	await tree.create_timer(CLEAR_REST).timeout
-	_play_stream(note, CLEAR_FIFTH_RATIO)
+	for step in CLEAR_SEQUENCE:
+		_play_stream(note, step["pitch"])
+		var gap: float = step["gap"]
+		if gap <= 0.0:
+			continue
+		if tree == null:
+			return
+		await tree.create_timer(gap).timeout
 
 
 ## --- 全体音量 ---

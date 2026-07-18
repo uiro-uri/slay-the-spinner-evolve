@@ -110,11 +110,25 @@ func _test_play_never_crashes(check: Callable) -> void:
 func _test_clear_fanfare(check: Callable) -> void:
 	var am: Node = load("res://autoloads/AudioManager.gd").new()
 
-	# 締めは完全5度上=3/2。
-	check.call(absf(am.CLEAR_FIFTH_RATIO - 1.5) < EPS, "クリア締めは5度上(×1.5) (%.3f)" % am.CLEAR_FIFTH_RATIO)
-	# 「一拍置いて」の間は三連打の間隔より広い(締めが分離して聞こえる)。
-	check.call(am.CLEAR_REST > am.CLEAR_HIT_INTERVAL, "締め前の間が三連打の間隔より広い")
+	# 5度=3/2、オクターブ=2。
+	check.call(absf(am.CLEAR_FIFTH_RATIO - 1.5) < EPS, "5度は×1.5 (%.3f)" % am.CLEAR_FIFTH_RATIO)
+	check.call(absf(am.CLEAR_OCTAVE - 2.0) < EPS, "オクターブは×2.0 (%.3f)" % am.CLEAR_OCTAVE)
+	# 「一拍置いて」の間は三連打の間隔より広い(着地フレーズが分離して聞こえる)。
+	check.call(am.CLEAR_REST > am.CLEAR_HIT_INTERVAL, "着地前の間が三連打の間隔より広い")
 	check.call(am.CLEAR_HIT_INTERVAL > 0.0, "三連打の間隔が正")
+
+	# 旋律: 頭は同音三連打、締めはオクターブで着地(=最後がドミナントより上に解決する)。
+	var seq: Array = am.CLEAR_SEQUENCE
+	check.call(seq.size() >= 5, "旋律が三連打+着地フレーズを含む長さ (%d音)" % seq.size())
+	var opening_unison := true
+	for i in 3:
+		if not is_equal_approx(seq[i]["pitch"], am.CLEAR_UNISON):
+			opening_unison = false
+	check.call(opening_unison, "頭の三音が同音(主音)")
+	var last_pitch: float = seq[seq.size() - 1]["pitch"]
+	check.call(absf(last_pitch - am.CLEAR_OCTAVE) < EPS, "最後の音がオクターブ(主音)で着地する (%.3f)" % last_pitch)
+	check.call(last_pitch > am.CLEAR_FIFTH_RATIO, "着地音が5度より高い(ドミナントで開放したまま終わらない)")
+	check.call(seq[seq.size() - 1]["gap"] <= 0.0, "最後の音の後に間は無い")
 	# クリア音素材が読めてOggVorbisであること。
 	var note := load(am.CLEAR_NOTE_PATH) as AudioStream
 	check.call(note != null and note is AudioStreamOggVorbis, "クリア音がOggVorbisで読める (%s)" % am.CLEAR_NOTE_PATH)

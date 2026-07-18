@@ -64,9 +64,12 @@ AudioManager.start_charge() / update_charge(ratio) / stop_charge()
 衝突音は再生と同じ `BattleResult.impacts`／`wall_impacts` に同期させている（物理ステップ
 ではない）。回転音・チャージ音の音量・ピッチは `AudioLevels` の `const` で調整できる。
 
-クリアファンファーレは `jingles_HIT` を三連打 → 一拍置いて → 完全5度上（ピッチ×1.5）で
-締める短い旋律。`AudioManager.play_clear_fanfare()` が `SceneTreeTimer` で間を取り、`_play_stream`
-の `pitch` 引数でピッチを上げる。間隔・間・ピッチ倍率は `AudioManager` の `CLEAR_*` const で調整できる。
+クリアファンファーレは `jingles_HIT` を同音で三連打 → 一拍置いて → 長3度→5度→オクターブの
+上昇アルペジオで主音（オクターブ）に着地させる短い旋律。5度で止めるとドミナントで開放的な
+ままなので、オクターブまで上げて解決させている。`AudioManager.play_clear_fanfare()` が
+`CLEAR_SEQUENCE`（各音の `pitch`／次までの `gap`）を順に、`SceneTreeTimer` で間を取りながら鳴らし、
+`_play_stream` の `pitch` 引数でピッチを作る（素材は単音）。旋律・間隔・ピッチ倍率は
+`AudioManager` の `CLEAR_SEQUENCE` と `CLEAR_*` const で調整できる。
 
 ## サウンドテスト・全体音量
 
