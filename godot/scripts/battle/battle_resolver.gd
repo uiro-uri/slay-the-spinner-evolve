@@ -213,7 +213,7 @@ static func _resolve_walls(
 			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
-		s.rps *= req.wall_damping
+		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
 
 
 ## 障害物(固定円)との衝突。壁と同型で、法線が中心からの放射方向になるだけ。
@@ -233,7 +233,7 @@ static func _resolve_obstacles(
 			BattleResult.Impact.new(t, s.position - normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
-		s.rps *= req.wall_damping
+		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
 
 
 static func _apply_natural_decay(s: State, req: BattleRequest, dt: float) -> void:

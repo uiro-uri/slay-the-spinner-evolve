@@ -30,6 +30,10 @@ extends Resource
 ## 1未満で回転を失いにくくなる＝長く回り続ける。Full Steam Aheadが下げる。
 @export_range(0.1, 2.0, 0.01) var spin_decay: float = 1.0
 
+## 壁・障害物にぶつかったときのrps喪失を減らす度合い。0で従来どおり、1で無損失。
+## 実効ダンピングを1.0(無損失)へこの割合だけ寄せる。Rage Reflectionが上げる。
+@export_range(0.0, 1.0, 0.01) var wall_keep: float = 0.0
+
 
 func duplicate_stats() -> SpinnerStats:
 	var copy := SpinnerStats.new()
@@ -39,6 +43,7 @@ func duplicate_stats() -> SpinnerStats:
 	copy.restitution = restitution
 	copy.rps = rps
 	copy.spin_decay = spin_decay
+	copy.wall_keep = wall_keep
 	return copy
 
 

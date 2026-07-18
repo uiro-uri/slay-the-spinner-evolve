@@ -21,9 +21,9 @@ const COPIES := [0, 1, 2, 3]
 const PART_IDS := [2, 3, 5, 6, 7, 9]
 const PART_LABEL := {
 	2: "GIANT_GROWTH  半径×1.25",
-	3: "OVERENCUMBERED 質量×1.6 ",
-	5: "FULL_STEAM     摩擦×0.85",
-	6: "RAGE_REFLECT   反発×1.1 ",
+	3: "OVERENCUMBERED 質量×1.5 ",
+	5: "FULL_STEAM     勢い維持×0.8",
+	6: "RAGE_REFLECT   反発+壁保持",
 	7: "SPIN_ENGINE    RPS ×1.25",
 	9: "GHOST          無敵2s/枚",
 }

@@ -247,6 +247,25 @@ func _test_wall(check: Callable) -> void:
 	var damped := SpinnerPhysics.wall_bounce(Vector2(-2, 0), wall_normal, 0.5)
 	check.call(absf(damped.x - 1.0) < EPS, "壁: restitutionで勢いが落ちる (x=%.3f)" % damped.x)
 
+	# 壁rps保持(wall_keep)は実効ダンピングを1.0(無損失)へ寄せる。Rage Reflection用。
+	check.call(
+		absf(SpinnerPhysics.effective_wall_damping(0.8, 0.0) - 0.8) < EPS,
+		"壁rps保持: keep=0は素通し(baseのまま)"
+	)
+	check.call(
+		absf(SpinnerPhysics.effective_wall_damping(0.8, 1.0) - 1.0) < EPS,
+		"壁rps保持: keep=1で無損失(1.0)"
+	)
+	# keep=0.5でbaseと1.0の中点。かつkeepが増えるほど1.0へ近づく(損失が減る)。
+	check.call(
+		absf(SpinnerPhysics.effective_wall_damping(0.8, 0.5) - 0.9) < EPS,
+		"壁rps保持: ke=0.5でbaseと1.0の中点 (%.3f)" % SpinnerPhysics.effective_wall_damping(0.8, 0.5)
+	)
+	check.call(
+		SpinnerPhysics.effective_wall_damping(0.8, 0.5) > SpinnerPhysics.effective_wall_damping(0.8, 0.0),
+		"壁rps保持: keepが増えると壁でのrps喪失が減る"
+	)
+
 
 func _test_natural_decay(check: Callable) -> void:
 	var small := SpinnerPhysics.natural_spin_decay(0.5, 1.0, 0.1)

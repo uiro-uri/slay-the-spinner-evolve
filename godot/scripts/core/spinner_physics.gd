@@ -125,6 +125,12 @@ static func wall_bounce(vel: Vector2, wall_normal: Vector2, restitution: float) 
 	return vel.bounce(wall_normal) * restitution
 
 
+## 壁での実効rpsダンピング。wall_keep(0..1)のぶんだけ無損失(1.0)へ寄せる。
+## wall_keep=0で従来のbase、1で1.0(壁でrpsを失わない)。Rage Reflectionが上げる。
+static func effective_wall_damping(base: float, wall_keep: float) -> float:
+	return base + (1.0 - base) * clampf(wall_keep, 0.0, 1.0)
+
+
 ## 障害物(固定された円)にめり込んでいて、かつ障害物へ向かって進んでいるか。
 ## 壁のwall_hitと同じ構造で、法線が固定でなく中心からの放射方向になるだけ。
 ## 反射は wall_bounce(vel, (pos - obstacle_center).normalized(), restitution) を使う。

@@ -18,6 +18,7 @@ func run(check: Callable) -> void:
 	_test_no_debuffs(check)
 	_test_set_lives(check)
 	_test_ghost(check)
+	_test_rage(check)
 
 
 func _stats() -> SpinnerStats:
@@ -151,6 +152,14 @@ func _test_description_matches_effect(check: Callable) -> void:
 			check.call(
 				text.contains(CustomPart._trim(part.multiplier)),
 				"パーツ%d(%s): 勢い維持の説明に倍率が出ている (%s)" % [part.id, part.title_key, text]
+			)
+			continue
+
+		# 怒りの反射は反発倍率と壁rps保持の複合。反発倍率が出ていることを確かめる。
+		if part.effect == CustomPart.Effect.RAGE:
+			check.call(
+				text.contains(CustomPart._trim(part.multiplier)),
+				"パーツ%d(%s): 怒りの反射の説明に反発倍率が出ている (%s)" % [part.id, part.title_key, text]
 			)
 			continue
 
@@ -387,6 +396,33 @@ func _test_ghost(check: Callable) -> void:
 ## GameStateはオートロードだが、--scriptランナーではツリーに載らず参照できないので、
 ## ここではスクリプトを直接new()した独立インスタンスで検証する（グローバルも汚さない）。
 const GameStateScript := preload("res://autoloads/GameState.gd")
+
+
+## 怒りの反射(RAGE)札。反発を上げつつ(cap上限)、壁rps保持(wall_keep)も上げる複合。
+func _test_rage(check: Callable) -> void:
+	var rage := CustomPartCatalog.by_id(6)
+	check.call(rage.effect == CustomPart.Effect.RAGE, "怒りの反射: 効果種別がRAGE")
+
+	# 1枚で反発が上がり、壁rps保持も上がる（複合）。
+	# 実プレイの初期反発は0.75(上限1.0未満)なので、そこから上がることを見る。
+	var s := _stats()
+	s.restitution = 0.75
+	var before_rest := s.restitution
+	var before_keep := s.wall_keep
+	rage.apply_to(s)
+	check.call(s.restitution > before_rest, "怒りの反射: 反発が上がる (%.3f -> %.3f)" % [before_rest, s.restitution])
+	check.call(s.wall_keep > before_keep, "怒りの反射: 壁rps保持が上がる (%.3f -> %.3f)" % [before_keep, s.wall_keep])
+
+	# 反発はRESTITUTION_CAP(1.0)を超えない。壁rps保持は1.0を超えない。
+	s = _stats()
+	for i in 10:
+		rage.apply_to(s)
+	check.call(
+		s.restitution <= CustomPartCatalog.RESTITUTION_CAP + EPS,
+		"怒りの反射: 反発が上限%.1fで止まる (%.3f)" % [CustomPartCatalog.RESTITUTION_CAP, s.restitution]
+	)
+	check.call(s.wall_keep <= 1.0 + EPS, "怒りの反射: 壁rps保持が1.0で止まる (%.3f)" % s.wall_keep)
+	check.call(s.wall_keep >= 1.0 - EPS, "怒りの反射: 重ねがけで壁rps保持が1.0へ届く (%.3f)" % s.wall_keep)
 
 
 func _test_set_lives(check: Callable) -> void:
