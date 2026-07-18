@@ -17,6 +17,9 @@ func run(check: Callable) -> void:
 	_test_field_reaches_battle(check)
 	_test_overrides_beat_field(check)
 	_test_run_sim_consistent(check)
+	_test_run_sim_forced_pick(check)
+	_test_run_sim_continues(check)
+	_test_run_sim_spare_core(check)
 
 
 func _request() -> BattleRequest:
@@ -234,3 +237,84 @@ func _test_run_sim_consistent(check: Callable) -> void:
 			check.call(r["died_at_step"] == -1, "run_sim: クリアなら死亡段がない")
 		else:
 			check.call(r["died_at_step"] >= 1, "run_sim: 死亡段が記録される")
+
+
+## FORCED方針: 対象idが3択にあれば必ずそれを取る。ステータスを変えないSET_LIVES
+## (greedyのtoughness選好では絶対選ばれない)を強制できることが肝。
+func _test_run_sim_forced_pick(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var stats := SpinnerStats.default_player()
+
+	# 3択にSPARE_CORE(id8)を混ぜる。greedyなら硬さの上がるGiant Growth(id2)を選ぶが、
+	# FORCEDならid8を選ぶ。
+	var with_target: Array[CustomPart] = [
+		CustomPartCatalog.by_id(2), CustomPartCatalog.by_id(8), CustomPartCatalog.by_id(5)
+	]
+	var picked := RunSim._choose_part(
+		with_target, RunSim.RewardPolicy.FORCED, rng, stats, 8
+	)
+	check.call(picked.id == 8, "run_sim: FORCEDは対象id(残機札)を必ず取る (実際 %d)" % picked.id)
+
+	# 対象が3択に無い回はgreedyに委譲する(3択の中から選ぶ)。
+	var without_target: Array[CustomPart] = [
+		CustomPartCatalog.by_id(2), CustomPartCatalog.by_id(5), CustomPartCatalog.by_id(6)
+	]
+	var fallback := RunSim._choose_part(
+		without_target, RunSim.RewardPolicy.FORCED, rng, stats, 8
+	)
+	var ids := without_target.map(func(p): return p.id)
+	check.call(
+		ids.has(fallback.id),
+		"run_sim: FORCEDは対象不在ならgreedyに委譲 (実際 %d)" % fallback.id
+	)
+
+
+## 残機(コンティニュー)の模擬。敗北しても残機がある限り再挑戦し、残機が尽きて
+## 初めて力尽きる。実プレイのGameStateと同じ。SPARE_COREを取らないFORCED(質量)で
+## 回すので残機の底上げは起きず、初期3から消費した分だけ減る。
+func _test_run_sim_continues(check: Callable) -> void:
+	var died_checked := false
+	for seed_value in range(0, 30):
+		var r := RunSim.play_one(
+			seed_value, LaunchPolicy.Kind.INTERCEPT, RunSim.RewardPolicy.FORCED, null, 3
+		)
+		# SPARE_COREを取らないので残機は増えない: 消費+残 == 初期。
+		check.call(
+			r["continues_used"] + r["final_continues"] == RunSim.START_CONTINUES,
+			"run_sim: 残機の収支が初期値と整合 (seed %d)" % seed_value
+		)
+		check.call(
+			r["continues_used"] <= RunSim.START_CONTINUES,
+			"run_sim: 消費残機が初期値以下 (seed %d)" % seed_value
+		)
+		# 肝: 残機がある限り死なない。死んだなら残機は必ず0。
+		if not r["cleared"]:
+			died_checked = true
+			check.call(
+				r["final_continues"] == 0,
+				"run_sim: 残機がある限り死なない(死亡時は残0) (seed %d, 残%d)" % [
+					seed_value, r["final_continues"]
+				]
+			)
+	check.call(died_checked, "run_sim: 残機の死亡分岐を少なくとも1回検証した")
+
+
+## SPARE_CORE(id8)を取ると残機が5へ底上げされる(GameState.apply_partのmaxiと同じ)。
+## 取得後に一度も敗北しなければ残機は5のまま。固定シード集合なので決定的。
+func _test_run_sim_spare_core(check: Callable) -> void:
+	var acquired_any := false
+	var max_continues := 0
+	for seed_value in range(0, 60):
+		var r := RunSim.play_one(
+			seed_value, LaunchPolicy.Kind.INTERCEPT, RunSim.RewardPolicy.FORCED, null, 8
+		)
+		if r["parts"].has(8):
+			acquired_any = true
+			max_continues = maxi(max_continues, r["final_continues"])
+	check.call(acquired_any, "run_sim: SPARE_COREを取得したランがある")
+	check.call(
+		max_continues > RunSim.START_CONTINUES,
+		"run_sim: SPARE_COREで残機が初期(%d)を超える (最大 %d)" % [
+			RunSim.START_CONTINUES, max_continues
+		]
+	)
