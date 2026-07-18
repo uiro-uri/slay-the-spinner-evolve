@@ -18,6 +18,7 @@ func run(check: Callable) -> void:
 	_test_sampling(check)
 	_test_outcome(check)
 	_test_multi_enemy(check)
+	_test_dead_ignores_walls(check)
 
 
 func _stats(mass: float, radius: float, rps: float) -> SpinnerStats:
@@ -314,3 +315,49 @@ func _test_multi_enemy(check: Callable) -> void:
 			revived.outcome == result.outcome and absf(revived.finish_time - result.finish_time) < EPS,
 			"乱戦: JSONを通しても同じ結果"
 		)
+
+
+## 落ちたコマ(alive=false)は壁の当たり判定を失い、跳ね返らず場外へ素通りする。
+## 生きているコマは同じ初速でも壁で跳ね返ってアリーナ内に留まる。
+## 傾斜と自然減衰は切って、壁の有無だけが位置を分けるようにする。
+func _test_dead_ignores_walls(check: Callable) -> void:
+	var req := BattleRequest.new()
+	req.stage_strength = 0.0
+	req.natural_damping = 0.0
+	var bounds := req.arena_bounds
+	var walls := ArenaWall.build(req.wall_shape, bounds)
+	# 右の壁(x=10)へ向かって速く撃つ。壁際から始めてすぐ当たる位置に置く。
+	var launch := BattleRequest.Launch.new(_stats(1.0, 0.5, 15.0), Vector2(9.0, 5.0), Vector2(20, 0))
+
+	var alive_state := BattleResolver.State.new(launch)
+	var dead_state := BattleResolver.State.new(launch)
+	dead_state.alive = false
+
+	var alive_result := BattleResult.new()
+	var dead_result := BattleResult.new()
+	var center := bounds.get_center()
+	var dt := req.time_step
+	var t := 0.0
+	for step in 40:
+		BattleResolver._integrate(alive_state, center, req, dt)
+		BattleResolver._integrate(dead_state, center, req, dt)
+		BattleResolver._resolve_body_field(alive_state, walls, req, dt, t, alive_result)
+		BattleResolver._resolve_body_field(dead_state, walls, req, dt, t, dead_result)
+		t += dt
+
+	check.call(
+		alive_result.wall_impacts.size() > 0,
+		"死亡壁抜け: 生きているコマは壁に当たる (%d回)" % alive_result.wall_impacts.size()
+	)
+	check.call(
+		dead_result.wall_impacts.size() == 0,
+		"死亡壁抜け: 落ちたコマは壁に当たらない (%d回)" % dead_result.wall_impacts.size()
+	)
+	check.call(
+		bounds.grow(1.0).has_point(alive_state.position),
+		"死亡壁抜け: 生きているコマは跳ね返ってアリーナ内に留まる (%s)" % alive_state.position
+	)
+	check.call(
+		dead_state.position.x > bounds.end.x + 1.0,
+		"死亡壁抜け: 落ちたコマは壁を素通りして場外へ抜ける (%s)" % dead_state.position
+	)

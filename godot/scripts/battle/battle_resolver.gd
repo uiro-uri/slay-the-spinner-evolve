@@ -21,8 +21,9 @@ class State:
 	var velocity: Vector2
 	var rps: float
 
-	## 力尽きたら偽。落ちたコマは削り合い(コマ同士の衝突)から外れるが、
-	## 場外に飛ばないよう積分・壁・減衰と軌跡の記録は続ける。
+	## 力尽きたら偽。落ちたコマは削り合い(コマ同士の衝突)からも壁・障害物との
+	## 当たり判定からも外れ、以後は誰にも触れずに勢いのまま流れていく。
+	## 積分・自然減衰・軌跡の記録だけは続ける(そのまま止まってフェードアウトさせる)。
 	var alive: bool = true
 
 	func _init(launch: BattleRequest.Launch) -> void:
@@ -176,11 +177,14 @@ static func _resolve_disc_collision(
 
 ## 1体ぶんの土俵まわり: 壁・障害物・自然減衰。体ごとに独立しており、
 ## 他の体には触れないので、複数体でも並び順は結果に影響しない。
+## 落ちたコマ(alive=false)は壁・障害物の当たり判定を持たず素通りする。
+## 積分と自然減衰だけは続けるので、勢いのまま流れつつ止まっていく。
 static func _resolve_body_field(
 	s: State, walls: Array[ArenaWall], req: BattleRequest, dt: float, t: float, result: BattleResult
 ) -> void:
-	_resolve_walls(s, walls, req, t, result)
-	_resolve_obstacles(s, req, t, result)
+	if s.alive:
+		_resolve_walls(s, walls, req, t, result)
+		_resolve_obstacles(s, req, t, result)
 	_apply_natural_decay(s, req, dt)
 
 

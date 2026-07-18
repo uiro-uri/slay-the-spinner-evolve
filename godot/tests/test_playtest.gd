@@ -59,6 +59,17 @@ func _test_invariants_catch_bad_results(check: Callable) -> void:
 		"検査器: rpsの増加を拾う"
 	)
 
+	# 落ちたコマ(rps <= lose_threshold)は壁を抜けて場外へ出るのが仕様なので、
+	# アリーナ外にいても脱出違反にはしない。生きているコマ(上の脱出テスト)とは扱いを分ける。
+	# 以降のフレームもrpsを下げて閾値以下に揃える(rps増加違反を誘発しないため)。
+	var dead := _healthy_result(request)
+	for i in range(2, dead.enemy_tracks[0].size()):
+		dead.enemy_tracks[0][i] = BattleResult.Snapshot.new(Vector2(30.0, 5.0), Vector2.ZERO, 0.0)
+	check.call(
+		PlaytestInvariants.check(request, dead).is_empty(),
+		"検査器: 落ちたコマの場外脱出は見逃す (%s)" % [PlaytestInvariants.check(request, dead)]
+	)
+
 	# 戦闘の外の衝突時刻
 	bad = _healthy_result(request)
 	bad.impacts.append(BattleResult.Impact.new(bad.finish_time + 10.0, Vector2(5, 5)))

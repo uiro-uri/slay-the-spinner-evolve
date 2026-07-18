@@ -66,9 +66,13 @@ static func _check_frames(
 			violations.append("%s: 数値が壊れた (step %d: pos=%s rps=%s)" % [who, i, f.position, f.rps])
 			return
 
-		if f.position.x < lo.x or f.position.x > hi.x or f.position.y < lo.y or f.position.y > hi.y:
-			violations.append("%s: アリーナから脱出 (step %d: %s)" % [who, i, f.position])
-			return
+		# 落ちたコマ(rps <= lose_threshold)は壁の当たり判定を失い、勢いのまま場外へ
+		# 抜けるのが仕様。生きている間だけアリーナ内に収まっていることを確かめる。
+		# rpsは増えないので、一度この閾値を割ればそのフレーム以降は全て素通しになる。
+		if f.rps > request.lose_threshold:
+			if f.position.x < lo.x or f.position.x > hi.x or f.position.y < lo.y or f.position.y > hi.y:
+				violations.append("%s: アリーナから脱出 (step %d: %s)" % [who, i, f.position])
+				return
 
 		# rpsが増える経路はリゾルバに存在しないはず。増えたら計算が壊れている。
 		if f.rps > prev_rps + 1e-4:
