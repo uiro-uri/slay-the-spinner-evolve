@@ -207,7 +207,9 @@ func _ready() -> void:
 	_message.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
 
 	# プレイヤーのコマ色もPalette由来にする(tscnのリテラルではなくここが権威)。
+	# 本体グラデーションはプレイヤー=明側へ振る。
 	_player.body_color = Palette.PLAYER
+	_player.gradient_toward_light = true
 
 	# コマは回転数でz_indexを上げる(勢いのある方が手前)。予告・狙い・衝撃波は
 	# それより手前へ退避させ、コマに覆い隠されないようにする(従来の重なり順を保つ)。
@@ -306,6 +308,8 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	var disc := DISC.instantiate() as Disc
 	disc.stats = data.stats
 	disc.body_color = ENEMY_COLOR
+	# 本体グラデーションは敵=暗側へ振る。
+	disc.gradient_toward_light = false
 	_enemy_discs_root.add_child(disc)
 
 	var telegraph := EnemyTelegraph.new()

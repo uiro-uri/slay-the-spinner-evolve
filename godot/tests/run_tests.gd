@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "spawn", "battle", "fields", "disc", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "audio"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "audio"
 ]
 
 
@@ -70,6 +70,9 @@ func _init() -> void:
 
 	print("== disc ==")
 	_test_disc()
+
+	print("== discgradient ==")
+	_test_disc_gradient()
 
 	print("== spinaura ==")
 	_test_spin_aura()
@@ -267,6 +270,12 @@ func _test_disc() -> void:
 	var suite = load("res://tests/test_disc_visual.gd").new()
 	suite.run(_check)
 	_done("disc")
+
+
+func _test_disc_gradient() -> void:
+	var suite = load("res://tests/test_disc_gradient.gd").new()
+	suite.run(_check)
+	_done("discgradient")
 
 
 func _test_spin_aura() -> void:

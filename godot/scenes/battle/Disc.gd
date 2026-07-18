@@ -62,8 +62,21 @@ const DRAW_ORDER_Z_MAX := 320
 ## 上限(40)に合わせてあるので、上限のコマは完全なリングになる。
 @export_range(1.0, 60.0, 1.0) var tail_full_rps: float = 40.0
 
+## 本体グラデーションのリム頂点数。円をこれだけの多角形で近似する。直線勾配は
+## 位置の一次関数なので、リム頂点色を勾配で決めればgouraud補間が内部を厳密に
+## 再現する(中心頂点は不要)。数が多いほど輪郭が滑らか。
+const GRADIENT_SEGMENTS := 48
+
 @export var stats: SpinnerStats
 @export var body_color: Color = Palette.PLAYER
+
+## 本体グラデーションの明度の振れ方。true=明側へ(プレイヤー既定)、false=暗側へ(敵)。
+## 方向は陣営で固定。数式は DiscGradient が持つ。
+@export var gradient_toward_light: bool = true
+
+## 本体グラデーションの勾配軸(ローカル系・度)。マークは局所RIGHT=0°にあるので、
+## 既定90°でマークと直交させ被りを避ける。ローカル系に描くのでコマと一緒に回る。
+@export_range(0.0, 360.0, 1.0) var gradient_axis_deg: float = 90.0
 
 var velocity: Vector2 = Vector2.ZERO
 
@@ -135,10 +148,7 @@ func _draw() -> void:
 		_draw_aura(radius, ar)
 		_draw_particles(radius, ar)
 
-	var fill := body_color
-	if defeated:
-		fill = fill.darkened(0.7)
-	draw_circle(Vector2.ZERO, radius, fill)
+	_draw_body_gradient(radius)
 
 	if defeated:
 		# 力尽きたコマは回っていない。マークだけ残して尾は出さない。
@@ -147,6 +157,24 @@ func _draw() -> void:
 
 	_draw_tail(radius)
 	_draw_mark(radius, Color(Palette.SPIN_MARK, 0.95))
+
+
+## 本体を直線グラデーションで塗る。リム多角形の各頂点色を、勾配軸への射影
+## t=0.5+0.5*(p·axis)/radius から DiscGradient で決め、draw_polygon の gouraud 補間に
+## 内部を任せる。ローカル系(rotationが乗る系)に描くのでコマと一緒に勾配が回る。
+## 力尽きたコマは従来どおり暗転させる(基準色を暗く落としてから勾配を作る)。
+func _draw_body_gradient(radius: float) -> void:
+	var base := body_color.darkened(0.7) if defeated else body_color
+	var axis := Vector2.RIGHT.rotated(deg_to_rad(gradient_axis_deg))
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	for i in GRADIENT_SEGMENTS:
+		var ang := TAU * float(i) / float(GRADIENT_SEGMENTS)
+		var p := Vector2.RIGHT.rotated(ang) * radius
+		var t := 0.5 + 0.5 * (p.dot(axis) / radius)
+		points.push_back(p)
+		colors.push_back(DiscGradient.sample(base, gradient_toward_light, t))
+	draw_polygon(points, colors)
 
 
 ## 本体色の薄い同心円を重ねて、勢いのオーラにする。回転不変なので回転座標系の
