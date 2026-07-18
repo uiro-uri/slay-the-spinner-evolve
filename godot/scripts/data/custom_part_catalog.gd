@@ -49,9 +49,9 @@ const RPS_CAP := 40.0
 
 ## Rage Reflectionが1枚あたり上げる壁rps保持量と、その上限。
 ## 壁を完全無損失(1.0)まで許すとラン単位で無敵化した(計測で+59ptクリア率)ため、
-## 上限を低く抑える。step0.1・上限0.2なら壁rps喪失を最大2割減らすだけの穏当な札。
+## 上限を低く抑える。step0.1・上限0.3なら壁rps喪失を最大3割減らす穏当な札。
 const RAGE_WALL_KEEP_STEP := 0.1
-const RAGE_WALL_KEEP_MAX := 0.2
+const RAGE_WALL_KEEP_MAX := 0.3
 
 ## Full Steam Aheadのspin_decay下限。重ねてもこれ以下には回転減衰を下げない。
 ## 0.4なら自然減衰は最大でも通常の40%まで（無限に回るのを防ぐ）。
@@ -78,9 +78,11 @@ static func all() -> Array[CustomPart]:
 	return [
 		CustomPart.make(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
 			CustomPart.Stat.RADIUS, 1.25, RADIUS_CAP),
-		# 最強札だったので×1.6→×1.5に微減(ボスは削りで倒す設計は維持)。
+		# 質量×1.6。×1.5への微減を試したが、ボスは自滅(spin_decay=0.6)を抑えたぶん
+		# 削りで倒す設計になっており、greedyの主火力である質量を削るとボス段勝率が
+		# 26.9%→9%へ崩れた。ボス難度据え置き(uiro指示)を優先し1.6へ戻す。
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
-			CustomPart.Stat.MASS, 1.5, MASS_CAP),
+			CustomPart.Stat.MASS, 1.6, MASS_CAP),
 		# Full Steam Ahead: 勢いを保つ札。摩擦(速度減衰)だけを下げていた頃は
 		# 戦績がほぼ0の死に札だった(摩擦は勝敗にほとんど効かない)。名前どおり
 		# 「勢いを保つ」よう、摩擦と回転減衰率(自然にRPSが落ちる速さ)の両方を
