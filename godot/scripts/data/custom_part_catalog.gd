@@ -79,11 +79,11 @@ static func all() -> Array[CustomPart]:
 	return [
 		CustomPart.make(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
 			CustomPart.Stat.RADIUS, 1.25, RADIUS_CAP),
-		# 質量×1.6。×1.5への微減を試したが、ボスは自滅(spin_decay=0.6)を抑えたぶん
-		# 削りで倒す設計になっており、greedyの主火力である質量を削るとボス段勝率が
-		# 26.9%→9%へ崩れた。ボス難度据え置き(uiro指示)を優先し1.6へ戻す。
+		# 質量×1.5。改修前は最強札(×1.6)だったので微減。ボスは自滅(spin_decay=0.6)を
+		# 抑えたぶん削りで倒す設計になっており、greedyの主火力である質量を削るとボスは
+		# 硬くなる。uiroの判断でボス難化を許容(残機で緩和)し、札の突出を抑える方を採った。
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
-			CustomPart.Stat.MASS, 1.6, MASS_CAP),
+			CustomPart.Stat.MASS, 1.5, MASS_CAP),
 		# Full Steam Ahead: 勢いを保つ札。摩擦(速度減衰)だけを下げていた頃は
 		# 戦績がほぼ0の死に札だった(摩擦は勝敗にほとんど効かない)。名前どおり
 		# 「勢いを保つ」よう、摩擦と回転減衰率(自然にRPSが落ちる速さ)の両方を
