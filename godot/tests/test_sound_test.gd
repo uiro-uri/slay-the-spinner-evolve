@@ -129,6 +129,22 @@ func _test_clear_fanfare(check: Callable) -> void:
 	check.call(absf(last_pitch - am.CLEAR_OCTAVE) < EPS, "最後の音がオクターブ(主音)で着地する (%.3f)" % last_pitch)
 	check.call(last_pitch > am.CLEAR_FIFTH_RATIO, "着地音が5度より高い(ドミナントで開放したまま終わらない)")
 	check.call(seq[seq.size() - 1]["gap"] <= 0.0, "最後の音の後に間は無い")
+
+	# 締めはオクターブの16分連打。連打は三連打の間隔より速く、末尾に複数連続する。
+	check.call(am.CLEAR_ROLL_INTERVAL < am.CLEAR_HIT_INTERVAL, "連打(16分)が三連打の間隔より速い")
+	var trailing_octaves := 0
+	for i in range(seq.size() - 1, -1, -1):
+		if is_equal_approx(seq[i]["pitch"], am.CLEAR_OCTAVE):
+			trailing_octaves += 1
+		else:
+			break
+	check.call(trailing_octaves >= 3, "締めがオクターブの連打(末尾に%d連続)" % trailing_octaves)
+	# 連打内の音(最後を除く)は16分間隔で刻む。
+	var roll_spacing_ok := true
+	for i in range(seq.size() - trailing_octaves, seq.size() - 1):
+		if not is_equal_approx(seq[i]["gap"], am.CLEAR_ROLL_INTERVAL):
+			roll_spacing_ok = false
+	check.call(roll_spacing_ok, "連打の間隔が16分(CLEAR_ROLL_INTERVAL)で揃う")
 	# クリア音素材が読めてOggVorbisであること。
 	var note := load(am.CLEAR_NOTE_PATH) as AudioStream
 	check.call(note != null and note is AudioStreamOggVorbis, "クリア音がOggVorbisで読める (%s)" % am.CLEAR_NOTE_PATH)

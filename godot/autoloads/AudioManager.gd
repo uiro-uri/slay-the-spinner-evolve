@@ -168,6 +168,9 @@ const CLEAR_HIT_INTERVAL := 0.3
 ## 三連打の後、着地フレーズに入るまでの「一拍」の間(秒)。三連打の間隔より広くとる。
 const CLEAR_REST := 0.6
 
+## 締めの連打の間隔(秒)。アルペジオを8分とみなし、その半分=16分で刻む。
+const CLEAR_ROLL_INTERVAL := CLEAR_HIT_INTERVAL / 2.0
+
 ## ピッチ倍率(純正律)。CLEAR_SEQUENCE で使う。
 const CLEAR_UNISON := 1.0        ## 主音(ド)
 const CLEAR_THIRD := 1.25        ## 長3度(ミ) 5/4
@@ -175,14 +178,18 @@ const CLEAR_FIFTH_RATIO := 1.5   ## 完全5度(ソ) 3/2
 const CLEAR_OCTAVE := 2.0        ## オクターブ(ド↑) 着地音
 
 ## クリア旋律。各音は (pitch: ピッチ倍率, gap: 次の音までの間[秒])。
-## 同音三連打で立ち上げ、一拍置いてから上昇アルペジオでオクターブに着地する。
-## 最後の音は gap=0(後に続かない)。感触の調整はこの表とピッチ/間隔 const で行う。
+## 同音三連打で立ち上げ、一拍置いてから長3度→5度の上昇アルペジオ、締めはオクターブを
+## 16分(CLEAR_ROLL_INTERVAL)で連打して主音に着地する。最後の音は gap=0(後に続かない)。
+## 感触の調整はこの表とピッチ/間隔 const で行う(連打の数はオクターブ行の増減で変える)。
 const CLEAR_SEQUENCE: Array[Dictionary] = [
 	{"pitch": CLEAR_UNISON, "gap": CLEAR_HIT_INTERVAL},
 	{"pitch": CLEAR_UNISON, "gap": CLEAR_HIT_INTERVAL},
 	{"pitch": CLEAR_UNISON, "gap": CLEAR_REST},
 	{"pitch": CLEAR_THIRD, "gap": CLEAR_HIT_INTERVAL},
 	{"pitch": CLEAR_FIFTH_RATIO, "gap": CLEAR_HIT_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": CLEAR_ROLL_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": CLEAR_ROLL_INTERVAL},
+	{"pitch": CLEAR_OCTAVE, "gap": CLEAR_ROLL_INTERVAL},
 	{"pitch": CLEAR_OCTAVE, "gap": 0.0},
 ]
 
