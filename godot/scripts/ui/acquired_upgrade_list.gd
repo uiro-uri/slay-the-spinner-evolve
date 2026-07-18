@@ -11,7 +11,10 @@ extends RefCounted
 
 
 ## listの中身を取得済みパーツの行で組み直す。既存の子は消してから積む。
-static func populate(list: VBoxContainer, ids: Array[int]) -> void:
+## 集約後のエントリ数(＝行数。空なら0)を返す。呼び手が列数などを決めるのに使える
+## (クリア画面はこれでGridの列数を合わせ、スクロール無しで全部見せる)。
+## 器はVBox/Gridどちらでもよいので型は Container で受ける。
+static func populate(list: Container, ids: Array[int]) -> int:
 	for child in list.get_children():
 		list.remove_child(child)
 		child.queue_free()
@@ -21,10 +24,11 @@ static func populate(list: VBoxContainer, ids: Array[int]) -> void:
 		var empty := Label.new()
 		empty.text = "MAP_NO_UPGRADES"  # キー＝自動翻訳
 		list.add_child(empty)
-		return
+		return 0
 
 	for entry in entries:
 		list.add_child(build_row(entry["part"], entry["count"]))
+	return entries.size()
 
 
 ## 取得済みパーツ1件分の行。報酬カード(RewardScreen._build_card)の縮約版。

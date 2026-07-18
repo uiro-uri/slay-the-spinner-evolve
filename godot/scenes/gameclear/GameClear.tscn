@@ -64,15 +64,11 @@ theme_override_font_sizes/font_size = 20
 text = "MAP_ACQUIRED_HEADING"
 horizontal_alignment = 1
 
-[node name="Scroll" type="ScrollContainer" parent="CenterContainer/VBoxContainer"]
-custom_minimum_size = Vector2(360, 260)
+[node name="List" type="GridContainer" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-horizontal_scroll_mode = 0
-
-[node name="List" type="VBoxContainer" parent="CenterContainer/VBoxContainer/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 8
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 8
+columns = 3
 
 [node name="ToTitleButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2

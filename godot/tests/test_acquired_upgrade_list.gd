@@ -23,7 +23,8 @@ func run(check: Callable) -> void:
 func _test_empty_shows_placeholder(check: Callable) -> void:
 	var list := VBoxContainer.new()
 	var ids: Array[int] = []
-	AcquiredUpgradeList.populate(list, ids)
+	var rows := AcquiredUpgradeList.populate(list, ids)
+	check.call(rows == 0, "空の取得IDは行数0を返す (%d)" % rows)
 	check.call(
 		list.get_child_count() == 1,
 		"空の取得IDは「なし」表示1件だけになる (%d)" % list.get_child_count()
@@ -38,7 +39,8 @@ func _test_aggregates_into_rows(check: Callable) -> void:
 	# id2 を2回、id5 を1回。集約で2行になる。
 	var list := VBoxContainer.new()
 	var ids: Array[int] = [2, 2, 5]
-	AcquiredUpgradeList.populate(list, ids)
+	var rows := AcquiredUpgradeList.populate(list, ids)
+	check.call(rows == 2, "集約後の行数2を返す (%d)" % rows)
 	check.call(
 		list.get_child_count() == 2,
 		"重複を畳んで2行になる (%d)" % list.get_child_count()

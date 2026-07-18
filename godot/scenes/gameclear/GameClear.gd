@@ -7,12 +7,17 @@ signal to_title_requested
 
 @onready var _parts_label: Label = $CenterContainer/VBoxContainer/PartsLabel
 @onready var _continues_label: Label = $CenterContainer/VBoxContainer/ContinuesLabel
-@onready var _acquired_list: VBoxContainer = $CenterContainer/VBoxContainer/Scroll/List
+@onready var _acquired_list: GridContainer = $CenterContainer/VBoxContainer/List
 @onready var _to_title_button: Button = $CenterContainer/VBoxContainer/ToTitleButton
 
 
 func _ready() -> void:
 	_to_title_button.pressed.connect(_on_to_title_pressed)
+
+
+## パーツは最大5種なので、スクロールさせずGridに縦横で並べて全部見せる。
+## 列数はエントリ数に合わせる(最大3列＝最大2行)ので、少数のときは横に広がりすぎない。
+const MAX_COLUMNS := 3
 
 
 ## ランの結果を受け取り、サマリ2行＋取得アップグレード一覧を組み立てる。
@@ -21,7 +26,9 @@ func _ready() -> void:
 func setup(acquired_ids: Array[int], continues_left: int) -> void:
 	_parts_label.text = format_parts(acquired_ids.size())
 	_continues_label.text = format_continues(continues_left)
-	AcquiredUpgradeList.populate(_acquired_list, acquired_ids)
+	# 行(＝集約後のパーツ種数)に合わせて列数を決めてから並べる。
+	var rows := AcquiredUpgradeList.populate(_acquired_list, acquired_ids)
+	_acquired_list.columns = maxi(1, mini(rows, MAX_COLUMNS))
 
 
 ## 表示ロジックはヘッドレスで検証できるよう純関数に切り出す。
