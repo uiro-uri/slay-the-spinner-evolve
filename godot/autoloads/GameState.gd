@@ -27,6 +27,11 @@ var acquired_part_ids: Array[int] = []
 ## このランで残っているコンティニュー回数。0で打ち止め。
 var continues_left: int = MAX_CONTINUES
 
+## 連続クリア記録（連勝数）。ランをまたいで持ち越すので reset_run() では消さない。
+## クリアで +1、ギブアップ（ランを勝ち切れず終了）で 0 に戻る。メモリ上のみ＝
+## アプリを閉じると消えるのは、このプロジェクトのセーブなし方針に合わせている。
+var clear_streak: int = 0
+
 
 func reset_run() -> void:
 	player_stats = default_player_stats()
@@ -44,6 +49,16 @@ func apply_part(part: CustomPart) -> void:
 	part.apply_to(player_stats)
 	continues_left = maxi(continues_left, part.lives)
 	acquired_part_ids.append(part.id)
+
+
+## ボスを倒してランを勝ち切ったときに呼ぶ。連続クリア記録を1伸ばす。
+func record_clear() -> void:
+	clear_streak += 1
+
+
+## ランを勝ち切れずに終えたとき（あきらめ）に呼ぶ。連続クリア記録が途切れて0に戻る。
+func break_streak() -> void:
+	clear_streak = 0
 
 
 ## コンティニューを1回消費する。残0なら何もせずfalse。

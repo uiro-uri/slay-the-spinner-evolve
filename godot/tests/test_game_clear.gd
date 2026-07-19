@@ -21,11 +21,19 @@ func run(check: Callable) -> void:
 		GameClearScript.format_continues(2) == "コンティニュー残: 2",
 		"ja: コンティニュー残数が文言に入る -> '%s'" % GameClearScript.format_continues(2)
 	)
+	check.call(
+		GameClearScript.format_streak(3) == "連続クリア: 3",
+		"ja: 連続クリア記録が文言に入る -> '%s'" % GameClearScript.format_streak(3)
+	)
 
 	TranslationServer.set_locale("en")
 	check.call(
 		GameClearScript.format_continues(3) == "Continues left: 3",
 		"en: コンティニュー残数が文言に入る -> '%s'" % GameClearScript.format_continues(3)
+	)
+	check.call(
+		GameClearScript.format_streak(3) == "Win streak: 3",
+		"en: 連続クリア記録が文言に入る -> '%s'" % GameClearScript.format_streak(3)
 	)
 
 	TranslationServer.set_locale(prev_locale)

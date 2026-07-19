@@ -75,9 +75,11 @@ func _on_battle_finished(player_won: bool) -> void:
 
 
 func goto_gameclear() -> void:
+	# 勝ち切ったので連続クリア記録を伸ばす。setupの前に加算し、加算後の値を画面へ渡す。
+	GameState.record_clear()
 	var gameclear := _swap_screen(GAMECLEAR_SCENE)
 	gameclear.to_title_requested.connect(_on_gameclear_to_title)
-	gameclear.setup(GameState.acquired_part_ids, GameState.continues_left)
+	gameclear.setup(GameState.acquired_part_ids, GameState.continues_left, GameState.clear_streak)
 	# クリアの締めにファンファーレ。戦闘の勝利ジングルは決着後の余韻中に鳴り終えており、
 	# クリア画面は決着から finish_delay 秒ほど後に出るので重ならない。
 	AudioManager.play_clear_fanfare()
@@ -107,6 +109,8 @@ func _on_continue_requested() -> void:
 
 
 func _on_give_up_requested() -> void:
+	# ランを勝ち切れずに終えたので連続クリア記録は途切れる。
+	GameState.break_streak()
 	AudioManager.play("ui_back")
 	goto_title()
 

@@ -24,6 +24,7 @@ GAMEOVER_CONTINUES_LEFT,Continues left: {0},残りコンティニュー: {0}
 GAMECLEAR_TITLE,GAME CLEAR!,ゲームクリア!
 GAMECLEAR_CONTINUES_LEFT,Continues left: {0},コンティニュー残: {0}
 GAMECLEAR_TO_TITLE,To Title,タイトルへ
+STREAK,Win streak: {0},連続クリア: {0}
 MAP_CHOOSE_NEXT,Choose your path,進む先を選べ
 MAP_ACQUIRED_HEADING,Your Build,取得済みアップグレード
 MAP_NO_UPGRADES,No parts yet,まだありません

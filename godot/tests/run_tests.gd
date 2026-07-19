@@ -197,6 +197,16 @@ func _test_gamestate_autoload() -> void:
 	_check(game_state.use_continue() == false, "残0のuse_continue()はfalse")
 	_check(game_state.continues_left == 0, "残0を下回らない")
 
+	# 連続クリア記録。クリアで増え、あきらめで0に戻り、reset_run()をまたいでも消えない。
+	_check(game_state.clear_streak == 0, "clear_streakの初期値は0")
+	game_state.record_clear()
+	game_state.record_clear()
+	_check(game_state.clear_streak == 2, "record_clear()で連続クリア記録が増える")
+	game_state.reset_run()
+	_check(game_state.clear_streak == 2, "reset_run()をまたいでも連続クリア記録は保持される")
+	game_state.break_streak()
+	_check(game_state.clear_streak == 0, "break_streak()で連続クリア記録が0に戻る")
+
 	game_state.free()
 
 	_done("gamestate")
