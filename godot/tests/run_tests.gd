@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "victorygrowth"
 ]
 
 
@@ -118,6 +118,9 @@ func _init() -> void:
 
 	print("== launchspeed ==")
 	_test_launch_speed()
+
+	print("== victorygrowth ==")
+	_test_victory_growth()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -379,6 +382,12 @@ func _test_launch_speed() -> void:
 	var suite = load("res://tests/test_launch_speed.gd").new()
 	suite.run(_check)
 	_done("launchspeed")
+
+
+func _test_victory_growth() -> void:
+	var suite = load("res://tests/test_victory_growth.gd").new()
+	suite.run(_check)
+	_done("victorygrowth")
 
 
 func _test_ghost_visual() -> void:

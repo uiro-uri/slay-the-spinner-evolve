@@ -34,6 +34,24 @@ extends Resource
 ## 実効ダンピングを1.0(無損失)へこの割合だけ寄せる。Rage Reflectionが上げる。
 @export_range(0.0, 1.0, 0.01) var wall_keep: float = 0.0
 
+## 回転数の上限。「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
+## SPIN_ENGINE札の上限(CustomPartCatalog.RPS_CAP)も勝利成長もこれを参照する。
+const RPS_CAP := 40.0
+
+## 戦闘勝利1回ごとの回転成長量。敵rpsは段と共に15→33へ確実に上がるのに、
+## プレイヤーの成長はRARE札(SPIN_ENGINE)の引き運に全依存で、引けないランは
+## 段3〜5の減衰レースで詰む(計測: 段5勝率20.3%が谷、死亡の66%が段3〜5)。
+## 勝つたびに小さく確実に育つ下支えを入れて、引き運の振れ幅を狭める。
+## 値は計測(scripts/playtest.sh)で決めた: +1.0は谷を29.5%まで上げる一方、無操作寄りの
+## random+random botのクリア率が56%へ跳ねて過剰。+0.5で谷25.2%・全体の締まりを両立。
+const VICTORY_RPS_GROWTH := 0.5
+
+
+## 戦闘に勝ったときに呼ぶ。回転を少しだけ成長させる(上限RPS_CAP)。
+## 実プレイ(Main経由のGameState)とシミュレーション(RunSim)の両方がここを使う。
+func grow_rps_by_victory() -> void:
+	rps = minf(rps + VICTORY_RPS_GROWTH, RPS_CAP)
+
 
 func duplicate_stats() -> SpinnerStats:
 	var copy := SpinnerStats.new()

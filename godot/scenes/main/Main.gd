@@ -82,6 +82,8 @@ func _on_battle_finished(player_won: bool) -> void:
 		# ボスに勝ったらラン終了。クリア画面で締める。
 		goto_gameclear()
 		return
+	# 勝利の勢いで回転が少し成長する。報酬選択より先(倍率札は成長込みに掛かる)。
+	GameState.grow_after_victory()
 	# 倒した頭数だけ報酬を選ぶ。乱戦はrps据え置きで手強いぶん、見返りも頭数ぶん。
 	_rewards_remaining = maxi(GameState.pending_enemies.size(), 1)
 	goto_reward()

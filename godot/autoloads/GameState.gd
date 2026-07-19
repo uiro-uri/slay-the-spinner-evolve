@@ -51,6 +51,12 @@ func apply_part(part: CustomPart) -> void:
 	acquired_part_ids.append(part.id)
 
 
+## 戦闘に勝つたびに呼ぶ。回転が少しだけ確実に成長する(SpinnerStats.grow_rps_by_victory)。
+## 報酬札より先に適用する(倍率札はこの成長込みのrpsに掛かる)。
+func grow_after_victory() -> void:
+	player_stats.grow_rps_by_victory()
+
+
 ## ボスを倒してランを勝ち切ったときに呼ぶ。連続クリア記録を1伸ばす。
 func record_clear() -> void:
 	clear_streak += 1
