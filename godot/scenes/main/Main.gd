@@ -15,6 +15,9 @@ const SOUNDTEST_SCENE: PackedScene = preload("res://scenes/soundtest/SoundTest.t
 
 @onready var _screen_holder: Node = $ScreenHolder
 
+## 勝った戦闘で倒した頭数ぶん、報酬選択を繰り返す残り回数。
+var _rewards_remaining: int = 0
+
 ## ランを通して出しっぱなしにするビルド表示HUD。ScreenHolderの外(Main直下)に置いて
 ## 画面差し替えで消えないようにし、_swap_screenのたびに現在のGameStateへ追従させる。
 var _stat_panel: StatPanel
@@ -79,6 +82,8 @@ func _on_battle_finished(player_won: bool) -> void:
 		# ボスに勝ったらラン終了。クリア画面で締める。
 		goto_gameclear()
 		return
+	# 倒した頭数だけ報酬を選ぶ。乱戦はrps据え置きで手強いぶん、見返りも頭数ぶん。
+	_rewards_remaining = maxi(GameState.pending_enemies.size(), 1)
 	goto_reward()
 
 
@@ -134,6 +139,11 @@ func goto_reward() -> void:
 func _on_part_chosen(part: CustomPart) -> void:
 	AudioManager.play("ui_confirm")
 	GameState.apply_part(part)
+	# まだ倒した頭数ぶんの報酬が残っていれば、次の報酬選択へ。無ければマップへ戻る。
+	_rewards_remaining -= 1
+	if _rewards_remaining > 0:
+		goto_reward()
+		return
 	goto_map()
 
 

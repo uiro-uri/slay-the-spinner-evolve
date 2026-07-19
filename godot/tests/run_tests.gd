@@ -446,8 +446,8 @@ func _test_enemies() -> void:
 			boss_always_single = false
 	_check(boss_always_single, "グループ: ボス段(段%d)は常に単体" % MapTree.STEP_GOAL)
 
-	# 弱体化は複製に対して行い、共有Resourceを壊さないこと。同じ敵をグループ用に
-	# 取り出しても、元のall()のrpsは変わらない。
+	# グループ抽選が共有Resourceを壊さないこと。乱戦メンバーは弱めず据え置きだが、
+	# 何度取り出しても元のall()のrpsは変わらない(all()が毎回新しい実体を作る)。
 	var lvl1_rps_before: float = EnemyRoster.of_level(1)[0].stats.rps
 	var scale_rng := RandomNumberGenerator.new()
 	scale_rng.seed = 9
@@ -456,7 +456,7 @@ func _test_enemies() -> void:
 	var lvl1_rps_after: float = EnemyRoster.of_level(1)[0].stats.rps
 	_check(
 		is_equal_approx(lvl1_rps_before, lvl1_rps_after),
-		"グループ: 弱体化が共有Resourceを壊さない (%.2f -> %.2f)" % [lvl1_rps_before, lvl1_rps_after]
+		"グループ: 抽選が共有Resourceを壊さない (%.2f -> %.2f)" % [lvl1_rps_before, lvl1_rps_after]
 	)
 
 	_done("enemies")
