@@ -23,6 +23,8 @@ func run(check: Callable) -> void:
 	_test_naive_play_card_text(check)
 	_test_naive_play_pick_guard(check)
 	_test_naive_play_result_label(check)
+	_test_naive_play_stats_roundtrip(check)
+	_test_naive_play_group_rewards(check)
 
 
 func _request() -> BattleRequest:
@@ -357,6 +359,48 @@ func _test_naive_play_pick_guard(check: Callable) -> void:
 	check.call(not NaivePlay.pick_allowed([5, 7, 9], 2), "naive_play: 提示外の札は取れない")
 	check.call(not NaivePlay.pick_allowed([], 2), "naive_play: 提示ゼロでは何も取れない")
 	check.call(NaivePlay.pick_allowed([5.0, 7.0], 5), "naive_play: JSON経由のfloat idも照合できる")
+
+
+## MOMENTUM/RAGE札の主効果(spin_decay/wall_keep)が状態JSONの往復で消えていた。
+## 発見の経緯: コールドプレイでMOMENTUM札を3枚取っても寿命が全く伸びず、
+## ボス戦の一次証拠が壊れた(摩擦・反発は残るので気づきにくい)。
+func _test_naive_play_stats_roundtrip(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var stats := SpinnerStats.default_player()
+	CustomPartCatalog.by_id(5).apply_to(stats)    # MOMENTUM: spin_decayが下がる
+	CustomPartCatalog.by_id(6).apply_to(stats)    # RAGE: wall_keepが上がる
+	check.call(stats.spin_decay < 1.0 - EPS, "前提: MOMENTUM札でspin_decayが下がっている")
+	check.call(stats.wall_keep > EPS, "前提: RAGE札でwall_keepが上がっている")
+	var back: SpinnerStats = NaivePlay.stats_from(NaivePlay.stats_dict(stats))
+	check.call(
+		absf(back.spin_decay - stats.spin_decay) < EPS,
+		"naive_play: spin_decay(MOMENTUM)が状態の往復で保存される")
+	check.call(
+		absf(back.wall_keep - stats.wall_keep) < EPS,
+		"naive_play: wall_keep(RAGE)が状態の往復で保存される")
+	check.call(
+		absf(back.mass - stats.mass) < EPS and absf(back.rps - stats.rps) < EPS
+			and absf(back.friction - stats.friction) < EPS
+			and absf(back.restitution - stats.restitution) < EPS
+			and absf(back.radius - stats.radius) < EPS,
+		"naive_play: 既存フィールドも往復で保存される")
+	# 旧stateファイル(キー欠落)は既定値で読めること(後方互換)。
+	var legacy: SpinnerStats = NaivePlay.stats_from(
+		{"mass": 1.5, "radius": 0.7, "friction": 0.98, "restitution": 0.75, "rps": 15.0})
+	check.call(
+		absf(legacy.spin_decay - 1.0) < EPS and absf(legacy.wall_keep) < EPS,
+		"naive_play: 旧state(キー欠落)は既定値で読める")
+
+
+## 実ゲーム(Main)は乱戦で倒した頭数ぶん報酬を選べるが、CLIは頭数によらず1枚だった。
+## 発見の経緯: コールドプレイで2体戦に勝っても報酬が1枚しか出ず、実ゲームより
+## ビルドが痩せたまま後半へ進んでいた。
+func _test_naive_play_group_rewards(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	check.call(NaivePlay.rewards_for_group(1) == 1, "naive_play: 単体撃破は報酬1回")
+	check.call(NaivePlay.rewards_for_group(2) == 2, "naive_play: 2体乱戦は報酬2回")
+	check.call(NaivePlay.rewards_for_group(3) == 3, "naive_play: 3体乱戦は報酬3回")
+	check.call(NaivePlay.rewards_for_group(0) == 1, "naive_play: 0体でも最低1回(Mainのmaxiと同じ)")
 
 
 ## 引き分けは進行上は敗北扱いだが、表示では区別する。発見の経緯: DRAWが
