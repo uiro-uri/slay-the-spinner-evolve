@@ -131,6 +131,14 @@ static func effective_wall_damping(base: float, wall_keep: float) -> float:
 	return base + (1.0 - base) * clampf(wall_keep, 0.0, 1.0)
 
 
+## 衝突で受けるrps削りの実効値。hit_guard(0..1)のぶんだけ削りを打ち消す。
+## 壁のeffective_wall_dampingと対になる、コマ同士の衝突版の防御(Shock Absorber)。
+## 削りが減るぶんspin_kick(削り量に比例する弾き)も弱まる=回転を守る代わりに
+## 逃げの弾きも小さくなる。
+static func guarded_spin_drain(drain: float, hit_guard: float) -> float:
+	return drain * (1.0 - clampf(hit_guard, 0.0, 1.0))
+
+
 ## 障害物(固定された円)にめり込んでいて、かつ障害物へ向かって進んでいるか。
 ## 壁のwall_hitと同じ構造で、法線が固定でなく中心からの放射方向になるだけ。
 ## 反射は wall_bounce(vel, (pos - obstacle_center).normalized(), restitution) を使う。

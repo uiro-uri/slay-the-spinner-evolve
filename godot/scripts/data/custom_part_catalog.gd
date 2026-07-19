@@ -59,6 +59,12 @@ const RAGE_WALL_KEEP_MAX := 0.5
 ## 0.4なら自然減衰は最大でも通常の40%まで（無限に回るのを防ぐ）。
 const FULL_STEAM_FLOOR := 0.4
 
+## Shock Absorberが1枚あたり上げる衝突rps保持量(hit_guard)と、その上限。
+## 数値は壁版のRAGE(wall_keep 0.17/0.5)に合わせた: 1枚で衝突削り-17%、
+## 3枚の上限0.5で削り半減。1.0(削り無効)まで許すと衝突無敵になるので頭打ちにする。
+const GUARD_HIT_STEP := 0.17
+const GUARD_HIT_MAX := 0.5
+
 ## ゴースト1枚あたりの無敵秒数。基準は開始後2秒間で、複数取得で線形に延長する
 ## (2枚=4秒、3枚=6秒…)。無敵時間の知識をここに閉じ込め、画面(Battle)も
 ## シミュ(RunSim)も同じ値を参照する。
@@ -106,6 +112,11 @@ static func all() -> Array[CustomPart]:
 		# ステータスは変えず、重ねて取るほど無敵時間が伸びる(線形)。
 		CustomPart.make_ghost(9, "PART_GHOST", CustomPart.Rarity.COMMON,
 			GHOST_SECONDS_PER_STACK),
+		# Shock Absorber: 衝突で受けるrps削りを軽減する純防御札。防御の選択肢が
+		# GHOST(時間限定)と質量(RARE)しかなくCOMMONの防御軸が空いていたのと、
+		# 7枚プールでは3枚提示の顔ぶれが毎回同じになるため追加(報酬プール拡充)。
+		CustomPart.make_guard(10, "PART_SHOCK_ABSORBER", CustomPart.Rarity.COMMON,
+			GUARD_HIT_STEP, GUARD_HIT_MAX),
 	]
 
 

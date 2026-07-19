@@ -32,7 +32,10 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ## RAGE: 反発(restitution)を multiplier 倍(cap上限)にしつつ、壁でのrps喪失を
 ## 減らす(wall_keepを wall_keep_step ぶん加算、上限1.0)複合効果。反発upは相手を
 ## 壁へ押し込む攻撃用途として残しつつ、wall_keepで自分の壁ダメージを減らす。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE }
+##
+## GUARD: コマ同士の衝突で受けるrps削りを減らす(hit_guardを hit_guard_step ぶん
+## 加算、上限hit_guard_max)。壁のRAGE(wall_keep)と対になる衝突版の純防御。
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -90,6 +93,12 @@ const _STAT_NAMES := {
 
 ## RAGE札のwall_keep上限。壁を完全無損失(1.0)にすると無敵化するので1未満で頭打ち。
 @export var wall_keep_max: float = 1.0
+
+## GUARD札が1枚あたり加算する衝突rps保持量(hit_guardへ加算)。
+@export var hit_guard_step: float = 0.0
+
+## GUARD札のhit_guard上限。1.0(衝突削り無効)まで許すと無敵化するので1未満で頭打ち。
+@export var hit_guard_max: float = 1.0
 
 
 static func make(
@@ -167,6 +176,22 @@ static func make_rage(
 	return part
 
 
+## 衝撃吸収札を作る。衝突で受けるrps削りの軽減(hit_guard)を step_ ぶん上げる。
+## max_ は重ねがけの上限(1.0=削り無効の無敵化を防ぐためRAGEと同様1未満)。
+static func make_guard(
+	id_: int, title_key_: String, rarity_: Rarity,
+	step_: float, max_: float
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.GUARD
+	part.hit_guard_step = step_
+	part.hit_guard_max = max_
+	return part
+
+
 func apply_to(stats: SpinnerStats) -> void:
 	# 勢い維持(MOMENTUM): 摩擦と回転減衰の両方を下げる。spin_decayはcapを下限に
 	# クランプして、重ねても回転減衰がゼロ(=無限に回る)にならないようにする。
@@ -176,6 +201,11 @@ func apply_to(stats: SpinnerStats) -> void:
 		if cap > 0.0:
 			decayed = maxf(decayed, cap)
 		stats.spin_decay = decayed
+		return
+	# 衝撃吸収(GUARD): 衝突で受けるrps削りを減らす(hit_guard加算)。上限で頭打ちに
+	# して、重ねがけで削り無効(=衝突無敵)にならないようにする。
+	if effect == Effect.GUARD:
+		stats.hit_guard = minf(stats.hit_guard + hit_guard_step, hit_guard_max)
 		return
 	# 怒りの反射(RAGE): 反発を上げつつ(cap上限)、壁rps喪失を減らす(wall_keep加算)。
 	if effect == Effect.RAGE:
@@ -226,6 +256,11 @@ func describe() -> String:
 	# 怒りの反射は反発倍率と壁rps保持の複合。両方を埋めた専用の説明を返す。
 	if effect == Effect.RAGE:
 		return tr("PART_EFFECT_RAGE").format([_trim(multiplier), _trim(cap)])
+	# 衝撃吸収は軽減率を%で見せる(0.17より17%の方が読める)。上限も%で併記する。
+	if effect == Effect.GUARD:
+		return tr("PART_EFFECT_GUARD").format(
+			[_trim(hit_guard_step * 100.0), _trim(hit_guard_max * 100.0)]
+		)
 	var text: String = tr(_STAT_KEYS[stat]).format([_trim(multiplier)])
 	if cap > 0.0:
 		text += tr("PART_EFFECT_CAP").format([_trim(cap)])
