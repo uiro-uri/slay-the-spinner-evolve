@@ -8,13 +8,24 @@ extends RefCounted
 ## 予告の描画だけ。取り違えると予告が本当に嘘になるので、Battleは発射時に
 ## 必ず確定値を使うこと。
 ##
-## 揺らぎは確定値を中心に振れるので、長く見ていれば平均は真の値に寄る。
-## つまり「読めなくする」のではなく「一瞬では読み切れなくする」もの。
+## 揺らぎの中心は確定値からわざと偏らせる(bias_dir)。真の値は揺れの範囲には
+## 入っているが中心ではないので、長く眺めて平均を取っても真の値は割り出せない。
+## 「一瞬では読み切れない」だけでなく「じっと平均しても当てられない」ことを狙う。
+## 偏りはt=0で0から立ち上がるので、予告が出た瞬間はやはり確定値そのもの
+## (コマが飛ばない)。偏りの向きは呼び出し側(Battle)が毎回決めて渡す。
 ##
-## Nodeにもシーンにも乱数にも依存しない純粋関数。時刻を渡せば同じ値が返る。
+## Nodeにもシーンにも乱数にも依存しない純粋関数。時刻と偏りの向きを渡せば
+## 同じ値が返る。乱数は呼び出し側が持つ。
 
-## 位置の揺れ幅(ユニット)。
-const DEFAULT_POSITION_AMPLITUDE := 0.22
+## 位置の揺れ幅(ユニット)。読み取りにくさを重視して大きめに取ってある。
+const DEFAULT_POSITION_AMPLITUDE := 1.2
+
+## 揺れの中心を確定値からずらす割合(揺れ幅に対して)。0で従来どおり確定値が中心。
+## 揺れ幅より小さくしてあるので、真の値は必ず揺れの範囲に残る(=予告は嘘にならない)。
+const POSITION_BIAS := 0.7
+
+## 中心ずらしの立ち上がりの速さ。bias_ramp が 0→1 になる目安。
+const BIAS_RAMP_RATE := 1.8
 
 ## 向きの揺れ幅(度)。
 const DEFAULT_ANGLE_AMPLITUDE := 7.0
@@ -57,12 +68,22 @@ static func wave(t: float, speed: float, freq: Vector2) -> float:
 	return sin(t * speed * freq.x) * 0.6 + sin(t * speed * freq.y) * 0.4
 
 
-## 予告に見せる位置。確定値の周りを漂う。t=0では確定値そのもの。
+## 中心ずらしの立ち上がり。0→1に滑らかに増える。t=0では0(=偏りなし)で、
+## t=0での傾きも0にしてあるので、予告が出た瞬間にコマがカクッと動かない。
+static func bias_ramp(t: float) -> float:
+	return 1.0 - exp(-pow(t * BIAS_RAMP_RATE, 2.0))
+
+
+## 予告に見せる位置。確定値の「周り」を漂うが、中心は bias_dir 方向へずらす。
+## t=0では確定値そのもの。bias_dir は単位ベクトル(向きだけ)。Vector2.ZERO なら
+## 従来どおり確定値が揺れの中心になる。
 static func position_at(
 	true_position: Vector2, t: float,
-	amplitude: float = DEFAULT_POSITION_AMPLITUDE, speed: float = DEFAULT_SPEED
+	amplitude: float = DEFAULT_POSITION_AMPLITUDE, speed: float = DEFAULT_SPEED,
+	bias_dir: Vector2 = Vector2.ZERO
 ) -> Vector2:
-	return true_position + Vector2(
+	var bias := bias_dir * amplitude * POSITION_BIAS * bias_ramp(t)
+	return true_position + bias + Vector2(
 		wave(t, speed, FREQ_X) * amplitude,
 		wave(t, speed, FREQ_Y) * amplitude
 	)

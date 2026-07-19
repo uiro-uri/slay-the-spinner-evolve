@@ -16,6 +16,7 @@ func run(check: Callable) -> void:
 	_test_wave_bounded(check)
 	_test_within_amplitude(check)
 	_test_centered_on_truth(check)
+	_test_bias_offsets_average(check)
 	_test_smooth(check)
 	_test_starts_at_truth(check)
 	_test_zero_amplitude(check)
@@ -78,14 +79,15 @@ func _test_within_amplitude(check: Callable) -> void:
 	check.call(worst_len > len_amp * 0.5, "揺らぎ: 長さが実際に揺れている (%.1f%%)" % [worst_len * 100])
 
 
-## 確定値を中心に振れること。偏っていると、平均を取っても真の値に寄らず
-## 「予告が systematically ずれている」ことになる。
+## 偏りを与えないときは確定値を中心に振れること(向きの揺れは常にこの性質)。
+## 位置は既定では偏らないので、bias_dir=ZEROなら平均が真の値に寄る。
 func _test_centered_on_truth(check: Callable) -> void:
 	var sum_pos := Vector2.ZERO
 	var sum_angle := 0.0
 	var samples := 4000
 	for i in samples:
 		var t := i * 0.013
+		# bias_dir 省略(=ZERO)なので位置は確定値中心
 		sum_pos += TelegraphWobble.position_at(TRUE_POS, t, 0.22, 2.2) - TRUE_POS
 		var v := TelegraphWobble.velocity_at(TRUE_VEL, t, 7.0, 0.14, 2.2)
 		sum_angle += TRUE_VEL.angle_to(v)
@@ -94,7 +96,7 @@ func _test_centered_on_truth(check: Callable) -> void:
 	var mean_angle := rad_to_deg(sum_angle / samples)
 	check.call(
 		mean_pos.length() < 0.02,
-		"揺らぎ: 位置の平均が確定値に寄る (ずれ %.4f)" % mean_pos.length()
+		"揺らぎ: 偏りなしなら位置の平均が確定値に寄る (ずれ %.4f)" % mean_pos.length()
 	)
 	check.call(
 		absf(mean_angle) < 0.5,
@@ -102,14 +104,62 @@ func _test_centered_on_truth(check: Callable) -> void:
 	)
 
 
+## 偏り(bias_dir)を与えると、揺れの中心が確定値からずれる。これが本命の性質:
+## - 長く平均を取っても真の値に寄らない(=平均から真値を割り出せない)
+## - それでも真の値は揺れの範囲には入っている(各軸で表示が真値をまたぐ)
+## - 予告が出た瞬間(t=0)はやはり確定値そのもの(コマが飛ばない)
+func _test_bias_offsets_average(check: Callable) -> void:
+	var amp := 0.66
+	var bias_dir := Vector2(1.0, 1.0).normalized()
+
+	# t=0は偏りを与えても確定値のまま
+	var p0 := TelegraphWobble.position_at(TRUE_POS, 0.0, amp, 2.2, bias_dir)
+	check.call(p0.is_equal_approx(TRUE_POS), "揺らぎ: 偏りを与えてもt=0は確定値 (%s)" % p0)
+
+	var sum_pos := Vector2.ZERO
+	var min_d := Vector2(INF, INF)
+	var max_d := Vector2(-INF, -INF)
+	var samples := 4000
+	for i in samples:
+		var t := i * 0.013
+		var d := TelegraphWobble.position_at(TRUE_POS, t, amp, 2.2, bias_dir) - TRUE_POS
+		sum_pos += d
+		min_d = min_d.min(d)
+		max_d = max_d.max(d)
+
+	var mean_pos := sum_pos / samples
+	# 平均は確定値から明確にずれ、そのずれは偏りの向きに一致する
+	var expected := amp * TelegraphWobble.POSITION_BIAS
+	check.call(
+		mean_pos.length() > expected * 0.7,
+		"揺らぎ: 偏りありなら位置の平均が確定値からずれる (ずれ %.4f > %.4f)" % [
+			mean_pos.length(), expected * 0.7
+		]
+	)
+	check.call(
+		mean_pos.normalized().dot(bias_dir) > 0.98,
+		"揺らぎ: 平均のずれは偏りの向きに一致する (dot %.3f)" % mean_pos.normalized().dot(bias_dir)
+	)
+	# それでも真の値は範囲内: 各軸で表示が真値(0)の両側に振れる
+	check.call(
+		min_d.x < -EPS and max_d.x > EPS and min_d.y < -EPS and max_d.y > EPS,
+		"揺らぎ: 偏りがあっても真の値は揺れの範囲に入る (x[%.2f,%.2f] y[%.2f,%.2f])" % [
+			min_d.x, max_d.x, min_d.y, max_d.y
+		]
+	)
+
+
 ## 滑らかであること。フレームごとにランダムだとチカチカして読めない。
 func _test_smooth(check: Callable) -> void:
+	# 偏りありでも滑らかか見る。中心ずらしの立ち上がり(bias_ramp)がカクつくと
+	# ここで跳ねる。t=0近傍の立ち上がりも含めて見る。
+	var bias_dir := Vector2(1.0, 1.0).normalized()
 	var worst := 0.0
 	var dt := 1.0 / 60.0
 	for i in 2000:
 		var t := i * dt
-		var a := TelegraphWobble.position_at(TRUE_POS, t, 0.22, 2.2)
-		var b := TelegraphWobble.position_at(TRUE_POS, t + dt, 0.22, 2.2)
+		var a := TelegraphWobble.position_at(TRUE_POS, t, 0.22, 2.2, bias_dir)
+		var b := TelegraphWobble.position_at(TRUE_POS, t + dt, 0.22, 2.2, bias_dir)
 		worst = maxf(worst, a.distance_to(b))
 	# 1フレームで揺れ幅の半分も飛んだら、それは揺らぎではなくノイズ
 	check.call(worst < 0.11, "揺らぎ: 1フレームの移動が滑らか (最大 %.4f ユニット)" % worst)

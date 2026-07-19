@@ -34,6 +34,9 @@ const LAND_BARS_RECT := Rect2(390.0, 622.0, 500.0, 60.0)
 
 ## アリーナの1辺(10ユニット×既定スケール50=500px)。当てはめの基準。
 const ARENA_PX := 500.0
+## 予告の揺れの中心をずらす向きの散らし幅(ラジアン)。基本は中心向きだが、
+## この範囲で回して「常に同じ方向にずれる」と読まれないようにする。約±50度。
+const BIAS_DIR_SPREAD := 0.9
 ## アリーナの下に確保するバー帯の設計上の高さ。当てはめで縦にこのぶん余分を取る。
 const BAR_BAND := 90.0
 ## バー帯とアリーナの隙間、およびメッセージ/バー行の高さ(px)。
@@ -108,7 +111,8 @@ const BAR_ROW_H := 60.0
 @export_range(0.0, 90.0, 5.0) var enemy_spread_deg: float = 30.0
 
 ## 発射前の初期表示で、敵をプレイヤーや他の敵からこれだけ離して出す余白(ユニット)。
-## コマの縁同士がこの分だけ空く。予告の揺れ(表示のみ、±0.22)ぶんも吸えるよう少し大きめ。
+## コマの縁同士がこの分だけ空く。予告の揺れ(表示のみ、揺れ幅±1.2+中心ずらしは
+## 主に中心向き)ぶんも吸えるよう少し大きめ。
 @export_range(0.0, 3.0, 0.05) var spawn_clearance: float = 0.6
 
 ## Battle.tscn単体で走らせたときの敵の発射速度。本編ではEnemyDataから来る。
@@ -358,7 +362,13 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	)
 	disc.position = plan.position
 	disc.velocity = Vector2.ZERO
-	telegraph.show_plan(plan.position, plan.velocity)
+	# 予告の揺れの中心を確定値からずらす向き。平均を取っても真の位置を割り出せない
+	# ようにするため。基本は中心向き(壁から離れる側)にして、揺れが壁を突き抜けない
+	# ようにしつつ、±で散らして「常に真下」のような読み方を許さない。
+	var to_center := _center() - plan.position
+	var inward := to_center.normalized() if to_center.length() > 0.001 else Vector2.UP
+	var bias_dir := inward.rotated(rng.randf_range(-BIAS_DIR_SPREAD, BIAS_DIR_SPREAD))
+	telegraph.show_plan(plan.position, plan.velocity, bias_dir)
 
 	_enemies.append(disc)
 	_telegraphs.append(telegraph)

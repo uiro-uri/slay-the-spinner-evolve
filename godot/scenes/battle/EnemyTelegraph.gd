@@ -9,9 +9,9 @@ extends Node2D
 ##
 ## ただし確定値をそのまま見せると読み切れてしまうので、確定値の周りで
 ## 揺らして見せる(TelegraphWobble)。**揺れるのは見た目だけで、実際の発射は
-## show_plan()で渡された確定値のまま。** 揺らぎは確定値を中心に振れるので、
-## 長く見ていれば平均は真の値に寄る。「読めなくする」のではなく
-## 「一瞬では読み切れなくする」もの。
+## show_plan()で渡された確定値のまま。** さらに揺れの中心を確定値からわざと
+## ずらすので(bias_dir)、長く眺めて平均を取っても真の値は割り出せない。
+## それでも真の値は揺れの範囲には入っている(予告は嘘ではない)。
 ##
 ## 発射する側(Battle)は必ず確定値を使うこと。表示値で撃つと予告が本当に
 ## 嘘になる。
@@ -36,7 +36,7 @@ extends Node2D
 @export_group("揺らぎ")
 
 ## 位置の揺れ幅(ユニット)。0で揺らさない。
-@export_range(0.0, 1.0, 0.01) var wobble_position: float = TelegraphWobble.DEFAULT_POSITION_AMPLITUDE
+@export_range(0.0, 2.0, 0.01) var wobble_position: float = TelegraphWobble.DEFAULT_POSITION_AMPLITUDE
 
 ## 向きの揺れ幅(度)。0で揺らさない。
 @export_range(0.0, 45.0, 0.5) var wobble_angle_deg: float = TelegraphWobble.DEFAULT_ANGLE_AMPLITUDE
@@ -56,6 +56,10 @@ var wobble_level_scale: float = 1.0
 var _origin: Vector2 = Vector2.ZERO
 var _velocity: Vector2 = Vector2.ZERO
 
+## 揺れの中心をずらす向き(単位ベクトル)。毎回の出現ごとにBattleが決める。
+## ZEROなら確定値がそのまま揺れの中心になる。
+var _position_bias_dir: Vector2 = Vector2.ZERO
+
 var _showing: bool = false
 var _pulse: float = 0.0
 
@@ -63,9 +67,10 @@ var _pulse: float = 0.0
 var _wobble_time: float = 0.0
 
 
-func show_plan(origin: Vector2, velocity: Vector2) -> void:
+func show_plan(origin: Vector2, velocity: Vector2, position_bias_dir: Vector2 = Vector2.ZERO) -> void:
 	_origin = origin
 	_velocity = velocity
+	_position_bias_dir = position_bias_dir
 	_showing = true
 	_pulse = 0.0
 	_wobble_time = 0.0
@@ -94,7 +99,8 @@ func _process(delta: float) -> void:
 ## コマもここへ置くので、三角形の頂点とコマがずれない。
 func display_position() -> Vector2:
 	return TelegraphWobble.position_at(
-		_origin, _wobble_time, wobble_position * wobble_level_scale, wobble_speed
+		_origin, _wobble_time, wobble_position * wobble_level_scale, wobble_speed,
+		_position_bias_dir
 	)
 
 
