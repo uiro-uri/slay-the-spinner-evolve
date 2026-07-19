@@ -15,20 +15,28 @@ const SOUNDTEST_SCENE: PackedScene = preload("res://scenes/soundtest/SoundTest.t
 
 @onready var _screen_holder: Node = $ScreenHolder
 
+## ランを通して出しっぱなしにするビルド表示HUD。ScreenHolderの外(Main直下)に置いて
+## 画面差し替えで消えないようにし、_swap_screenのたびに現在のGameStateへ追従させる。
+var _stat_panel: StatPanel
+
 
 func _ready() -> void:
+	_stat_panel = StatPanel.new()
+	add_child(_stat_panel)
 	goto_title()
 
 
 func goto_title() -> void:
-	var title := _swap_screen(TITLE_SCENE)
+	# タイトルはランの外なのでビルド表示は出さない。
+	var title := _swap_screen(TITLE_SCENE, false)
 	title.start_requested.connect(_on_start_requested)
 	title.sound_test_requested.connect(goto_sound_test)
 
 
 ## タイトルから開くサウンドテスト。戻るでタイトルへ返す。
 func goto_sound_test() -> void:
-	var sound_test := _swap_screen(SOUNDTEST_SCENE)
+	# サウンドテストもランの外なのでビルド表示は出さない。
+	var sound_test := _swap_screen(SOUNDTEST_SCENE, false)
 	sound_test.back_requested.connect(goto_title)
 
 
@@ -129,10 +137,16 @@ func _on_part_chosen(part: CustomPart) -> void:
 	goto_map()
 
 
-func _swap_screen(scene: PackedScene) -> Node:
+## 画面を差し替える。show_stats=true(既定)のときはビルド表示HUDを今のGameStateへ
+## 更新して見せ、ランの外の画面(タイトル/サウンドテスト)はfalseで隠す。
+func _swap_screen(scene: PackedScene, show_stats: bool = true) -> Node:
 	for child in _screen_holder.get_children():
 		_screen_holder.remove_child(child)
 		child.queue_free()
 	var screen := scene.instantiate()
 	_screen_holder.add_child(screen)
+	if show_stats:
+		_stat_panel.refresh()
+	else:
+		_stat_panel.hide_panel()
 	return screen

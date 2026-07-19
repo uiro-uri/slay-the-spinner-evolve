@@ -161,7 +161,6 @@ const BAR_ROW_H := 60.0
 @onready var _enemy_discs_root: Node2D = $ArenaRoot/EnemyDiscs
 @onready var _enemy_telegraphs_root: Node2D = $ArenaRoot/EnemyTelegraphs
 @onready var _launcher: LaunchController = $ArenaRoot/LaunchController
-@onready var _ui: CanvasLayer = $UI
 @onready var _message: Label = $UI/Message
 @onready var _bars: VBoxContainer = $UI/Bars
 @onready var _player_bar: ProgressBar = $UI/Bars/PlayerBar
@@ -234,10 +233,6 @@ func _ready() -> void:
 	_recompute_layout()
 
 	_apply_run_state()
-
-	# 自分のコマの現在ステータスを左上に常時表示する。_apply_run_state() の後なので
-	# _player.stats はランの実ステータス(単体起動時はシーンのResource_player)。
-	_build_stat_panel()
 
 	# 敵の出現をここで決めてしまい、発射前から予告しておく。毎回変わるが、
 	# プレイヤーは狙う前に相手の軌道を読める。
@@ -401,59 +396,6 @@ func _apply_run_state() -> void:
 	_field = GameState.pending_field
 	# 土俵の見た目(壁の位置・形状・障害物)を反映してから最初の描画に入る。
 	_arena.setup(_field)
-
-
-## 自分のコマの現在ステータス(重さ・大きさ・反発・初期回転数)を、画面左上に
-## 数値で常時表示する。何を・どの書式で出すかは StatReadout(純粋関数)が決める。
-##
-## 敵HPバーと同じくコードで組む(Battle.tscnは触らない。cf. _spawn_enemy)。左上へ
-## アンカー固定するのでレイアウト非依存 ―― 横画面はアリーナ左の空き帯、縦画面は
-## アリーナ上の空きに収まり、どちらでもアリーナと重ならないので_recompute_layoutは触らない。
-func _build_stat_panel() -> void:
-	var panel := PanelContainer.new()
-	# 左上アンカー＋小マージン。決着ズームはArenaRootにしか効かないのでここは常に固定。
-	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.position = Vector2(12, 12)
-	# 背景はプレイヤーバーの背景(暗紫・半透明)を流用して見た目を揃える。
-	var bg := _player_bar.get_theme_stylebox("background")
-	if bg != null:
-		panel.add_theme_stylebox_override("panel", bg)
-
-	var margin := MarginContainer.new()
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 8)
-	panel.add_child(margin)
-
-	# 2列: 左に名前、右に値。名前ラベルはキーをそのまま入れてControlの自動翻訳に任せる。
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 2)
-	margin.add_child(grid)
-
-	# ゴースト札を取得していれば無敵時間の行も出す。単体調整時は取得0で行なし。
-	var ghost_seconds := CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)
-	for row in StatReadout.rows(_player.stats, ghost_seconds):
-		var name_label := Label.new()
-		name_label.text = row["label_key"]
-		_style_stat_label(name_label)
-		grid.add_child(name_label)
-
-		var value_label := Label.new()
-		value_label.text = row["value"]
-		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_style_stat_label(value_label)
-		grid.add_child(value_label)
-
-	_ui.add_child(panel)
-
-
-## ステータスラベルの文字色・縁取り。床やコマの上でも読めるよう、メッセージ表示に倣う。
-func _style_stat_label(label: Label) -> void:
-	label.add_theme_color_override("font_color", Palette.TEXT_PRIMARY)
-	label.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
-	label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
 
 
 ## 土俵の矩形。フィールドがあればそれ、なければシーン既定のArena.BOUNDS。

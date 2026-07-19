@@ -88,7 +88,7 @@ STAT_RADIUS,Size,大きさ
 STAT_RESTITUTION,Bounce,反発
 STAT_RPS_INITIAL,Initial Spin,初期回転数
 STAT_GHOST,Invincibility,無敵時間
-STAT_SECONDS,{0}s,{0}秒
+STAT_LIVES,Lives,残機
 PART_GIANT_GROWTH,Giant Growth,ジャイアントグロース
 PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
 PART_FULL_STEAM_AHEAD,Full Steam Ahead,フルスロットル

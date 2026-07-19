@@ -149,6 +149,7 @@ func _test_translations() -> void:
 	_check(tr("STAT_RPS_INITIAL") == "初期回転数", "ja: STAT_RPS_INITIAL -> '%s'" % tr("STAT_RPS_INITIAL"))
 	_check(tr("STAT_MASS") == "重さ", "ja: STAT_MASS -> '%s'" % tr("STAT_MASS"))
 	_check(tr("STAT_GHOST") == "無敵時間", "ja: STAT_GHOST -> '%s'" % tr("STAT_GHOST"))
+	_check(tr("STAT_LIVES") == "残機", "ja: STAT_LIVES -> '%s'" % tr("STAT_LIVES"))
 
 	# 未定義キーはキー自身が返る＝訳抜けを検出できる
 	_check(tr("NO_SUCH_KEY") == "NO_SUCH_KEY", "未定義キーはそのまま返る")
