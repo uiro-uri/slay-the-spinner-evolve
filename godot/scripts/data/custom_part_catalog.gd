@@ -6,15 +6,16 @@ extends RefCounted
 ##
 ## 数値はプロトタイプを出発点にしているだけで、手触りで調整する前提。
 
-## レアリティごとの当たりやすさ。commonはrareの5倍出る(レベル1時)。
+## レアリティごとの当たりやすさ。commonはrareの7倍出る(レベル1時)。
 ## COMMONの重みは固定で、RAREの重みだけ敵レベルで上げる(rare_weight_for_level)。
+## レア(強札)が出過ぎる手触りだったのでCOMMON側を重くして全レベルで出現率を下げた。
 const WEIGHTS := {
-	CustomPart.Rarity.COMMON: 5,
+	CustomPart.Rarity.COMMON: 7,
 	CustomPart.Rarity.RARE: 1,
 }
 
 ## RAREの重みを敵レベル(1..5)で増やす。深く進むほどレアが出やすい王道の設計。
-## レベル1は現行どおり重み1(COMMON 5 : RARE 1)。以降レベルごとに+1し、MAXで頭打ち。
+## レベル1は重み1(COMMON 7 : RARE 1 ≒ 12.5%)。以降レベルごとに+1し、MAXで頭打ち。
 const RARE_WEIGHT_MIN := 1
 const RARE_WEIGHT_MAX := 4
 
