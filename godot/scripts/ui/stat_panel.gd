@@ -15,7 +15,22 @@ extends CanvasLayer
 const STAT_BAR_SIZE := Vector2(120.0, 10.0)
 const LIFE_PIP_DIAMETER := 12.0
 
+## 値が変わった行のバーを一瞬明るくして気付かせる。塗りをこの明るい色にしてから
+## プレイヤー色へ戻す(cyanはG/Bが既に最大でmodulate倍率だと明度が上がらないため、
+## 色そのものを白側へ寄せる)。戻るまでの秒数と、変化とみなす割合の下限も。
+const FLASH_COLOR := Color(1, 1, 1)
+const FLASH_DURATION := 0.45
+const FLASH_EPS := 0.0001
+
 var _grid: GridContainer
+
+## 直前に見せた各行の埋まり具合(label_key -> fraction)。次のrefreshで差分を出しフラッシュに使う。
+var _prev_fractions: Dictionary = {}
+
+## 直前に見たプレイヤーstatsの実体。reset_run()で別ランになると実体が変わるので、
+## それを新ラン(＝基準取り直し、フラッシュしない)の合図に使う。パーツ取得はstatsを
+## その場で書き換える(実体は同じ)ので、ラン中の変化は差分として拾える。
+var _run_stats: SpinnerStats = null
 
 
 func _ready() -> void:
@@ -41,11 +56,18 @@ func _build_shell() -> void:
 
 
 ## いまの GameState からビルド表示を組み直す。ランが無ければ隠す。
+## 前回から埋まり具合が変わった行のバーは、組み直した直後に一瞬明るくして目立たせる。
 func refresh() -> void:
 	if GameState.player_stats == null:
 		visible = false
 		return
 	visible = true
+
+	# 別ラン(stats実体が変わった)なら基準を取り直し、初回なので差分フラッシュはしない。
+	var fresh := GameState.player_stats != _run_stats
+	_run_stats = GameState.player_stats
+	if fresh:
+		_prev_fractions.clear()
 
 	for child in _grid.get_children():
 		_grid.remove_child(child)
@@ -53,13 +75,23 @@ func refresh() -> void:
 
 	# ゴースト札を取得していれば無敵時間の行も付く(StatReadout側で判断)。
 	var ghost_seconds := CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)
+	var current: Dictionary = {}
 	for row in StatReadout.rows(GameState.player_stats, ghost_seconds):
-		_grid.add_child(_name_label(row["label_key"]))
-		_grid.add_child(_bar(row["fraction"]))
+		var key: String = row["label_key"]
+		var fraction: float = row["fraction"]
+		current[key] = fraction
+		_grid.add_child(_name_label(key))
+		var bar := _bar(fraction)
+		_grid.add_child(bar)
+		# 前回に無かった行(新登場)か、埋まり具合が動いた行だけ光らせる。
+		if not fresh and (not _prev_fractions.has(key) or absf(fraction - _prev_fractions[key]) > FLASH_EPS):
+			_flash(bar)
 
 	# 残機を◯アイコンで。ランの残機(GameState.continues_left)ぶん並べる。
 	_grid.add_child(_name_label("STAT_LIVES"))
 	_grid.add_child(_life_pips(GameState.continues_left))
+
+	_prev_fractions = current
 
 
 ## 画面切替でランがまだ無い/終わった画面(タイトル等)から呼ぶ。中身は消さず隠すだけ。
@@ -91,6 +123,19 @@ func _bar(fraction: float) -> ProgressBar:
 	bar.add_theme_stylebox_override("background", _bar_bg_style())
 	bar.add_theme_stylebox_override("fill", _fill_style(Palette.PLAYER))
 	return bar
+
+
+## 値が変わったバーを一瞬明るくして素へ戻す。塗り(fill)の色を白へ飛ばしてから
+## プレイヤー色へ引き戻すので、埋まった部分がぱっと光って落ち着く。バーごとに
+## fillスタイルボックスは別実体(_fill_styleが都度new)なので、他のバーには波及しない。
+## tweenはバーに束ねるので、次のrefreshでバーが消えても勝手に片付く。
+func _flash(bar: ProgressBar) -> void:
+	var fill := bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill == null:
+		return
+	fill.bg_color = FLASH_COLOR
+	var tween := bar.create_tween()
+	tween.tween_property(fill, "bg_color", Palette.PLAYER, FLASH_DURATION).set_ease(Tween.EASE_OUT)
 
 
 ## 残機を◯アイコンで横並びに。残機ぶんだけプレイヤー色の小円を置く。0個ならHBoxが空。
