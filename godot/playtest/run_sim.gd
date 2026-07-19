@@ -170,8 +170,12 @@ static func play_one(
 ## 最初はステータスごとの好みを手で並べていたが、それだと半径が2乗で効くことを
 ## 見落として Shrink(半径×0.5) を良い札として選んでしまい、「上手い人」のはずが
 ## 耐久を1/4にしていた。式から出す方が間違えない。
+## hit_guardは衝突削りを(1-hit_guard)倍にするので、耐えられる被弾数は
+## 1/(1-hit_guard)倍。greedyがGUARD札を正しく値踏みできるよう式に織り込む
+## (織り込まないとGHOST同様「絶対選ばれない札」になり、統計に現れない)。
 static func toughness(stats: SpinnerStats) -> float:
-	return stats.rps * stats.mass * stats.radius * stats.radius
+	var guard_gain := 1.0 / maxf(1.0 - stats.hit_guard, 0.05)
+	return stats.rps * stats.mass * stats.radius * stats.radius * guard_gain
 
 
 static func _choose_part(

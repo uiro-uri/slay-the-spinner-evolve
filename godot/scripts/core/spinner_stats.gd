@@ -34,6 +34,10 @@ extends Resource
 ## 実効ダンピングを1.0(無損失)へこの割合だけ寄せる。Rage Reflectionが上げる。
 @export_range(0.0, 1.0, 0.01) var wall_keep: float = 0.0
 
+## コマ同士の衝突で受けるrps削りを減らす度合い。0で従来どおり、1で削り無効。
+## 壁のwall_keepと対になる衝突版の防御。Shock Absorberが上げる。
+@export_range(0.0, 1.0, 0.01) var hit_guard: float = 0.0
+
 ## 回転数の上限。「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
 ## SPIN_ENGINE札の上限(CustomPartCatalog.RPS_CAP)も勝利成長もこれを参照する。
 const RPS_CAP := 40.0
@@ -62,6 +66,7 @@ func duplicate_stats() -> SpinnerStats:
 	copy.rps = rps
 	copy.spin_decay = spin_decay
 	copy.wall_keep = wall_keep
+	copy.hit_guard = hit_guard
 	return copy
 
 

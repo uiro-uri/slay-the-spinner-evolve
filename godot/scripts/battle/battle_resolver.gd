@@ -168,11 +168,19 @@ static func _resolve_disc_collision(
 	a.velocity = bounced[0]
 	b.velocity = bounced[1]
 
-	var a_drain := SpinnerPhysics.spin_drain(
-		b.stats.mass, b_speed, a.stats.mass, a.stats.radius, req.violence
+	# hit_guard(Shock Absorber)は受ける削りを打ち消す。spin_kickも削り量比例なので
+	# 一緒に弱まる(回転を守る代わりに弾かれ逃げも小さくなる)。
+	var a_drain := SpinnerPhysics.guarded_spin_drain(
+		SpinnerPhysics.spin_drain(
+			b.stats.mass, b_speed, a.stats.mass, a.stats.radius, req.violence
+		),
+		a.stats.hit_guard
 	)
-	var b_drain := SpinnerPhysics.spin_drain(
-		a.stats.mass, a_speed, b.stats.mass, b.stats.radius, req.violence
+	var b_drain := SpinnerPhysics.guarded_spin_drain(
+		SpinnerPhysics.spin_drain(
+			a.stats.mass, a_speed, b.stats.mass, b.stats.radius, req.violence
+		),
+		b.stats.hit_guard
 	)
 
 	a.velocity += SpinnerPhysics.spin_kick(

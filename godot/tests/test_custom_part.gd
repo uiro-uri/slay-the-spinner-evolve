@@ -155,6 +155,18 @@ func _test_description_matches_effect(check: Callable) -> void:
 			)
 			continue
 
+		# 衝撃吸収は倍率でなく軽減率(%)と上限(%)の単行の説明。両方の数字が
+		# 出ていることを確かめる(倍率・注記・改行の検査はステータス札向け)。
+		if part.effect == CustomPart.Effect.GUARD:
+			check.call(
+				text.contains(CustomPart._trim(part.hit_guard_step * 100.0))
+					and text.contains(CustomPart._trim(part.hit_guard_max * 100.0)),
+				"パーツ%d(%s): 衝撃吸収の説明に軽減率と上限が出ている (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			continue
+
 		# 怒りの反射は反発倍率と壁rps保持の複合。反発倍率が出ていることを確かめる。
 		if part.effect == CustomPart.Effect.RAGE:
 			check.call(
