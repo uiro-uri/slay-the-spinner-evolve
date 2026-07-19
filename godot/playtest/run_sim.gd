@@ -126,6 +126,10 @@ static func play_one(
 			won_all = true
 			break
 
+		# Main._on_battle_finished と同じく、勝利のたびに回転が少し成長する
+		# (報酬選択より先。倍率札は成長込みのrpsに掛かる)。
+		stats.grow_rps_by_victory()
+
 		# 勝利報酬。Main._on_battle_finished/_on_part_chosen(GameState.apply_part)と
 		# 同じく、倒した頭数ぶん報酬を選ぶ(乱戦はrps据え置きで手強いぶん見返りも頭数ぶん)。
 		# 各回: ステータス倍率に加え、SET_LIVES札(SPARE_CORE)は残機をmaxiで底上げする。

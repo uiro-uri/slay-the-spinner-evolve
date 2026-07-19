@@ -205,6 +205,14 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			_save(state, path)
 			print("！！！全段突破・ラン完了！！！")
 		else:
+			# 実ゲーム(Main._on_battle_finished)と同じく、勝利のたびに回転が少し成長する。
+			# 報酬(倍率札)より先に適用して保存する。
+			var grown := stats_from(state["stats"])
+			grown.grow_rps_by_victory()
+			state["stats"] = stats_dict(grown)
+			_save(state, path)
+			print("勝利の勢いで回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [
+				grown.rps, SpinnerStats.VICTORY_RPS_GROWTH, SpinnerStats.RPS_CAP])
 			print("→ reward --bseed=<R> で報酬を見る")
 	else:
 		print("→ retry --bseed=<新B> (残機%d) か giveup" % state["continues"])

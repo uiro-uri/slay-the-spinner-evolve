@@ -45,8 +45,8 @@ const RADIUS_CAP := 2.0
 const MASS_CAP := 8.0
 
 ## 回転数の上限。プロトタイプの min(40.0, ...) に相当。
-## 「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
-const RPS_CAP := 40.0
+## 実体は勝利成長と共有するSpinnerStats.RPS_CAP(値の由来もあちらのコメント参照)。
+const RPS_CAP := SpinnerStats.RPS_CAP
 
 ## Rage Reflectionが1枚あたり上げる壁rps保持量と、その上限。
 ## wall_keepは非線形で、1.0(完全無損失)付近で無敵化する(計測で+59ptクリア率)。
