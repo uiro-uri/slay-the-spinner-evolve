@@ -91,3 +91,34 @@
   大きいので分割)。勝利成長の画面演出(現状StatPanelの数字が黙って増えるだけ)。
   GIANT_GROWTHの罠テキスト。naive_playのlaunchが敗北を保存しない抜け穴。
   報酬プールの拡充。
+
+## サイクル 2026-07-19 21:25 UTC
+- プレイ所感: seed=17423 で1ラン、初の「全戦一発勝利」での全段突破(9戦9勝、残機3温存)。
+  MASS_UP3枚+SPIN_ENGINE2枚と引きが良かったのもあるが、「反対側から全力ラム」と
+  「進路へ迎撃」だけでどの戦闘も1発で終わり、狙いを工夫する動機が薄かった。
+  最大の不満は報酬の顔ぶれ: 9回の提示でGHOSTが6回・FULL_STEAMが5回出て、7枚プールの
+  狭さがそのまま選択の退屈につながっていた。防御の選択肢はGHOST(時間限定)だけで
+  魅力がなく、一度も取らなかった。死因表示(drain/decay/wall)は良い。
+- 選んだ改善: journal筆頭候補とも一致した報酬プールの拡充。コマ同士の衝突で受ける
+  rps削りを軽減する純防御COMMON「ショックアブソーバー」(hit_guard、1枚+0.17・
+  上限0.5=最大で削り半減)を追加。壁のwall_keep(RAGE)と対になる衝突版で、COMMONの
+  防御軸の空白を埋める。削りが減るぶんspin_kick(削り量比例の弾き)も一緒に弱まる。
+- 変更: scripts/core/spinner_stats.gd(hit_guard)、spinner_physics.gd
+  (guarded_spin_drain)、battle_resolver.gd、battle_request.gd(dict往復・後方互換)、
+  scripts/data/custom_part.gd(GUARD効果)・custom_part_catalog.gd(id=10)、
+  translations/strings.csv、playtest/naive_play.gd(表示・state往復・card_text)、
+  run_sim.gd(greedyの値踏みにhit_guardを織り込み)、measure_parts.gd。
+  tests/test_hit_guard.gd 新設(EXPECTED_TESTS登録)。
+- 結果: 全テストgreen(32 suite)。リゾルバのguard適用除去・上限クランプ除去の2種の
+  サボタージュで落ちることを確認。単独計測(measure_parts): Lv3で+4.7pt/枚・3枚で
+  +16.0ptとRAGE(+5.0)/FULL_STEAM(+7.5)同格の中堅COMMON。ラン統計(playtest.sh):
+  死亡集中帯の段3勝率52.6%→57.2%、段5も25.2%→27.0%と谷が緩み、intercept+randomの
+  クリア率は21.7%で不変。一方intercept+greedyは13.3%→8.3%に低下: greedyが後半も
+  GUARDをmomentum系より優先して自然減衰レースで伸び悩むためで、値踏みを
+  1/(1-g)→控えめな線形(1+g)に直しても傾向は変わらなかった(bot側の近視眼が主因、
+  カード自体の単独効果は正)。要経過観察として次サイクルに引き継ぐ。
+- 次の候補: greedy botの報酬価値関数の再設計(1戦の硬さでなくラン単位の複利を
+  織り込む。GUARD追加で段6〜9のgreedy勝率が下がった件の切り分けを含む)。
+  受け身戦法支配の本丸(Lv3+死因の8割が自然減衰)。勝利成長の画面演出。
+  GIANT_GROWTHの罠テキスト(今回の単独計測でもLv3 -9.2pt/枚と唯一の負で、罠が数字でも
+  裏付けられた)。naive_playのlaunchが敗北を保存しない抜け穴。
