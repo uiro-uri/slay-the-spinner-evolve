@@ -16,10 +16,10 @@ func run(check: Callable) -> void:
 	_test_from_pull(check)
 
 
-## レンジの妥当性。MINは予告可読性の下限、MAX上限。MIN<MAXでMIN>0。
+## レンジの妥当性。MINは自機と同じ下限(0)、MAXが上限。MIN>=0でMIN<MAX。
 func _test_constants(check: Callable) -> void:
 	check.call(LaunchSpeed.MIN < LaunchSpeed.MAX, "MIN(%.1f) < MAX(%.1f)" % [LaunchSpeed.MIN, LaunchSpeed.MAX])
-	check.call(LaunchSpeed.MIN > 0.0, "MIN(%.1f) は敵の抽選下限として正" % LaunchSpeed.MIN)
+	check.call(LaunchSpeed.MIN >= 0.0, "MIN(%.1f) は0以上(負の速度は無い)" % LaunchSpeed.MIN)
 
 
 ## 敵の抽選は必ず[MIN,MAX]に収まること。多数サンプルで両端も踏む。

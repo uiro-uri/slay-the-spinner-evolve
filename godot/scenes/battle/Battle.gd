@@ -325,6 +325,8 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	# 強い敵ほど予告が大きくブレて読みにくくする。
 	if data != null:
 		telegraph.apply_level(data.level)
+	# 発射速度は0まで下がりうるので、予告がこのコマの下に隠れないよう半径を渡す。
+	telegraph.readable_radius = disc.stats.radius
 	_enemy_telegraphs_root.add_child(telegraph)
 
 	# HPバーの見た目はプレイヤーバー(Battle.tscnで設定)に合わせる。背景は共有し、
