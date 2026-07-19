@@ -20,6 +20,9 @@ func run(check: Callable) -> void:
 	_test_run_sim_forced_pick(check)
 	_test_run_sim_continues(check)
 	_test_run_sim_spare_core(check)
+	_test_naive_play_card_text(check)
+	_test_naive_play_pick_guard(check)
+	_test_naive_play_result_label(check)
 
 
 func _request() -> BattleRequest:
@@ -324,3 +327,48 @@ func _test_run_sim_spare_core(check: Callable) -> void:
 			RunSim.START_CONTINUES, max_continues
 		]
 	)
+
+
+## naive_play(コールドプレイCLI)のカード表記が実効果と一致することを固定する。
+## 発見の経緯: RAGE/MOMENTUMがSTAT_MULTIPLY用の分岐に落ち、statの既定値MASSを
+## 読んで「質量 ×1.10」と表示していた。コールドプレイは効果テキストだけで
+## 報酬を選ぶ約束なので、表記が嘘だと選択の一次証拠が腐る。
+func _test_naive_play_card_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var rage := CustomPartCatalog.by_id(6)    # RAGE(反発+壁rps保持)
+	var rage_text: String = NaivePlay.card_text(rage)
+	check.call("反発" in rage_text, "naive_play: RAGE札は反発を謳う (%s)" % rage_text)
+	check.call(not ("質量" in rage_text), "naive_play: RAGE札の表記に質量が混ざらない")
+	var momentum := CustomPartCatalog.by_id(5)    # MOMENTUM(摩擦+回転減衰)
+	var momentum_text: String = NaivePlay.card_text(momentum)
+	check.call("回転減衰" in momentum_text, "naive_play: MOMENTUM札は回転減衰を謳う (%s)" % momentum_text)
+	check.call(not ("質量" in momentum_text), "naive_play: MOMENTUM札の表記に質量が混ざらない")
+	var growth := CustomPartCatalog.by_id(2)    # 純ステータス札(直径)は従来表記のまま
+	check.call("直径" in NaivePlay.card_text(growth), "naive_play: 直径札は直径を謳う")
+	var lives := CustomPartCatalog.by_id(8)
+	check.call("残機" in NaivePlay.card_text(lives), "naive_play: 残機札は残機を謳う")
+
+
+## pickは直前のrewardで提示された札しか取れない。発見の経緯: 提示されていない
+## id=2 を pick したら通ってしまい、ラン後半の一次証拠が壊れた。
+func _test_naive_play_pick_guard(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	check.call(NaivePlay.pick_allowed([5, 7, 9], 7), "naive_play: 提示された札は取れる")
+	check.call(not NaivePlay.pick_allowed([5, 7, 9], 2), "naive_play: 提示外の札は取れない")
+	check.call(not NaivePlay.pick_allowed([], 2), "naive_play: 提示ゼロでは何も取れない")
+	check.call(NaivePlay.pick_allowed([5.0, 7.0], 5), "naive_play: JSON経由のfloat idも照合できる")
+
+
+## 引き分けは進行上は敗北扱いだが、表示では区別する。発見の経緯: DRAWが
+## 「敗北 死因=? loser=none」と出て、なぜ負けたのか分からなかった。
+func _test_naive_play_result_label(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	check.call(
+		"勝利" in NaivePlay.result_label(BattleResult.Outcome.PLAYER_WIN),
+		"naive_play: PLAYER_WINは勝利表示")
+	check.call(
+		"引き分け" in NaivePlay.result_label(BattleResult.Outcome.DRAW),
+		"naive_play: DRAWは引き分けと明示")
+	check.call(
+		NaivePlay.result_label(BattleResult.Outcome.ENEMY_WIN) == "敗北",
+		"naive_play: ENEMY_WINは敗北表示")

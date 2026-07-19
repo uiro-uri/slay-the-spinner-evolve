@@ -9,7 +9,9 @@ extends SceneTree
 ##   launch --state=path --bseed=B --from-deg=D --target=center|enemyK|x,y --force=F
 ##                                            自分の発射を決めて1戦解決。勝敗を出す
 ##   reward --state=path --bseed=B            勝利後、報酬3枚の効果を出す
+##                                            (最初の1回で確定。以後bseedを変えても同じ3枚)
 ##   pick   --state=path --id=ID              報酬を1枚取り、次のマップ選択へ
+##                                            (直前のrewardで提示された札しか取れない)
 ##   retry  --state=path --bseed=B            残機を1消費して同ノードを再抽選(新しい予告)
 ##   giveup --state=path                      あきらめてラン終了
 ##
@@ -47,6 +49,7 @@ func _default_state(seed_value: int) -> Dictionary:
 		"pending": null,       # 交戦中ノードの col (未突破)
 		"stats": _stats_dict(s),
 		"parts": [],
+		"offered": null,       # 直前のrewardで提示した札id列 (pickの検証と再抽選防止)
 		"continues": 3,
 		"cleared": false,
 		"dead": false,
@@ -105,6 +108,7 @@ func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
 	if not target in tree.next_coords():
 		printerr("そのノードへは進めない: ", target, " 進める先=", tree.next_coords()); return
 	state["pending"] = col
+	state["offered"] = null    # 古い提示札で新ノードをpickできないように
 	_save(state, path)
 	# pathには勝ってから足す。ここでは表示のためadvanceした木を使う
 	tree.advance_to(target)
@@ -114,6 +118,7 @@ func _retry(state: Dictionary, path: String, bseed: int) -> void:
 	if int(state["continues"]) <= 0:
 		print("残機なし。giveupへ。"); return
 	state["continues"] = int(state["continues"]) - 1
+	state["offered"] = null
 	_save(state, path)
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
@@ -174,7 +179,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	print("=== 発射: pos=%s vel=%.1f@%.0f° target=%s force=%.2f ===" % [
 		str(pos), vel.length(), rad_to_deg(vel.angle()), target, force])
 	print("結果: %s  決着=%.2fs 衝突=%d timed_out=%s" % [
-		("★勝利★" if won else "敗北"), result.finish_time, result.impacts.size(), result.timed_out])
+		result_label(result.outcome), result.finish_time, result.impacts.size(), result.timed_out])
 	print("  死因=%s loser=%s hits_taken=%s" % [
 		metrics.get("death_cause","?"), metrics.get("loser","?"), str(metrics.get("hits_taken","?"))])
 	if won:
@@ -186,14 +191,32 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
 	var level := EnemyRoster.level_for_step(tree.current_step())
-	var rng := RandomNumberGenerator.new(); rng.seed = bseed
-	var choices := CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, rng, level)
-	print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (bseed=%d) ===" % [tree.current_step(), level, bseed])
+	var choices: Array[CustomPart] = []
+	if state.get("offered") != null:
+		# 提示済み: bseedを変えて引き直せないよう、保存した札をそのまま再掲する。
+		for v in state["offered"]:
+			choices.append(CustomPartCatalog.by_id(int(v)))
+		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (提示済み・再掲) ===" % [tree.current_step(), level])
+	else:
+		var rng := RandomNumberGenerator.new(); rng.seed = bseed
+		choices = CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, rng, level)
+		var ids := []
+		for c in choices: ids.append(c.id)
+		state["offered"] = ids
+		_save(state, path)
+		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (bseed=%d) ===" % [tree.current_step(), level, bseed])
 	for c in choices:
-		print("  id=%d '%s' [%s] %s" % [c.id, c.title_key, _rarity(c.rarity), _card_text(c)])
+		print("  id=%d '%s' [%s] %s" % [c.id, c.title_key, _rarity(c.rarity), card_text(c)])
 	print("→ pick --id=<ID>")
 
 func _pick(state: Dictionary, path: String, id: int) -> void:
+	var offered = state.get("offered")
+	if offered == null:
+		printerr("先に reward で提示を見ること"); return
+	if not pick_allowed(offered, id):
+		var ids := []
+		for v in offered: ids.append(int(v))
+		printerr("id=%d は提示されていない。提示中: %s" % [id, str(ids)]); return
 	var tree := _tree_at(state)
 	var col := int(state["pending"])
 	tree.advance_to(Vector2i(tree.current_step() + 1, col))
@@ -207,10 +230,11 @@ func _pick(state: Dictionary, path: String, id: int) -> void:
 	# ノード突破を確定
 	state["path"].append([tree.current_step(), col])
 	state["pending"] = null
+	state["offered"] = null
 	if tree.is_goal():
 		state["cleared"] = true
 	_save(state, path)
-	print("取得: id=%d '%s' → %s" % [id, part.title_key, _card_text(part)])
+	print("取得: id=%d '%s' → %s" % [id, part.title_key, card_text(part)])
 	_print_stats(state)
 	if state["cleared"]:
 		print("！！！全段突破・ラン完了！！！")
@@ -221,8 +245,11 @@ func _pick(state: Dictionary, path: String, id: int) -> void:
 func _giveup(state: Dictionary, path: String) -> void:
 	state["dead"] = true
 	_save(state, path)
-	print("=== GIVE UP 段%d で終了 取得%d枚 残機%d ===" % [
-		_tree_at(state).current_step(), state["parts"].size(), state["continues"]])
+	# current_step()は突破済みの段。交戦中に散った場合はその次の段で終わっている。
+	var step := _tree_at(state).current_step()
+	var where := "段%d(交戦中)" % (step + 1) if state.get("pending") != null else "段%d" % step
+	print("=== GIVE UP %s で終了 取得%d枚 残機%d ===" % [
+		where, state["parts"].size(), state["continues"]])
 
 
 # ---- 計算ヘルパ ----
@@ -292,18 +319,48 @@ func _print_reachable(tree: MapTree) -> void:
 		var n: MapTree.MapNode = tree.nodes[c]
 		print("  col%+d : Lv%d %d体 %s" % [c.y, n.level(), n.enemy_count(), n.field.title_key])
 
-func _card_text(c: CustomPart) -> String:
+## カードの効果を実効果と一致する日本語で出す(CustomPart.describe()のCLI版)。
+## 以前はRAGE/MOMENTUMもSTAT_MULTIPLY用の分岐に落ち、statの既定値MASSを読んで
+## 「質量 ×1.10」と嘘を表示していた(実際は反発と壁rps保持の複合)。
+## コールドプレイは効果テキストだけで報酬を選ぶので、ここが嘘だと工程が腐る。
+static func card_text(c: CustomPart) -> String:
 	match c.effect:
 		CustomPart.Effect.SET_LIVES:
 			return "残機を%dにする" % c.lives
 		CustomPart.Effect.GHOST:
 			return "開始%.0f秒間 敵をすり抜ける" % c.ghost_seconds
+		CustomPart.Effect.MOMENTUM:
+			return "摩擦と回転減衰 ×%.2f(回転減衰の下限%.2f) [MOMENTUM]" % [c.multiplier, c.cap]
+		CustomPart.Effect.RAGE:
+			return "反発 ×%.2f(上限%.2f)・壁でのrps喪失を軽減+%.2f(上限%.2f) [RAGE]" % [
+				c.multiplier, c.cap, c.wall_keep_step, c.wall_keep_max]
 		_:
 			var stat_name: String = ["質量","直径","摩擦","反発","回転"][c.stat]
 			var cap_txt := "" if c.cap <= 0.0 else "(上限%.2f)" % c.cap
 			var dir := "UP" if c.multiplier > 1.0 else "DOWN"
 			var key: String = ["MASS","RADIUS","FRICTION","RESTITUTION","RPS"][c.stat]
 			return "%s ×%.2f%s [%s_%s]" % [stat_name, c.multiplier, cap_txt, key, dir]
+
+
+## pickが取れるのは直前のrewardで提示された札だけ。JSON経由でidがfloatに
+## なっていても数値で照合する。
+static func pick_allowed(offered: Array, id: int) -> bool:
+	for v in offered:
+		if int(v) == id:
+			return true
+	return false
+
+
+## 勝敗表示。引き分け(相打ち・時間切れ)は進行上は敗北扱いだが、
+## 「敗北」とだけ出すと死因不明の負けに見えるため区別して出す。
+static func result_label(outcome: int) -> String:
+	match outcome:
+		BattleResult.Outcome.PLAYER_WIN:
+			return "★勝利★"
+		BattleResult.Outcome.DRAW:
+			return "引き分け(敗北扱い)"
+		_:
+			return "敗北"
 
 func _rarity(r: int) -> String:
 	return "RARE" if r == CustomPart.Rarity.RARE else "COMMON"
