@@ -4,9 +4,9 @@ extends RefCounted
 ## 1ラン(タイトル→マップ→戦闘→報酬→…→ボスorゲームオーバー)を丸ごと回す。
 ##
 ## ローグライクのバランス(パーツの強弱、どの段で死ぬか、RPSのインフレ)は
-## ラン全体でしか測れない。Main.gdの進行(段→敵と土俵、勝利→報酬3枚から1枚)を
-## 最小限に写しているので、Main.gd側の進行を変えたらここも見ること。
-## 報酬の枚数はCustomPartCatalog.REWARD_CHOICES(画面と共有)を参照する。
+## ラン全体でしか測れない。Main.gdの進行(段→敵と土俵、勝利→倒した頭数ぶん
+## 報酬3枚から1枚ずつ)を最小限に写しているので、Main.gd側の進行を変えたらここも
+## 見ること。1回あたりの報酬枚数はCustomPartCatalog.REWARD_CHOICES(画面と共有)を参照。
 
 enum RewardPolicy {
 	## 3枚から一様ランダム。何も考えない人。
@@ -126,16 +126,18 @@ static func play_one(
 			won_all = true
 			break
 
-		# 勝利報酬。Main._on_part_chosen(GameState.apply_part)と同じ適用:
-		# ステータス倍率に加え、SET_LIVES札(SPARE_CORE)は残機をmaxiで底上げする。
+		# 勝利報酬。Main._on_battle_finished/_on_part_chosen(GameState.apply_part)と
+		# 同じく、倒した頭数ぶん報酬を選ぶ(乱戦はrps据え置きで手強いぶん見返りも頭数ぶん)。
+		# 各回: ステータス倍率に加え、SET_LIVES札(SPARE_CORE)は残機をmaxiで底上げする。
 		# 倒した敵のレベルほどレアが出やすい。
-		var choices := CustomPartCatalog.pick_choices(
-			CustomPartCatalog.REWARD_CHOICES, rng, int(record["level"])
-		)
-		var part := _choose_part(choices, reward_policy, rng, stats, force_part_id)
-		part.apply_to(stats)
-		continues = maxi(continues, part.lives)
-		parts.append(part.id)
+		for _r in maxi(group.size(), 1):
+			var choices := CustomPartCatalog.pick_choices(
+				CustomPartCatalog.REWARD_CHOICES, rng, int(record["level"])
+			)
+			var part := _choose_part(choices, reward_policy, rng, stats, force_part_id)
+			part.apply_to(stats)
+			continues = maxi(continues, part.lives)
+			parts.append(part.id)
 
 	return {
 		"seed": seed_value,

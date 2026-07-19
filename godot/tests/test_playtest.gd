@@ -224,11 +224,17 @@ func _test_run_sim_consistent(check: Callable) -> void:
 		check.call(not r.has("error"), "run_sim: ランが完走する (seed %d)" % seed_value)
 		check.call(r["battles"].size() > 0, "run_sim: 戦闘が記録される (seed %d)" % seed_value)
 
-		# パーツはボス以外の勝利ごとに1枚。クリアなら最後の勝利(ボス)には付かない。
-		var expected_parts: int = r["battles_won"] - (1 if r["cleared"] else 0)
+		# パーツはボス以外の勝利ごとに「倒した頭数」枚(乱戦は頭数ぶん報酬)。
+		# クリアなら最後の勝利(ボス=単体)には付かないので1枚ぶん差し引く。
+		var expected_parts := 0
+		for b in r["battles"]:
+			if b["win"]:
+				expected_parts += int(b["count"])
+		if r["cleared"]:
+			expected_parts -= 1
 		check.call(
 			r["parts"].size() == expected_parts,
-			"run_sim: パーツ数が勝利数と整合 (seed %d: %d枚 / 期待 %d)" % [
+			"run_sim: パーツ数が倒した頭数と整合 (seed %d: %d枚 / 期待 %d)" % [
 				seed_value, r["parts"].size(), expected_parts
 			]
 		)

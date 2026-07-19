@@ -3,9 +3,9 @@ extends RefCounted
 ## EnemyRoster の強さに関するテスト。数値そのものではなく、チューニングで値が
 ## 変わっても崩れてはいけない性質を固定する。
 ##
-##  - 乱戦メンバーの耐久下限: 頭数割りで「1衝突で終わる」コマを作らない。
-##    これが無いと3体乱戦のLv1メンバーが耐久2.1まで落ち、実測で12.7%が最初の
-##    1衝突で死んでいた(pick_group_for_step / MIN_GROUP_TOUGHNESS参照)。
+##  - 乱戦メンバーが弱められないこと: 頭数でrpsを割らず、各体を1段下のレベルの
+##    まま戦わせる(手強さの見返りは頭数ぶんの報酬。pick_group_for_step参照)。
+##    ここが1未満に落ちたら、どこかで頭数割りが復活している。
 ##  - レベルの梯子: 耐久(rps×質量×半径²=「耐えられる衝突回数の目安」)がレベルが
 ##    上がるほど強くなること。rpsもレベル順に上げているが(回転ゲージ=強さの見た目)、
 ##    強さは硬さ・質量・rpsの複合なので、レベルの梯子は複合結果である耐久で見る。
@@ -17,18 +17,17 @@ const EPS := 1e-4
 
 
 func run(check: Callable) -> void:
-	_test_group_toughness_floor(check)
+	_test_swarm_members_unweakened(check)
 	_test_toughness_ladder(check)
 
 
-## 乱戦メンバーはどれも耐久下限を下回らないこと。ただし単体の耐久が既に下限より
-## 低い敵は下限まで上げようがない(係数は1で頭打ち)ので、その敵の単体耐久と
-## 下限の小さい方を下限とみなす。下限を外して 1/頭数 に戻すと、3体Lv1メンバーが
-## この下限を割って落ちる。
-func _test_group_toughness_floor(check: Callable) -> void:
+## 乱戦メンバーはどれも頭数で弱められていないこと。各体の耐久(=rps×質量×半径²)が、
+## 同名の元(フルrps)の耐久とちょうど一致する(比が1.0)。頭数割りを復活させると
+## rpsが下がって比が1未満になり、ここが落ちる。
+func _test_swarm_members_unweakened(check: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20240718
-	var worst_ratio := INF   # (メンバー耐久 / 期待下限) の最小。1未満なら違反。
+	var worst_ratio := INF   # (メンバー耐久 / 元のフルrps耐久) の最小。1未満なら弱められている。
 	var seen_swarm := false
 	for _iter in 2000:
 		for step in range(1, MapTree.STEP_GOAL + 1):
@@ -37,20 +36,19 @@ func _test_group_toughness_floor(check: Callable) -> void:
 				continue
 			seen_swarm = true
 			for member in group:
-				var member_tough := RunSim.toughness(member.stats)
-				var expected_floor := minf(
-					EnemyRoster.MIN_GROUP_TOUGHNESS, _solo_toughness(member)
-				)
-				worst_ratio = minf(worst_ratio, member_tough / expected_floor)
+				var solo := _solo_toughness(member)
+				if solo <= 0.0:
+					continue
+				worst_ratio = minf(worst_ratio, RunSim.toughness(member.stats) / solo)
 	check.call(seen_swarm, "乱戦(複数体)グループが実際に生成された")
 	check.call(
 		worst_ratio >= 1.0 - EPS,
-		"乱戦メンバーの耐久が下限を満たす (最悪比 %.3f、1.0以上であるべき)" % worst_ratio
+		"乱戦メンバーが頭数で弱められていない (最悪比 %.3f、1.0であるべき)" % worst_ratio
 	)
 
 
 ## 同レベルの敵の中で、そのメンバーの元(フルrps)の耐久を引く。メンバーは
-## display_name で元をたどれる。見つからなければ0を返す(下限判定が緩くなるだけ)。
+## display_name で元をたどれる。見つからなければ0を返す(判定を飛ばすだけ)。
 func _solo_toughness(member: EnemyData) -> float:
 	for base in EnemyRoster.of_level(member.level):
 		if base.display_name == member.display_name:
