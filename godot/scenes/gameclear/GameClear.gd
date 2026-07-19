@@ -1,11 +1,10 @@
 extends Control
 
 ## ボス(ゴール)に勝ってランを勝ち切ったときのゲームクリア画面。
-## 締めに簡単なリザルトサマリ(取得パーツ数・コンティニュー残数)を出す。
+## 締めに簡単なリザルトサマリ(コンティニュー残数)＋取得パーツ一覧を出す。
 ## 遷移先はMainが決める。GameClearは「タイトルへ押された」ことだけ知らせる。
 signal to_title_requested
 
-@onready var _parts_label: Label = $CenterContainer/VBoxContainer/PartsLabel
 @onready var _continues_label: Label = $CenterContainer/VBoxContainer/ContinuesLabel
 @onready var _streak_label: Label = $CenterContainer/VBoxContainer/StreakLabel
 @onready var _acquired_list: GridContainer = $CenterContainer/VBoxContainer/List
@@ -16,32 +15,25 @@ func _ready() -> void:
 	_to_title_button.pressed.connect(_on_to_title_pressed)
 
 
-## パーツは最大5種なので、スクロールさせずGridに縦横で並べて全部見せる。
-## 列数はエントリ数に合わせる(最大3列＝最大2行)ので、少数のときは横に広がりすぎない。
-const MAX_COLUMNS := 3
+## 取得パーツは2列で並べる。パーツは最大5種なのでスクロールさせず全部見せられる。
+const COLUMNS := 2
 
 
-## ランの結果を受け取り、サマリ2行＋取得アップグレード一覧を組み立てる。
+## ランの結果を受け取り、サマリ(コンティニュー残数)＋取得アップグレード一覧を組み立てる。
 ## {0}を差し込むラベルはキーの自動翻訳ではなく手で組み立てる(GameOverと同じ流儀)。
 ## 一覧はマップの「取得済み」パネルと同じ AcquiredUpgradeList を使う。
 func setup(acquired_ids: Array[int], continues_left: int, clear_streak: int) -> void:
-	_parts_label.text = format_parts(acquired_ids.size())
 	_continues_label.text = format_continues(continues_left)
 	_streak_label.text = format_streak(clear_streak)
 	# 締めのサマリなので効果説明は省き、名前だけを詰めて並べる(show_description=false)。
-	# 行(＝集約後のパーツ種数)に合わせて列数を決めてから並べる。
-	var rows := AcquiredUpgradeList.populate(_acquired_list, acquired_ids, false)
-	_acquired_list.columns = maxi(1, mini(rows, MAX_COLUMNS))
+	AcquiredUpgradeList.populate(_acquired_list, acquired_ids, false)
+	_acquired_list.columns = COLUMNS
 
 
 ## 表示ロジックはヘッドレスで検証できるよう純関数に切り出す。
 ## (この repo は表示文言も純関数でテストする流儀)
 ## tr()はインスタンスメソッドで静的から呼べないため、現在ロケールを引く
 ## TranslationServer.translate()で解決する(このキーに文脈はないので等価)。
-static func format_parts(parts_count: int) -> String:
-	return TranslationServer.translate("GAMECLEAR_PARTS").format([parts_count])
-
-
 static func format_continues(continues_left: int) -> String:
 	return TranslationServer.translate("GAMECLEAR_CONTINUES_LEFT").format([continues_left])
 

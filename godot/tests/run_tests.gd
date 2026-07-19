@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout"
 ]
 
 
@@ -113,6 +113,9 @@ func _init() -> void:
 	print("== soundtest ==")
 	_test_sound_test()
 
+	print("== statreadout ==")
+	_test_stat_readout()
+
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
 			_failures.append("%s が完走しなかった（実行時エラーの可能性）" % test_name)
@@ -141,6 +144,11 @@ func _test_translations() -> void:
 		tr("GAMEOVER_CONTINUE") == "コンティニュー",
 		"ja: GAMEOVER_CONTINUE -> '%s'" % tr("GAMEOVER_CONTINUE")
 	)
+
+	# 対戦画面のステータス表示キー(初期回転数など)
+	_check(tr("STAT_RPS_INITIAL") == "初期回転数", "ja: STAT_RPS_INITIAL -> '%s'" % tr("STAT_RPS_INITIAL"))
+	_check(tr("STAT_MASS") == "重さ", "ja: STAT_MASS -> '%s'" % tr("STAT_MASS"))
+	_check(tr("STAT_GHOST") == "無敵時間", "ja: STAT_GHOST -> '%s'" % tr("STAT_GHOST"))
 
 	# 未定義キーはキー自身が返る＝訳抜けを検出できる
 	_check(tr("NO_SUCH_KEY") == "NO_SUCH_KEY", "未定義キーはそのまま返る")
@@ -355,6 +363,12 @@ func _test_sound_test() -> void:
 	var suite = load("res://tests/test_sound_test.gd").new()
 	suite.run(_check)
 	_done("soundtest")
+
+
+func _test_stat_readout() -> void:
+	var suite = load("res://tests/test_stat_readout.gd").new()
+	suite.run(_check)
+	_done("statreadout")
 
 
 func _test_ghost_visual() -> void:

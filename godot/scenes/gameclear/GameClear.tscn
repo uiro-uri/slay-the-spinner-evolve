@@ -42,13 +42,6 @@ theme_override_font_sizes/font_size = 48
 text = "GAMECLEAR_TITLE"
 horizontal_alignment = 1
 
-[node name="PartsLabel" type="Label" parent="CenterContainer/VBoxContainer"]
-layout_mode = 2
-theme_override_colors/font_outline_color = Color(0.043137, 0.031373, 0.094118, 1)
-theme_override_constants/outline_size = 6
-text = "GAMECLEAR_PARTS"
-horizontal_alignment = 1
-
 [node name="ContinuesLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_colors/font_outline_color = Color(0.043137, 0.031373, 0.094118, 1)
@@ -75,7 +68,7 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_constants/h_separation = 12
 theme_override_constants/v_separation = 8
-columns = 3
+columns = 2
 
 [node name="ToTitleButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
