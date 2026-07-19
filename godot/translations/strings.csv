@@ -37,13 +37,29 @@ FIELD_ROUND,Round Dish,円形の土俵
 FIELD_PILLARS,Pillar Field,柱の土俵
 ENEMY_1_1,Chipling,コマ小僧
 ENEMY_1_2,Needlet,ニードレット
+ENEMY_1_3,Pebblet,小石コマ
+ENEMY_1_4,Fluffet,ふわコマ
+ENEMY_1_5,Twirlet,くるコマ
 ENEMY_2_1,Rambull,ランブル
 ENEMY_2_2,Spindle,スピンドル
+ENEMY_2_3,Tuskbull,タスクブル
+ENEMY_2_4,Driftle,ドリフト
+ENEMY_2_5,Whirlox,ワールオクス
 ENEMY_3_1,Bruiser,ブルーザー
 ENEMY_3_2,Piercer,ピアサー
+ENEMY_3_3,Crusher,クラッシャー
+ENEMY_3_4,Glider,グライダー
+ENEMY_3_5,Grinder,グラインダー
 ENEMY_4_1,Juggernaut,ジャガーノート
 ENEMY_4_2,Driller,ドリラー
+ENEMY_4_3,Colossus,コロッサス
+ENEMY_4_4,Ravager,レイヴァジャー
+ENEMY_4_5,Breaker,ブレイカー
 ENEMY_5_1,Overlord,オーバーロード
+ENEMY_5_2,Tyrant,タイラント
+ENEMY_5_3,Devourer,デヴァウアー
+ENEMY_5_4,Warlord,ウォーロード
+ENEMY_5_5,Sovereign,ソブリン
 REWARD_HEADING,Choose a custom part,カスタムパーツを選べ
 REWARD_SELECT,Select,選ぶ
 PART_RARITY_RARE,RARE,レア
