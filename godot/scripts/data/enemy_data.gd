@@ -11,25 +11,17 @@ extends Resource
 ## 表示名。プロトタイプはenemy1-1のような開発用の名前だった。
 @export var display_name: String = ""
 
-## 発射の速さ(ユニット/秒)。出現位置と向きは毎回ランダムに決まるので、
-## 敵ごとに固定なのは強さだけ。
-##
-## プロトタイプのENEMY_LISTには位置と速度ベクトルが入っていたが、app.pyは
-## initial_conditionsの固定値(全敵が中央から(3,4))を使っており、一度も
-## 読まれていない死んだデータだった。ただし値はレベルが上がるほど大きく
-## (Lv1で2.2、Lv5で14.1)、強い敵ほど速く発射させる意図は読み取れるので、
-## その大きさだけを引き継いでいる。
-@export_range(0.5, 30.0, 0.1) var launch_speed: float = 2.0
-
+## 出現位置・向き・発射速度はすべて出現ごとにランダムで、敵ごとに固定なのは強さだけ。
+## 発射速度はかつて敵ごとの固定値だったが、自機と共通のレンジ(LaunchSpeed)から
+## 出現ごとに抽選する方式に変えたため、EnemyDataは速度を持たなくなった。
 @export var stats: SpinnerStats
 
 
 static func make(
-	level_: int, name_: String, launch_speed_: float, stats_: SpinnerStats
+	level_: int, name_: String, stats_: SpinnerStats
 ) -> EnemyData:
 	var data := EnemyData.new()
 	data.level = level_
 	data.display_name = name_
-	data.launch_speed = launch_speed_
 	data.stats = stats_
 	return data

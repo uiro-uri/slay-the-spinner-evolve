@@ -7,8 +7,9 @@ extends SceneTree
 ##
 ## 各敵を素の初期性能プレイヤーと戦わせ、敵がrpsを削り(drain)/壁(wall)/自然減衰
 ## (decay)のどの割合で失うかを出す。壁+減衰が高い＝プレイヤーの手を借りず自滅
-## している＝発射が速すぎる/軌道が悪い兆候。--speed-scaleで全敵の発射速度を一律
-## 倍して、下げると自滅(特に壁)が減るかを見る。
+## している＝発射が速すぎる/軌道が悪い兆候。発射速度はいまは自機と共通のレンジ
+## (LaunchSpeed)から抽選するので、ここでは上限(LaunchSpeed.MAX)を基準にし、
+## --speed-scaleでそれを一律倍して、下げると自滅(特に壁)が減るかを見る。
 
 const SPAWN_RING := 4.0
 const SPAWN_SPREAD_DEG := 30.0
@@ -31,14 +32,15 @@ func _init() -> void:
 	print("|---|---|---|---|---|")
 	for level in [1, 2, 3, 4, 5]:
 		for enemy in EnemyRoster.of_level(level):
-			var speed := enemy.launch_speed * speed_scale
-			var e := EnemyData.make(level, enemy.display_name, speed, enemy.stats.duplicate_stats())
+			# 共通レンジの上限を基準に、speed_scaleで振る。
+			var speed := LaunchSpeed.MAX * speed_scale
+			var e := EnemyData.make(level, enemy.display_name, enemy.stats.duplicate_stats())
 			var wins := 0
 			var drain := 0.0
 			var wall := 0.0
 			var decay := 0.0
 			for i in count:
-				var r := _resolve(e, SpinnerStats.default_player(), policy, i)
+				var r := _resolve(e, speed, SpinnerStats.default_player(), policy, i)
 				if r["win"]:
 					wins += 1
 				drain += r["drain"]
@@ -54,7 +56,7 @@ func _init() -> void:
 	quit(0)
 
 
-func _resolve(enemy: EnemyData, player_stats: SpinnerStats, policy: LaunchPolicy.Kind,
+func _resolve(enemy: EnemyData, speed: float, player_stats: SpinnerStats, policy: LaunchPolicy.Kind,
 		seed_value: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
@@ -68,7 +70,7 @@ func _resolve(enemy: EnemyData, player_stats: SpinnerStats, policy: LaunchPolicy
 	request.stage_shape = field.stage_shape
 
 	var plan := EnemySpawn.plan(
-		field.center(), SPAWN_RING, enemy.launch_speed, SPAWN_SPREAD_DEG,
+		field.center(), SPAWN_RING, speed, SPAWN_SPREAD_DEG,
 		rng, enemy.stats.radius, field.inradius())
 	var launch := LaunchPolicy.decide(policy, field, player_stats.radius, plan, rng)
 	request.player = BattleRequest.Launch.new(player_stats, launch.position, launch.velocity)

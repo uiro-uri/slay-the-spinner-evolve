@@ -73,7 +73,7 @@ func _test_fits_inside_arena(check: Callable) -> void:
 		for trial in 50:
 			rng.seed = trial
 			var plan := EnemySpawn.plan(
-				CENTER, RING, enemy.launch_speed, 30.0, rng, radius, 5.0
+				CENTER, RING, LaunchSpeed.MAX, 30.0, rng, radius, 5.0
 			)
 			# 一番壁に近い縁が、アリーナ(0..10)の内側にあること
 			var margin := minf(
@@ -96,6 +96,12 @@ func _test_fits_inside_arena(check: Callable) -> void:
 ## 何も見えない。最初に速度比例で書いたときは長さ1.0に対しコマの半径0.5で、
 ## 実際に半分が隠れて画面上で87pxしか出ていなかった。スクショを目で見ても
 ## 気づけなかったので、数値で押さえる。
+##
+## 発射速度は自機と共通のレンジ(LaunchSpeed)から出現ごとに抽選し、下限は0まで下がる。
+## 予告長は sqrt(速度)×length_scale なので**最も短くなる速度0**が最悪ケース。そこでも
+## 隠れないよう、EnemyTelegraphは readable_radius+min_length_margin を最小可視長にする。
+## Battleが出現時に readable_radius=disc.stats.radius を入れるのと同じ状態で、速度0でも
+## どの敵の予告もコマの縁より外に出ることを確かめる。min_length_marginを削るとここが落ちる。
 func _test_telegraph_visible(check: Callable) -> void:
 	# 三角形の頂点はコマの中心にあるので、コマの縁より外へこれだけ出ていないと
 	# 見えたことにならない。ボスは半径3.0とアリーナに対してかなり大きいので、
@@ -106,7 +112,10 @@ func _test_telegraph_visible(check: Callable) -> void:
 	var worst_name := ""
 
 	for enemy in EnemyRoster.all():
-		telegraph.show_plan(Vector2(5, 1), Vector2.DOWN * enemy.launch_speed)
+		# Battle._spawn_enemyと同じく、このコマの半径を最小可視長の基準に渡す。
+		telegraph.readable_radius = enemy.stats.radius
+		# 最悪ケース=速度0(予告長が生の式では0になる)でも隠れないこと。
+		telegraph.show_plan(Vector2(5, 1), Vector2.DOWN * LaunchSpeed.MIN)
 		var length := telegraph.telegraph_length()
 		var margin: float = length - enemy.stats.radius
 		if margin < worst:
@@ -125,7 +134,9 @@ func _test_telegraph_visible(check: Callable) -> void:
 		"敵の予告: どの敵でもコマの縁より外に出る (最小 %.2f: %s)" % [worst, worst_name]
 	)
 
-	# 速い敵ほど長い（強さが見た目で分かる）
+	# 速い敵ほど長い（強さが見た目で分かる）。生の sqrt 式を見たいので最小可視長は無効化。
+	telegraph.readable_radius = 0.0
+	telegraph.min_length_margin = 0.0
 	telegraph.show_plan(Vector2.ZERO, Vector2.DOWN * 2.2)
 	var slow := telegraph.telegraph_length()
 	telegraph.show_plan(Vector2.ZERO, Vector2.DOWN * 14.1)

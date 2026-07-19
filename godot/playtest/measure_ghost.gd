@@ -50,7 +50,7 @@ func _init() -> void:
 				if not is_equal_approx(enemy_decay, 1.0):
 					var es := enemy.stats.duplicate_stats()
 					es.spin_decay = enemy_decay
-					enemy = EnemyData.make(enemy.level, enemy.display_name, enemy.launch_speed, es)
+					enemy = EnemyData.make(enemy.level, enemy.display_name, es)
 				var enemies: Array[EnemyData] = [enemy]
 				var stats := SpinnerStats.default_player()
 				var record := BattleSim.play_one(i, enemies, policy, stats, null, null, ghost)

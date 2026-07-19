@@ -72,8 +72,9 @@ static func play_one(
 	var enemy_launches: Array[BattleRequest.Launch] = []
 	var top_level := 0
 	for enemy in enemies:
+		# 発射速度は実ゲーム(Battle._spawn_enemy)と同じく共通レンジから出現ごとに抽選。
 		var plan := EnemySpawn.plan(
-			field.center(), SPAWN_RING, enemy.launch_speed,
+			field.center(), SPAWN_RING, LaunchSpeed.random(rng),
 			SPAWN_SPREAD_DEG, rng, enemy.stats.radius, field.inradius()
 		)
 		plans.append(plan)

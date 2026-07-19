@@ -28,8 +28,8 @@ const NAMES := {
 	Kind.INTERCEPT: "intercept",
 }
 
-## LaunchControllerの max_pull(4.0) × pull_to_speed(5.0) に相当する上限。
-const MAX_SPEED := 20.0
+## 自機の初速上限。自機・敵で共通のレンジ(LaunchSpeed)の上限に揃える。
+const MAX_SPEED := LaunchSpeed.MAX
 
 
 class Launch:

@@ -9,9 +9,10 @@ extends SceneTree
 ##
 ##   godot --headless --path godot --script res://playtest/measure_boss_launch.gd -- [--count=1000]
 ##
-## 発射速度(launch_speed=既存の敵つまみ)と半径(既存の物理量)を振り、無敵0/6秒の
-## 勝率とボスのダメージ割合を出す。壁割合が高ければ発射速度を落とす=壁への突撃が
-## 減り自滅が減る。自然減衰割合が高ければ半径を下げる=減衰は半径に比例。
+## 発射速度(いまは自機と共通のレンジ LaunchSpeed から出現ごとに抽選)と半径(既存の
+## 物理量)を振り、無敵0/6秒の勝率とボスのダメージ割合を出す。壁割合が高ければ共通
+## レンジの上限を下げる=壁への突撃が減り自滅が減る。自然減衰割合が高ければ半径を
+## 下げる=減衰は半径に比例。速度は診断のため固定値をplanに直接渡して振る。
 
 const SPAWN_RING := 4.0
 const SPAWN_SPREAD_DEG := 30.0
@@ -28,16 +29,17 @@ func _init() -> void:
 	var policy := LaunchPolicy.by_name(args.get("policy", "intercept"))
 
 	var boss := EnemyRoster.of_level(5)[0]
-	var base_speed := boss.launch_speed
+	# 共通レンジ(LaunchSpeed)の上限を基準に速度を振る。実ゲームは[MIN,MAX]から抽選。
+	var base_speed := LaunchSpeed.MAX
 	var base_radius := boss.stats.radius
 	print("# ボスのダメージ割合診断 (発射=%s, count=%d)" % [LaunchPolicy.NAMES[policy], count])
-	print("# 現状: launch_speed=%.1f, 実効radius=%.2f。壁1回で25%%喪失(wall_damping=0.75)" % [
+	print("# 共通レンジ上限=%.1f, 実効radius=%.2f。壁1回で25%%喪失(wall_damping=0.75)" % [
 		base_speed, base_radius])
 
 	print("\n## 発射速度スイープ (radius=%.2f 固定)" % base_radius)
 	_table(boss, count, policy, _speeds(base_speed), [base_radius])
 
-	print("\n## 半径スイープ (launch_speed=%.1f 固定)" % base_speed)
+	print("\n## 半径スイープ (速度=%.1f 固定)" % base_speed)
 	_table(boss, count, policy, [base_speed], _radii(base_radius))
 	quit(0)
 
@@ -58,17 +60,17 @@ func _table(boss: EnemyData, count: int, policy: LaunchPolicy.Kind,
 		for radius in radii:
 			var stats := boss.stats.duplicate_stats()
 			stats.radius = radius
-			var b := EnemyData.make(boss.level, boss.display_name, speed, stats)
+			var b := EnemyData.make(boss.level, boss.display_name, stats)
 			var win0 := 0
 			var win6 := 0
 			var drain := 0.0
 			var wall := 0.0
 			var decay := 0.0
 			for i in count:
-				var r0 := _resolve(b, SpinnerStats.default_player(), policy, i, 0.0)
+				var r0 := _resolve(b, speed, SpinnerStats.default_player(), policy, i, 0.0)
 				if r0["win"]:
 					win0 += 1
-				var r6 := _resolve(b, SpinnerStats.default_player(), policy, i, 6.0)
+				var r6 := _resolve(b, speed, SpinnerStats.default_player(), policy, i, 6.0)
 				if r6["win"]:
 					win6 += 1
 				# ダメージ割合は無敵6秒側(GHOSTが刺さる状況)のボスの内訳を積む。
@@ -86,7 +88,7 @@ func _table(boss: EnemyData, count: int, policy: LaunchPolicy.Kind,
 
 ## 1戦を解いて、勝敗とボスのrps喪失内訳(drain/wall/decay)を返す。
 ## BattleSim.play_oneと同じ手順で組み立て、resolverの生の結果から再構成する。
-func _resolve(enemy: EnemyData, player_stats: SpinnerStats, policy: LaunchPolicy.Kind,
+func _resolve(enemy: EnemyData, speed: float, player_stats: SpinnerStats, policy: LaunchPolicy.Kind,
 		seed_value: int, ghost: float) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
@@ -101,7 +103,7 @@ func _resolve(enemy: EnemyData, player_stats: SpinnerStats, policy: LaunchPolicy
 	request.ghost_duration = ghost
 
 	var plan := EnemySpawn.plan(
-		field.center(), SPAWN_RING, enemy.launch_speed, SPAWN_SPREAD_DEG,
+		field.center(), SPAWN_RING, speed, SPAWN_SPREAD_DEG,
 		rng, enemy.stats.radius, field.inradius())
 	var launch := LaunchPolicy.decide(policy, field, player_stats.radius, plan, rng)
 	request.player = BattleRequest.Launch.new(player_stats, launch.position, launch.velocity)

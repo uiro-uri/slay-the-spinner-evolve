@@ -115,9 +115,6 @@ const BAR_ROW_H := 60.0
 ## 主に中心向き)ぶんも吸えるよう少し大きめ。
 @export_range(0.0, 3.0, 0.05) var spawn_clearance: float = 0.6
 
-## Battle.tscn単体で走らせたときの敵の発射速度。本編ではEnemyDataから来る。
-@export_range(0.5, 30.0, 0.1) var fallback_enemy_speed: float = 4.0
-
 ## Battle.tscn単体で走らせたときの敵の性能。本編ではEnemyDataから来る。
 ## GameState.pending_enemiesが空のときだけ使う。
 @export var fallback_enemy_stats: SpinnerStats
@@ -311,7 +308,7 @@ func _enemy_datas() -> Array[EnemyData]:
 	if not GameState.pending_enemies.is_empty():
 		return GameState.pending_enemies
 	var stats := fallback_enemy_stats if fallback_enemy_stats != null else SpinnerStats.new()
-	return [EnemyData.make(1, "ENEMY_1_1", fallback_enemy_speed, stats)]
+	return [EnemyData.make(1, "ENEMY_1_1", stats)]
 
 
 ## 敵を1体ぶん生成する。ディスク・予告・HPバーを作り、出現内容を決めて予告する。
@@ -328,6 +325,8 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	# 強い敵ほど予告が大きくブレて読みにくくする。
 	if data != null:
 		telegraph.apply_level(data.level)
+	# 発射速度は0まで下がりうるので、予告がこのコマの下に隠れないよう半径を渡す。
+	telegraph.readable_radius = disc.stats.radius
 	_enemy_telegraphs_root.add_child(telegraph)
 
 	# HPバーの見た目はプレイヤーバー(Battle.tscnで設定)に合わせる。背景は共有し、
@@ -344,7 +343,9 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	bar.add_theme_stylebox_override("fill", fill)
 	_bars.add_child(bar)
 
-	var speed := data.launch_speed if data != null else fallback_enemy_speed
+	# 発射速度は自機と共通のレンジから出現ごとに抽選する(位置・向きと同じ扱い)。
+	# EnemyTelegraphがplan.velocityをそのまま予告するので、速度も自動で予告される。
+	var speed := LaunchSpeed.random(rng)
 
 	# 発射前の表示が重ならないよう、プレイヤーの初期位置と既に決めた敵の位置を
 	# 除け所として渡す。min_gapはコマの縁同士がspawn_clearanceだけ空く距離。

@@ -29,6 +29,18 @@ extends Node2D
 ## 1.8〜4.5に収まり、どの敵でもコマの外に出た上で速い方が長いままになる。
 @export_range(0.2, 4.0, 0.1) var length_scale: float = 1.2
 
+## 予告がコマの下に隠れないための最小可視長の余白(ユニット)。
+## 発射速度は自機と共通のレンジ(LaunchSpeed)から抽選され、下限は0まで下がる。
+## 長さは sqrt(速度)×length_scale なので低速だとコマ半径を割って隠れてしまう。
+## そこで長さは必ず readable_radius + この余白 以上にする。速度そのものの下限は
+## 0に保ったまま、見た目だけ「必ずコマの縁より外へ出る」ことを保証する。
+## (揺れ・向きの表示は従来どおり。発射は確定値なので、この下限は嘘にならない)。
+@export_range(0.0, 2.0, 0.05) var min_length_margin: float = 0.7
+
+## この予告が指すコマの半径(ユニット)。最小可視長の基準に使う。Battleが出現時に
+## disc.stats.radius を入れる。0なら余白ぶんだけを最小可視長とする。
+var readable_radius: float = 0.0
+
 ## 明滅の速さ。止まっている三角形より、脈打っている方が
 ## 「これから飛ぶ」ことが伝わる。
 @export_range(0.0, 10.0, 0.5) var pulse_speed: float = 4.0
@@ -114,8 +126,10 @@ func display_velocity() -> Vector2:
 
 
 ## 長さは表示用の速度から決める。揺れ幅の分だけ伸び縮みする。
+## ただし低速でもコマの下に隠れないよう、readable_radius+min_length_margin を下限にする。
 func telegraph_length() -> float:
-	return sqrt(display_velocity().length()) * length_scale
+	var raw := sqrt(display_velocity().length()) * length_scale
+	return maxf(raw, readable_radius + min_length_margin)
 
 
 func _draw() -> void:

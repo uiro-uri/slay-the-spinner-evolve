@@ -13,10 +13,7 @@ extends Node2D
 ## Palette.AIM に寄せて予告(赤)と対の彩度に揃える。
 const ARROW_COLOR := Palette.AIM
 
-## 引いた距離(ユニット)を初速(ユニット/秒)に変換する倍率。
-@export_range(0.1, 20.0, 0.1) var pull_to_speed: float = 5.0
-
-## これ以上引いても速くならない上限(ユニット)。
+## これ以上引いても速くならない上限(ユニット)。full pull(=この距離)で初速がLaunchSpeed.MAXになる。
 @export_range(0.5, 10.0, 0.1) var max_pull: float = 4.0
 
 ## 発射位置と速度が決まった。
@@ -83,7 +80,9 @@ func _release() -> void:
 	# 離した瞬間にチャージ音を止める。発射音は launched の購読側(Battle)で鳴らす。
 	AudioManager.stop_charge()
 	queue_redraw()
-	launched.emit(_origin, _effective_pull() * pull_to_speed)
+	# 初速は自機・敵で共通のレンジ(LaunchSpeed)から。引き量比をMAXにマップする。
+	var pull := _effective_pull()
+	launched.emit(_origin, pull.normalized() * LaunchSpeed.from_pull(pull.length(), max_pull))
 
 
 ## 塗り潰しの三角形で狙いを示す。頂点が発射地点で、そのまま飛んでいく向きを指す。

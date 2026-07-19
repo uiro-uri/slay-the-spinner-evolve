@@ -231,7 +231,7 @@ func _enemy_plans(enemies: Array, field: FieldData, bseed: int) -> Array:
 	var rng := RandomNumberGenerator.new(); rng.seed = bseed
 	var plans := []
 	for e in enemies:
-		plans.append(EnemySpawn.plan(field.center(), SPAWN_RING, e.launch_speed, SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius()))
+		plans.append(EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius()))
 	return plans
 
 func _ring_pos(field: FieldData, prad: float, from_deg: float) -> Vector2:
