@@ -36,7 +36,7 @@ extends Node2D
 @export_group("揺らぎ")
 
 ## 位置の揺れ幅(ユニット)。0で揺らさない。
-@export_range(0.0, 1.0, 0.01) var wobble_position: float = TelegraphWobble.DEFAULT_POSITION_AMPLITUDE
+@export_range(0.0, 2.0, 0.01) var wobble_position: float = TelegraphWobble.DEFAULT_POSITION_AMPLITUDE
 
 ## 向きの揺れ幅(度)。0で揺らさない。
 @export_range(0.0, 45.0, 0.5) var wobble_angle_deg: float = TelegraphWobble.DEFAULT_ANGLE_AMPLITUDE
