@@ -1,0 +1,6 @@
+# 自動進化ループが検証の門番と手順書を自分で緩めないためのガード。
+# ここに載せたパスへの変更PRは code owner (人間) のレビューが必須になり、
+# auto-merge されない。
+/.github/ @uiro-uri
+/scripts/verify.sh @uiro-uri
+/EVOLVE.md @uiro-uri

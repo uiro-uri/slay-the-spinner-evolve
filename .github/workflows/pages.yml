@@ -1,6 +1,6 @@
 name: Deploy web build to GitHub Pages
 
-# mainへのpushでWeb版を https://uiro-uri.github.io/slay-the-spinner/ へ公開する。
+# mainへのpushでWeb版を https://uiro-uri.github.io/slay-the-spinner-evolve/ へ公開する。
 # pull_requestでもbuildジョブだけ走らせて、公開せずに検証だけ先に確かめられる
 # ようにしてある。
 on:

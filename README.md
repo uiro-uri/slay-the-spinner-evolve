@@ -1,4 +1,10 @@
-# Slay the Spinner
+# Slay the Spinner (evolve)
+
+> **自動進化実験 fork**: このリポジトリは
+> [uiro-uri/slay-the-spinner](https://github.com/uiro-uri/slay-the-spinner) の fork で、
+> 定期実行される Claude がテストプレイと自己改善を繰り返します。仕組みは
+> [`EVOLVE.md`](EVOLVE.md)、変更履歴の物語は
+> [`docs/evolve/journal.md`](docs/evolve/journal.md) を参照。
 
 ベイブレード風の回転数(RPS)減衰バトル × Slay the Spire風の分岐マップ ×
 レアリティ付きロ―グライク強化パーツ、を組み合わせたゲームです。
@@ -71,7 +77,7 @@ godot --headless --path godot --export-release "Web"
 
 ## 配信（GitHub Pages）
 
-Web版は **https://uiro-uri.github.io/slay-the-spinner/** で公開しています。
+Web版は **https://uiro-uri.github.io/slay-the-spinner-evolve/** で公開しています。
 `main` に push すると `.github/workflows/pages.yml` がビルドし、**`scripts/verify.sh`
 が緑のときだけ**デプロイします（同じスクリプトをそのままゲートに使っており、CI用の
 別実装は持ちません）。pull request ではビルドと検証だけを走らせ、公開はしません。

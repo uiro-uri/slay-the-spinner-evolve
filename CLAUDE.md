@@ -3,6 +3,12 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this
 repository.
 
+## このリポジトリは自動進化実験 fork
+
+このリポジトリは `uiro-uri/slay-the-spinner`（本体）の fork で、定期実行される Claude が
+「テストプレイ → 自己改善」を繰り返す実験場です。サイクルの手順は **`EVOLVE.md`** を参照。
+本体への追従・逆輸入は自動では行いません。以下は本体から引き継いだガイドです。
+
 ## Project overview
 
 "Slay the Spinner" is a Beyblade-style battler crossed with a Slay-the-Spire-style branching map
@@ -202,7 +208,7 @@ for sparks (`BattleResult.impacts`), not the physics step.
 
 The web build deploys to GitHub Pages from `main` via `.github/workflows/pages.yml`, gated on
 `scripts/verify.sh` going green — the same script, not a CI-only reimplementation. It is live at
-<https://uiro-uri.github.io/slay-the-spinner/>.
+<https://uiro-uri.github.io/slay-the-spinner-evolve/>.
 
 For Steam, see `docs/steam.md`. GodotSteam is deliberately **not** vendored yet — without an App ID it cannot
 initialize, so it would be an untestable 50MB+ binary in the repo. When it goes in, every Steam call
