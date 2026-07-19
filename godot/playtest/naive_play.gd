@@ -10,7 +10,8 @@ extends SceneTree
 ##                                            自分の発射を決めて1戦解決。勝敗を出す
 ##   reward --state=path --bseed=B            勝利後、報酬3枚の効果を出す
 ##                                            (最初の1回で確定。以後bseedを変えても同じ3枚)
-##   pick   --state=path --id=ID              報酬を1枚取り、次のマップ選択へ
+##   pick   --state=path --id=ID              報酬を1枚取る。乱戦は倒した頭数ぶん
+##                                            reward→pickを繰り返す(実ゲームと同じ)
 ##                                            (直前のrewardで提示された札しか取れない)
 ##   retry  --state=path --bseed=B            残機を1消費して同ノードを再抽選(新しい予告)
 ##   giveup --state=path                      あきらめてラン終了
@@ -47,20 +48,28 @@ func _default_state(seed_value: int) -> Dictionary:
 		"seed": seed_value,
 		"path": [],            # 突破済みノードの列 [[step,col],...]
 		"pending": null,       # 交戦中ノードの col (未突破)
-		"stats": _stats_dict(s),
+		"stats": stats_dict(s),
 		"parts": [],
 		"offered": null,       # 直前のrewardで提示した札id列 (pickの検証と再抽選防止)
+		"rewards_left": null,  # この勝利で残っている報酬選択回数 (乱戦=頭数ぶん)
 		"continues": 3,
 		"cleared": false,
 		"dead": false,
 	}
 
-func _stats_dict(s: SpinnerStats) -> Dictionary:
-	return {"mass": s.mass, "radius": s.radius, "friction": s.friction, "restitution": s.restitution, "rps": s.rps}
+## ステータスの保存/復元は全フィールドを往復させる。以前は spin_decay(MOMENTUM札)と
+## wall_keep(RAGE札)が抜けており、札を取っても次のコマンドで主効果が消えていた
+## (摩擦・反発は残るので気づきにくい)。旧stateのキー欠落は既定値で読む。
+static func stats_dict(s: SpinnerStats) -> Dictionary:
+	return {"mass": s.mass, "radius": s.radius, "friction": s.friction,
+		"restitution": s.restitution, "rps": s.rps,
+		"spin_decay": s.spin_decay, "wall_keep": s.wall_keep}
 
-func _stats_from(d: Dictionary) -> SpinnerStats:
+static func stats_from(d: Dictionary) -> SpinnerStats:
 	var s := SpinnerStats.new()
 	s.mass = d["mass"]; s.radius = d["radius"]; s.friction = d["friction"]; s.restitution = d["restitution"]; s.rps = d["rps"]
+	s.spin_decay = d.get("spin_decay", 1.0)
+	s.wall_keep = d.get("wall_keep", 0.0)
 	return s
 
 func _load(path: String) -> Dictionary:
@@ -109,6 +118,7 @@ func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
 		printerr("そのノードへは進めない: ", target, " 進める先=", tree.next_coords()); return
 	state["pending"] = col
 	state["offered"] = null    # 古い提示札で新ノードをpickできないように
+	state["rewards_left"] = null
 	_save(state, path)
 	# pathには勝ってから足す。ここでは表示のためadvanceした木を使う
 	tree.advance_to(target)
@@ -132,9 +142,10 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 	print("=== BATTLE 段%d %s ===" % [tree.current_step(), field.title_key])
 	print("土俵: 形状=%s 中心=%s 内接半径=%.2f 範囲=%s" % [
 		_wall_name(field.wall_shape), str(field.center()), field.inradius(), str(field.arena_bounds)])
-	print("自分: mass=%.2f radius=%.2f rps=%.1f friction=%.3f rest=%.2f  発射リング半径=%.2f" % [
+	print("自分: mass=%.2f radius=%.2f rps=%.1f friction=%.3f rest=%.2f spin_decay=%.2f wall_keep=%.2f  発射リング半径=%.2f" % [
 		state["stats"]["mass"], state["stats"]["radius"], state["stats"]["rps"],
 		state["stats"]["friction"], state["stats"]["restitution"],
+		float(state["stats"].get("spin_decay", 1.0)), float(state["stats"].get("wall_keep", 0.0)),
 		field.inradius() - float(state["stats"]["radius"]) - 0.5])
 	print("ゴースト無敵: %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
 	var plans := _enemy_plans(node.enemies, field, bseed)
@@ -154,7 +165,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
 	var field: FieldData = node.field
 	var plans := _enemy_plans(node.enemies, field, bseed)
-	var pstats := _stats_from(state["stats"])
+	var pstats := stats_from(state["stats"])
 
 	var pos := _ring_pos(field, pstats.radius, from_deg)
 	var tgt := _target_point(field, plans, target)
@@ -183,20 +194,37 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	print("  死因=%s loser=%s hits_taken=%s" % [
 		metrics.get("death_cause","?"), metrics.get("loser","?"), str(metrics.get("hits_taken","?"))])
 	if won:
-		print("→ reward --bseed=<R> で報酬を見る")
+		if tree.is_goal():
+			# 実ゲーム(Main._on_battle_finished)はボス撃破で即クリアし報酬はない。
+			# 以前はボス後にも報酬pickを要求しており、実ゲームに存在しない1枚が増えていた。
+			state["path"].append([tree.current_step(), int(state["pending"])])
+			state["pending"] = null
+			state["offered"] = null
+			state["rewards_left"] = null
+			state["cleared"] = true
+			_save(state, path)
+			print("！！！全段突破・ラン完了！！！")
+		else:
+			print("→ reward --bseed=<R> で報酬を見る")
 	else:
 		print("→ retry --bseed=<新B> (残機%d) か giveup" % state["continues"])
 
 func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
+	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
 	var level := EnemyRoster.level_for_step(tree.current_step())
+	# 乱戦は倒した頭数ぶん報酬を選べる(Main._on_battle_finishedの_rewards_remainingと同じ)。
+	# 以前は頭数によらず1枚で、実ゲームよりビルドが痩せていた。
+	if state.get("rewards_left") == null:
+		state["rewards_left"] = rewards_for_group(node.enemies.size())
+	var left := int(state["rewards_left"])
 	var choices: Array[CustomPart] = []
 	if state.get("offered") != null:
 		# 提示済み: bseedを変えて引き直せないよう、保存した札をそのまま再掲する。
 		for v in state["offered"]:
 			choices.append(CustomPartCatalog.by_id(int(v)))
-		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (提示済み・再掲) ===" % [tree.current_step(), level])
+		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (残り%d回, 提示済み・再掲) ===" % [tree.current_step(), level, left])
 	else:
 		var rng := RandomNumberGenerator.new(); rng.seed = bseed
 		choices = CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, rng, level)
@@ -204,7 +232,7 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 		for c in choices: ids.append(c.id)
 		state["offered"] = ids
 		_save(state, path)
-		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (bseed=%d) ===" % [tree.current_step(), level, bseed])
+		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (残り%d回, bseed=%d) ===" % [tree.current_step(), level, left, bseed])
 	for c in choices:
 		print("  id=%d '%s' [%s] %s" % [c.id, c.title_key, _rarity(c.rarity), card_text(c)])
 	print("→ pick --id=<ID>")
@@ -222,15 +250,25 @@ func _pick(state: Dictionary, path: String, id: int) -> void:
 	tree.advance_to(Vector2i(tree.current_step() + 1, col))
 	var part := CustomPartCatalog.by_id(id)
 	if part == null: printerr("不明なパーツid ", id); return
-	var stats := _stats_from(state["stats"])
+	var stats := stats_from(state["stats"])
 	part.apply_to(stats)
-	state["stats"] = _stats_dict(stats)
+	state["stats"] = stats_dict(stats)
 	state["continues"] = maxi(int(state["continues"]), part.lives)
 	state["parts"].append(id)
+	state["offered"] = null
+	# 乱戦は倒した頭数ぶん報酬を選べる。まだ残っていれば次のrewardへ(ノードは未確定のまま)。
+	var left: int = (int(state["rewards_left"]) if state.get("rewards_left") != null else 1) - 1
+	if left > 0:
+		state["rewards_left"] = left
+		_save(state, path)
+		print("取得: id=%d '%s' → %s" % [id, part.title_key, card_text(part)])
+		_print_stats(state)
+		print("乱戦の報酬があと%d回 → reward --bseed=<新R>" % left)
+		return
+	state["rewards_left"] = null
 	# ノード突破を確定
 	state["path"].append([tree.current_step(), col])
 	state["pending"] = null
-	state["offered"] = null
 	if tree.is_goal():
 		state["cleared"] = true
 	_save(state, path)
@@ -289,9 +327,13 @@ func _ids(state: Dictionary) -> Array[int]:
 
 func _print_stats(state: Dictionary) -> void:
 	var s = state["stats"]
-	print("ステータス: mass=%.2f radius=%.2f friction=%.3f rest=%.2f rps=%.1f  (寿命目安rps/radius=%.1f 硬さmass*r^2=%.2f)" % [
-		s["mass"], s["radius"], s["friction"], s["restitution"], s["rps"],
-		float(s["rps"]) / float(s["radius"]), float(s["mass"]) * float(s["radius"]) * float(s["radius"])])
+	var decay := float(s.get("spin_decay", 1.0))
+	var keep := float(s.get("wall_keep", 0.0))
+	# 自然減衰は radius×spin_decay に比例する(BattleResolverのnatural_spin_decay)ので、
+	# 寿命目安もspin_decayを織り込む。MOMENTUM札の効果がここに見える。
+	print("ステータス: mass=%.2f radius=%.2f friction=%.3f rest=%.2f rps=%.1f spin_decay=%.2f wall_keep=%.2f  (寿命目安rps/(radius*spin_decay)=%.1f 硬さmass*r^2=%.2f)" % [
+		s["mass"], s["radius"], s["friction"], s["restitution"], s["rps"], decay, keep,
+		float(s["rps"]) / (float(s["radius"]) * decay), float(s["mass"]) * float(s["radius"]) * float(s["radius"])])
 
 func _print_parts(state: Dictionary) -> void:
 	if state["parts"].is_empty(): print("所持パーツ: なし"); return
@@ -340,6 +382,12 @@ static func card_text(c: CustomPart) -> String:
 			var dir := "UP" if c.multiplier > 1.0 else "DOWN"
 			var key: String = ["MASS","RADIUS","FRICTION","RESTITUTION","RPS"][c.stat]
 			return "%s ×%.2f%s [%s_%s]" % [stat_name, c.multiplier, cap_txt, key, dir]
+
+
+## 勝利1回で選べる報酬回数。乱戦は倒した頭数ぶん
+## (Main._on_battle_finishedの `maxi(pending_enemies.size(), 1)` と同じ式)。
+static func rewards_for_group(group_size: int) -> int:
+	return maxi(group_size, 1)
 
 
 ## pickが取れるのは直前のrewardで提示された札だけ。JSON経由でidがfloatに
