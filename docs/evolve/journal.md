@@ -268,3 +268,36 @@
   3連敗、一方SPARE_COREを引けたので突破できた)。rosterスイートのEXPECTED_TESTS
   未登録。撃破ボーナスの画面表示・受け身支配の本丸(段8が22秒・衝突120回の泥仕合)・
   報酬プール拡充・naive_playのlaunchが敗北を保存しない抜け穴(いずれも継続)。
+
+## サイクル 2026-07-20 15:34 UTC
+- プレイ所感: seed=14700 で1ラン、敗北1回(残機2消費)で全段突破。「force=1で敵の進路へ
+  直撃」がほぼ常勝で、rps喪失内訳(前サイクルの成果)を見ると敵味方とも壁が支配的
+  だった。最大の不満は報酬の顔ぶれ: 9回の提示中GHOSTが6回出て一度も取る気にならず、
+  プールが防御(GUARD/RAGE)・寿命(MOMENTUM)・基礎値(質量/RPS)ばかりで「攻め」の軸が
+  空白なのも単調さの一因と感じた。rest=1.00表示のRAGEが段8で提示された件は検分の
+  結果、実体0.998の丸め表示で死にカードフィルタは正常(ただし+0.002はほぼ死に札)。
+- 選んだ改善: 報酬プール拡充・攻撃軸の新設。衝突で相手に与えるrps削りを増やす
+  ステータスedgeと、COMMON札シャープエッジ(id=11、+20%/枚・上限+60%)を追加。
+  受け側のhit_guard(SHOCK_ABSORBER)と対になる攻め版で、撃破ボーナスと同じ
+  「当てにいくプレイを報いる」方向。相手のspin_kickは受けた削り量比例なので、
+  強く削るほど壁への弾き飛ばしも強まる。
+- 変更: spinner_stats.gd(edge)、spinner_physics.gd(sharpened_spin_drain、負クランプ)、
+  battle_resolver.gd(与える削りに攻め手のedgeを乗算、hit_guardと乗算共存)、
+  battle_request.gd/naive_play.gd(dict/state往復・後方互換・表示)、custom_part.gd
+  (Effect.EDGE/make_edge/describe/_stats_equal)、custom_part_catalog.gd(id=11)、
+  strings.csv、run_sim.gd(greedyの値踏みに(1+edge)の控えめな線形)、measure_parts.gd。
+  tests/test_sharp_edge.gd 新設(EXPECTED_TESTS登録)。
+- 結果: 全テストgreen(36/35完走)。リゾルバのedge適用除去・上限クランプ除去の2種の
+  サボタージュで3件/4件落ちることを確認。単独計測: Lv3 Δ+1が+4.5pt/枚と、
+  SHOCK_ABSORBER採用時(+4.7pt/枚)と同格の中堅COMMON。全レベルでノイズ超のマイナス
+  なし。ラン統計before→after: intercept+greedy 39.0%→35.3%、random+random
+  56.7%→53.3%と全体が3〜4pt締まった(9枚目によるプール希釈+greedyの近視眼。
+  SHOCK追加時と同じ既知の応答)。前サイクルで「過剰基準56%を僅かに超過」とされた
+  random+randomが基準内に戻ったので、希釈は難度再点検の観点ではむしろ好転。
+  段5の谷52.0%→53.5%は不変。アラート・不変条件違反なし。
+- 次の候補: ベースライン計測はorigin/mainのfetch後に(今回、初回計測がfork初期化
+  時点の古いmainで走り取り直した)。GHOSTの魅力不足の本丸(今回も6/9提示で0取得。
+  プール拡充では薄まるだけで、効果自体の再設計が要る)。壁ダメージの可視化を実UIへ。
+  難易度カーブの再点検(ボス戦が段8の3体戦より簡単だった)。撃破ボーナスの画面表示・
+  受け身支配の本丸・rosterスイートのEXPECTED_TESTS未登録・naive_playのlaunchが
+  敗北を保存しない抜け穴(いずれも継続)。
