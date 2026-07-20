@@ -212,12 +212,22 @@ static func _resolve_disc_collision(
 	# 与える削りは攻め手のedge(Sharp Edge)で増え、受け手のhit_guard(Shock Absorber)で
 	# 減る(乗算なので順序不問)。spin_kickは受けた削り量比例なので、edgeは相手を強く
 	# 弾き、hit_guardは自分の弾かれ逃げも弱める。
+	# edgeのボーナス基準には「相手が攻め手自身と同じ硬さだったときの削り」(pierce)を
+	# 下限として渡す。素の削りは相手の硬さに反比例するため、これがないと巨体相手で
+	# edgeボーナスが消える(詳細はsharpened_spin_drainのコメント)。
+	var a_pierce := SpinnerPhysics.spin_drain(
+		b.stats.mass, b_speed, b.stats.mass, b.stats.radius, req.violence
+	)
+	var b_pierce := SpinnerPhysics.spin_drain(
+		a.stats.mass, a_speed, a.stats.mass, a.stats.radius, req.violence
+	)
 	var a_drain := SpinnerPhysics.guarded_spin_drain(
 		SpinnerPhysics.sharpened_spin_drain(
 			SpinnerPhysics.spin_drain(
 				b.stats.mass, b_speed, a.stats.mass, a.stats.radius, req.violence
 			),
-			b.stats.edge
+			b.stats.edge,
+			a_pierce
 		),
 		a.stats.hit_guard
 	)
@@ -226,7 +236,8 @@ static func _resolve_disc_collision(
 			SpinnerPhysics.spin_drain(
 				a.stats.mass, a_speed, b.stats.mass, b.stats.radius, req.violence
 			),
-			a.stats.edge
+			a.stats.edge,
+			b_pierce
 		),
 		b.stats.hit_guard
 	)

@@ -143,8 +143,16 @@ static func guarded_spin_drain(drain: float, hit_guard: float) -> float:
 ## guarded_spin_drain(受け手の軽減)と対になる攻め側の係数で、両方掛かるときは
 ## 乗算なので順序によらない。負のedgeは0でクランプ(削りを減らす方向には使わない。
 ## デバフ札を置かないカタログの原則と同じ向き)。
-static func sharpened_spin_drain(drain: float, edge: float) -> float:
-	return drain * (1.0 + maxf(edge, 0.0))
+##
+## pierce_drainは「相手が攻め手自身と同じ硬さだったときの素の削り」
+## (spin_drainに自分の質量・半径を渡した値)。素の削りは相手の硬さ(質量×半径²)に
+## 反比例するため、巨体相手ではedgeの乗算ボーナスがほぼゼロに消え、攻め札が
+## 終盤に無価値になる非対称があった(edge=0.60でもLv4に約0.2/hit)。edgeのボーナス
+## 基準を maxf(drain, pierce_drain) にすることで、刃の食い込みは相手の硬さで
+## 無効化されない: 柔らかい相手には従来どおり(1+edge)倍、硬い相手には
+## 自分基準の追加削りが下限になる。pierce_drain=0(既定)は従来の乗算と厳密一致。
+static func sharpened_spin_drain(drain: float, edge: float, pierce_drain: float = 0.0) -> float:
+	return drain + maxf(edge, 0.0) * maxf(drain, pierce_drain)
 
 
 ## 障害物(固定された円)にめり込んでいて、かつ障害物へ向かって進んでいるか。
