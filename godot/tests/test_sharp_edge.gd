@@ -16,7 +16,9 @@ const EPS := 1e-4
 
 func run(check: Callable) -> void:
 	_test_sharpened_drain_function(check)
+	_test_pierce_floor_function(check)
 	_test_resolver_honors_edge(check)
+	_test_resolver_pierce_vs_giants(check)
 	_test_edge_and_guard_compose(check)
 	_test_edge_part_stacks_with_cap(check)
 	_test_stats_copy_and_serialization(check)
@@ -36,6 +38,31 @@ func _test_sharpened_drain_function(check: Callable) -> void:
 	check.call(
 		absf(SpinnerPhysics.sharpened_spin_drain(2.0, -0.5) - 2.0) < EPS,
 		"sharpened_spin_drain: 負のedgeは0でクランプ(削りが減らない)"
+	)
+
+
+## edgeボーナスの下限(pierce_drain)。素の削りは相手の硬さに反比例して消えるが、
+## edgeの追加削りは「相手が自分と同じ硬さだったときの削り」を下回らない。
+func _test_pierce_floor_function(check: Callable) -> void:
+	# 硬い相手: 素の削り0.1 < pierce2.0 → ボーナスはpierce基準 (0.1 + 0.6*2.0)
+	check.call(
+		absf(SpinnerPhysics.sharpened_spin_drain(0.1, 0.6, 2.0) - 1.3) < EPS,
+		"sharpened_spin_drain: 硬い相手はpierceがedgeボーナスの基準になる"
+	)
+	# 柔らかい相手: 素の削り2.0 > pierce0.5 → 従来どおり(1+edge)倍
+	check.call(
+		absf(SpinnerPhysics.sharpened_spin_drain(2.0, 0.6, 0.5) - 3.2) < EPS,
+		"sharpened_spin_drain: 柔らかい相手は従来どおり(1+edge)倍のまま"
+	)
+	# edge=0ならpierceがあっても素の削りのまま(敵はedgeを持たないので不変)
+	check.call(
+		absf(SpinnerPhysics.sharpened_spin_drain(0.1, 0.0, 2.0) - 0.1) < EPS,
+		"sharpened_spin_drain: edge=0はpierceがあっても削りが増えない"
+	)
+	# pierce省略(既定0)は従来の乗算と厳密一致(後方互換)
+	check.call(
+		absf(SpinnerPhysics.sharpened_spin_drain(2.0, 0.6) - 3.2) < EPS,
+		"sharpened_spin_drain: pierce省略は従来の(1+edge)倍と一致"
 	)
 
 
@@ -83,6 +110,64 @@ func _test_resolver_honors_edge(check: Callable) -> void:
 		absf(sharp_loss - base_loss * 1.6) < EPS,
 		"リゾルバ: 1回衝突の敵の削りがちょうど(1+edge)倍 (%.4f ≒ %.4f)" % [
 			sharp_loss, base_loss * 1.6]
+	)
+
+
+## 巨体(自分より硬い相手)戦の1回衝突環境。_one_hit_requestと同じ理想化で、
+## 敵の質量だけを変えて硬さ(質量×半径²)を振れるようにする。半径と初速は固定
+## なので、質量が違っても衝突までの軌道と衝突時の速さは変わらない。
+## 壁は遠くへ置く: 既定の10x10だと弾かれたプレイヤーが壁で跳ね返って2回目の
+## 衝突が起き、その軌道が敵の質量に依存して「1回衝突の理想環境」が壊れる。
+func _giant_request(player_edge: float, enemy_mass: float) -> BattleRequest:
+	var pstats := SpinnerStats.default_player()
+	pstats.edge = player_edge
+	var estats := SpinnerStats.new()
+	estats.mass = enemy_mass
+	estats.radius = 0.5
+	estats.friction = 0.0
+	estats.restitution = 1.0
+	estats.rps = 15.0
+
+	var r := BattleRequest.new()
+	r.natural_damping = 0.0
+	r.stage_strength = 0.0
+	r.max_duration = 1.0
+	r.arena_bounds = Rect2(-100, -100, 200, 200)
+	r.player = BattleRequest.Launch.new(pstats, Vector2(3, 5), Vector2(4, 0))
+	r.enemies = [BattleRequest.Launch.new(estats, Vector2(7, 5), Vector2(-4, 0))]
+	return r
+
+
+## edgeの追加削りは相手の硬さで無効化されない(pierce下限)。
+## 素の削りは硬さに反比例して消えるが、edgeボーナス(edge有り−無しの差)は
+## 攻め手自身を基準に決まるので、硬さを倍にしても変わらない。
+## この非対称(edge=0.60でもLv4巨体に約0.2/hit)が攻め札を終盤無価値にしていた。
+func _test_resolver_pierce_vs_giants(check: Callable) -> void:
+	# どちらもプレイヤー(硬さ mass1.5×0.7²=0.735)よりはるかに硬い巨体。
+	var hard_bonus := (
+		_final_enemy_rps(BattleResolver.resolve(_giant_request(0.0, 12.0)))
+		- _final_enemy_rps(BattleResolver.resolve(_giant_request(0.6, 12.0)))
+	)
+	var harder_bonus := (
+		_final_enemy_rps(BattleResolver.resolve(_giant_request(0.0, 24.0)))
+		- _final_enemy_rps(BattleResolver.resolve(_giant_request(0.6, 24.0)))
+	)
+	check.call(
+		hard_bonus > EPS,
+		"リゾルバ: 巨体相手でもedgeは削りを実際に増やす (%.4f > 0)" % hard_bonus
+	)
+	check.call(
+		absf(hard_bonus - harder_bonus) < EPS,
+		"リゾルバ: edgeボーナスは相手の硬さに依存しない (%.4f ≒ %.4f)" % [
+			hard_bonus, harder_bonus]
+	)
+	# 素の削り(edge=0)は硬さ反比例のまま。pierceが素の削りまで底上げしていないこと。
+	var hard_base := 15.0 - _final_enemy_rps(BattleResolver.resolve(_giant_request(0.0, 12.0)))
+	var harder_base := 15.0 - _final_enemy_rps(BattleResolver.resolve(_giant_request(0.0, 24.0)))
+	check.call(
+		harder_base < hard_base - EPS,
+		"リゾルバ: edge=0の素の削りは硬いほど小さいまま (%.4f < %.4f)" % [
+			harder_base, hard_base]
 	)
 
 
