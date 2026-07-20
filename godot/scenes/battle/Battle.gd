@@ -12,7 +12,9 @@ extends Node2D
 ##
 ## 数値はすべて手触りで調整する前提。プロトタイプの値は出発点でしかない。
 
-signal finished(player_won: bool)
+## knockoutは「接触(衝突削り/壁)で決着を付けた勝利」か(BattleResult.finished_by_knockout)。
+## Mainが撃破ボーナス(勝利成長の増額)の判定に使う。敗北時は常に偽。
+signal finished(player_won: bool, knockout: bool)
 
 const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark.tscn")
 const DISC: PackedScene = preload("res://scenes/battle/Disc.tscn")
@@ -694,7 +696,7 @@ func _finish() -> void:
 	# フェードが余韻より長くチューニングされていても切れないよう、残っていれば待つ。
 	if fade != null and fade.is_valid() and fade.is_running():
 		await fade.finished
-	finished.emit(player_won)
+	finished.emit(player_won, _result.finished_by_knockout())
 
 
 ## 勝敗ジングルを result_se_delay 秒だけ遅らせて鳴らす。ここで戦闘の流れ(_finish)は
