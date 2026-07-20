@@ -135,8 +135,12 @@ func goto_reward() -> void:
 	var reward := _swap_screen(REWARD_SCENE)
 	reward.part_chosen.connect(_on_part_chosen)
 	# 今倒した段のレベルほどレアが出やすい。current_step()は段選択時と同じ値。
+	# 現在のステータスと残機を渡し、上限到達で効果ゼロの死にカードは提示しない。
 	var level := EnemyRoster.level_for_step(GameState.map_tree.current_step())
-	reward.setup(CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, null, level))
+	reward.setup(CustomPartCatalog.pick_choices(
+		CustomPartCatalog.REWARD_CHOICES, null, level,
+		GameState.player_stats, GameState.continues_left
+	))
 
 
 func _on_part_chosen(part: CustomPart) -> void:

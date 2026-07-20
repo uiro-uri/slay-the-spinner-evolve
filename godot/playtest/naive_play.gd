@@ -246,7 +246,11 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (残り%d回, 提示済み・再掲) ===" % [tree.current_step(), level, left])
 	else:
 		var rng := RandomNumberGenerator.new(); rng.seed = bseed
-		choices = CustomPartCatalog.pick_choices(CustomPartCatalog.REWARD_CHOICES, rng, level)
+		# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを除外する。
+		choices = CustomPartCatalog.pick_choices(
+			CustomPartCatalog.REWARD_CHOICES, rng, level,
+			stats_from(state["stats"]), int(state["continues"])
+		)
 		var ids := []
 		for c in choices: ids.append(c.id)
 		state["offered"] = ids
