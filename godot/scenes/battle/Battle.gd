@@ -32,6 +32,7 @@ const OVERLAY_Z := 1000
 const LAND_ARENA_POS := Vector2(390.0, 110.0)
 const LAND_ARENA_SCALE := Vector2(50.0, 50.0)
 const LAND_MESSAGE_RECT := Rect2(390.0, 300.0, 500.0, 60.0)
+const LAND_LOSS_RECT := Rect2(390.0, 360.0, 500.0, 40.0)
 const LAND_BARS_RECT := Rect2(390.0, 622.0, 500.0, 60.0)
 
 ## アリーナの1辺(10ユニット×既定スケール50=500px)。当てはめの基準。
@@ -161,6 +162,11 @@ const BAR_ROW_H := 60.0
 @onready var _enemy_telegraphs_root: Node2D = $ArenaRoot/EnemyTelegraphs
 @onready var _launcher: LaunchController = $ArenaRoot/LaunchController
 @onready var _message: Label = $UI/Message
+
+## 決着時に勝敗の下へ出す、rps喪失の機構別内訳(削り/壁/減衰)。壁の自傷は初見に
+## 見えないので、リザルトで毎回事実を見せる。文言の組み立てはRpsLossTextに委譲。
+## 動的生成(敵HPバーと同じ流儀)なのでtscnには居ない。
+var _loss_label: Label = null
 @onready var _bars: VBoxContainer = $UI/Bars
 @onready var _player_bar: ProgressBar = $UI/Bars/PlayerBar
 
@@ -217,6 +223,17 @@ func _ready() -> void:
 	_message.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
 	_message.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
 
+	# 内訳ラベルはメッセージの直下。決着までは空文字で見えない。
+	_loss_label = Label.new()
+	_loss_label.text = ""
+	_loss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_loss_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_loss_label.add_theme_font_size_override("font_size", 20)
+	_loss_label.add_theme_color_override("font_color", Palette.TEXT_PRIMARY)
+	_loss_label.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
+	_loss_label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
+	$UI.add_child(_loss_label)
+
 	# プレイヤーのコマ色もPalette由来にする(tscnのリテラルではなくここが権威)。
 	# 本体グラデーションはプレイヤー=明側へ振る。
 	_player.body_color = Palette.PLAYER
@@ -267,6 +284,7 @@ func _recompute_layout() -> void:
 		_arena_root.scale = LAND_ARENA_SCALE
 		_record_arena_base()
 		_set_rect(_message, LAND_MESSAGE_RECT)
+		_set_rect(_loss_label, LAND_LOSS_RECT)
 		_set_rect(_bars, LAND_BARS_RECT)
 		return
 
@@ -282,8 +300,12 @@ func _recompute_layout() -> void:
 	_arena_root.position = top_left
 	_record_arena_base()
 
-	# メッセージはアリーナ幅に合わせ、アリーナの縦中央あたりへ。
+	# メッセージはアリーナ幅に合わせ、アリーナの縦中央あたりへ。内訳はその直下。
 	_set_rect(_message, Rect2(top_left.x, top_left.y + arena_px * 0.4, arena_px, BAR_ROW_H))
+	_set_rect(
+		_loss_label,
+		Rect2(top_left.x, top_left.y + arena_px * 0.4 + BAR_ROW_H, arena_px, LAND_LOSS_RECT.size.y)
+	)
 	# バーはアリーナ直下、幅いっぱい。
 	_set_rect(_bars, Rect2(top_left.x, top_left.y + arena_px + BAND_GAP, arena_px, BAR_ROW_H))
 
@@ -450,6 +472,7 @@ func _begin(player_pos: Vector2, player_vel: Vector2) -> void:
 	for telegraph in _telegraphs:
 		telegraph.hide_plan()
 	_message.text = ""
+	_loss_label.text = ""
 	start(player_pos, player_vel)
 
 
@@ -688,6 +711,10 @@ func _finish() -> void:
 		_:
 			_message.text = "BATTLE_LOSE"
 			_play_result_se("lose")
+
+	# 勝敗の下に、自分の回転をどこで失ったかの内訳を出す。組み立てた文なので
+	# 自動翻訳は素通りする(キーが無ければそのまま表示される)のが意図どおり。
+	_loss_label.text = RpsLossText.summary_line(_result.player_rps_loss)
 
 	# 力尽きたコマは即グレーアウトさせず、最後の姿を一拍見せてからフェードで消す。
 	var fade := _start_defeated_fadeout()
