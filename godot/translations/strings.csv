@@ -17,6 +17,7 @@ BATTLE_DRAG_TO_SHOOT,Drag to Shoot!,引っ張って発射!
 BATTLE_WIN,You Win!,勝利!
 BATTLE_LOSE,You Lose...,敗北...
 BATTLE_DRAW,Draw,引き分け
+BATTLE_RPS_LOSS_BREAKDOWN,Spin lost — clash {0} / wall {1} (x{2}) / decay {3},失った回転 — 削り{0} / 壁{1}({2}回) / 減衰{3}
 GAMEOVER_TITLE,GAME OVER,ゲームオーバー
 GAMEOVER_CONTINUE,Continue,コンティニュー
 GAMEOVER_GIVE_UP,Give Up,あきらめる
