@@ -77,6 +77,9 @@ const GUARD_HIT_MAX := 0.5
 
 ## Sharp Edgeが1枚あたり上げる与ダメ増強量(edge)と、その上限。
 ## 受け側のGUARD(0.17/0.5)と対になる攻め版。+20%/枚・3枚の上限+60%。
+## 単独計測(measure_parts, intercept)でLv3 Δ+1が+4.5pt/枚と、SHOCK_ABSORBERが
+## 採用された時の+4.7pt/枚と同格の中堅COMMON。上限+60%(3枚+9.8pt)で
+## 与ダメの複利が青天井にならないよう頭打ちにする。
 const EDGE_STEP := 0.2
 const EDGE_MAX := 0.6
 
