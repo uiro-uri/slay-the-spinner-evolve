@@ -36,13 +36,18 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ## GUARD: コマ同士の衝突で受けるrps削りを減らす(hit_guardを hit_guard_step ぶん
 ## 加算、上限hit_guard_max)。壁のRAGE(wall_keep)と対になる衝突版の純防御。
 ##
+## EDGE: コマ同士の衝突で相手に与えるrps削りを増やす(edgeを edge_step ぶん加算、
+## 上限edge_max)。GUARD(受け)と対になる攻めの軸で、当てにいくプレイを装備側から
+## 支える(撃破ボーナスと同じ狙い)。相手のspin_kickは受けた削り量に比例するので、
+## 強く削るほど相手を強く弾き飛ばす=壁への押し込みとも噛み合う。
+##
 ## GROWTH: 直径と質量の両方を倍にする「巨大化」。直径だけの倍率(旧GIANT_GROWTH)は
 ## 自然減衰(radius×spin_decayに比例)の悪化が上回り、単独計測でLv3 -6.4pt/枚と
 ## 唯一の純マイナス札だった=「報酬は全部プラス」の原則(CustomPartCatalog.all参照)に
 ## 実測で反していた。大きくなるなら重くもなる方が直感にも合い、質量が衝突耐性
 ## (削りは1/(質量×半径²))と弾き飛ばしを補って、寿命悪化と引き換えの本物の
 ## トレードオフになる。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH }
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH, EDGE }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -106,6 +111,12 @@ const _STAT_NAMES := {
 
 ## GUARD札のhit_guard上限。1.0(衝突削り無効)まで許すと無敵化するので1未満で頭打ち。
 @export var hit_guard_max: float = 1.0
+
+## EDGE札が1枚あたり加算する与ダメ増強量(edgeへ加算)。0.2で与える削り+20%。
+@export var edge_step: float = 0.0
+
+## EDGE札のedge上限。重ねがけの複利で削りが青天井にならないよう頭打ちにする。
+@export var edge_max: float = 1.0
 
 ## GROWTH札が質量に掛ける倍率。直径側の倍率は multiplier / 上限は cap を使う。
 @export var mass_multiplier: float = 1.0
@@ -209,6 +220,22 @@ static func make_growth(
 	return part
 
 
+## シャープエッジ札を作る。衝突で相手に与えるrps削りの増強(edge)を step_ ぶん上げる。
+## max_ は重ねがけの上限(与ダメの複利が青天井にならないよう頭打ちにする)。
+static func make_edge(
+	id_: int, title_key_: String, rarity_: Rarity,
+	step_: float, max_: float
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.EDGE
+	part.edge_step = step_
+	part.edge_max = max_
+	return part
+
+
 ## 衝撃吸収札を作る。衝突で受けるrps削りの軽減(hit_guard)を step_ ぶん上げる。
 ## max_ は重ねがけの上限(1.0=削り無効の無敵化を防ぐためRAGEと同様1未満)。
 static func make_guard(
@@ -239,6 +266,11 @@ func apply_to(stats: SpinnerStats) -> void:
 	# して、重ねがけで削り無効(=衝突無敵)にならないようにする。
 	if effect == Effect.GUARD:
 		stats.hit_guard = minf(stats.hit_guard + hit_guard_step, hit_guard_max)
+		return
+	# シャープエッジ(EDGE): 衝突で相手に与えるrps削りを増やす(edge加算)。上限で
+	# 頭打ちにして、重ねがけの複利で削りが青天井にならないようにする。
+	if effect == Effect.EDGE:
+		stats.edge = minf(stats.edge + edge_step, edge_max)
 		return
 	# 巨大化(GROWTH): 直径と質量の両方を倍にする。それぞれ上限でクランプ
 	# (直径はアリーナを埋め尽くさないよう、質量は青天井の複利を防ぐよう)。
@@ -303,6 +335,7 @@ static func _stats_equal(a: SpinnerStats, b: SpinnerStats) -> bool:
 		and is_equal_approx(a.spin_decay, b.spin_decay)
 		and is_equal_approx(a.wall_keep, b.wall_keep)
 		and is_equal_approx(a.hit_guard, b.hit_guard)
+		and is_equal_approx(a.edge, b.edge)
 	)
 
 
@@ -339,6 +372,11 @@ func describe() -> String:
 	if effect == Effect.GUARD:
 		return tr("PART_EFFECT_GUARD").format(
 			[_trim(hit_guard_step * 100.0), _trim(hit_guard_max * 100.0)]
+		)
+	# シャープエッジも増強率を%で見せる(GUARDと同じ読みやすさの判断)。
+	if effect == Effect.EDGE:
+		return tr("PART_EFFECT_EDGE").format(
+			[_trim(edge_step * 100.0), _trim(edge_max * 100.0)]
 		)
 	# 巨大化は直径と質量の複合。代償(自然減衰の悪化)を効果注記で必ず謳う——
 	# 直径だけの旧版は代償が読めない罠札で、効果文だけで選ぶと損をする札だった。

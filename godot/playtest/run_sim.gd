@@ -180,8 +180,12 @@ static func play_one(
 ## 自然減衰レース(Lv3+の死因の8割)で後半の勝率を落とした(計測で段6〜9が悪化)。
 ## 単独計測でもGUARDの限界効果(Lv3で+4.7pt/枚)は質量(+41.8)やRPS(+15.2)より
 ## 小さく、線形の控えめな評価の方が実測に合う。
+## edge(Sharp Edge札)は自分の耐久ではなく相手を早く倒す攻めの値なので厳密には
+## 「硬さ」ではないが、GUARDと同じ理由(織り込まないと絶対選ばれない札になり
+## 統計に現れない)で、同じ控えめな線形(1+edge)で織り込む。
 static func toughness(stats: SpinnerStats) -> float:
-	return stats.rps * stats.mass * stats.radius * stats.radius * (1.0 + stats.hit_guard)
+	return stats.rps * stats.mass * stats.radius * stats.radius \
+		* (1.0 + stats.hit_guard) * (1.0 + stats.edge)
 
 
 static func _choose_part(
