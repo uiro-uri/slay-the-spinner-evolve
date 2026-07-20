@@ -107,6 +107,9 @@ static func play_one(
 		"finish_time": result.finish_time,
 		"timed_out": result.timed_out,
 		"impacts": result.impacts.size(),
+		# リゾルバが記録した事実。BattleMetrics(軌跡からの推定)とは別に持つ。
+		# RunSimが撃破ボーナス(勝利成長の増額)の判定に使う。
+		"knockout": result.finished_by_knockout(),
 	}
 	# 死因の内訳(一撃死かどうか、決着までの衝突回数)を足す。集計側が読む。
 	record.merge(BattleMetrics.classify(request, result))

@@ -26,6 +26,11 @@ class State:
 	## 積分・自然減衰・軌跡の記録だけは続ける(そのまま止まってフェードアウトさせる)。
 	var alive: bool = true
 
+	## 初めてrpsが閾値を割った瞬間の原因("drain"/"wall"/"decay")と時刻。
+	## 未死亡は空文字と-1。各機構がrpsを減らした直後に_mark_if_deadで確定する。
+	var death_cause: String = ""
+	var death_time: float = -1.0
+
 	func _init(launch: BattleRequest.Launch) -> void:
 		stats = launch.stats
 		position = launch.position
@@ -100,8 +105,10 @@ static func resolve(request: BattleRequest) -> BattleResult:
 				result.outcome = BattleResult.Outcome.DRAW
 			elif player_out:
 				result.outcome = BattleResult.Outcome.ENEMY_WIN
+				result.loser_death_cause = player.death_cause
 			else:
 				result.outcome = BattleResult.Outcome.PLAYER_WIN
+				result.loser_death_cause = _decisive_enemy_cause(enemies)
 			return result
 
 	# 上限に達した。自然減衰があるので普通は来ないが、調整次第では
@@ -123,6 +130,28 @@ static func resolve(request: BattleRequest) -> BattleResult:
 
 static func _snapshot(s: State) -> BattleResult.Snapshot:
 	return BattleResult.Snapshot.new(s.position, s.velocity, s.rps)
+
+
+## rpsを減らす各機構(衝突削り/壁・障害物/自然減衰)が、減らした直後に呼ぶ。
+## 初めて閾値を割った瞬間の原因と時刻だけを確定する(以後は上書きしない)。
+## 敗者の死因が「接触で決まった」か「自然減衰待ちだった」かは撃破ボーナス
+## (SpinnerStats.grow_rps_by_victory)の判定に使うので、推定でなくここで記録する。
+static func _mark_if_dead(s: State, cause: String, req: BattleRequest, t: float) -> void:
+	if s.death_cause == "" and s.rps <= req.lose_threshold:
+		s.death_cause = cause
+		s.death_time = t
+
+
+## 勝敗を決めた(=最後に力尽きた)敵の死因。乱戦では途中で落ちた敵ではなく、
+## 決着を付けた最後の1体で判定する。
+static func _decisive_enemy_cause(enemies: Array[State]) -> String:
+	var cause := ""
+	var latest := -INF
+	for enemy in enemies:
+		if enemy.death_cause != "" and enemy.death_time > latest:
+			latest = enemy.death_time
+			cause = enemy.death_cause
+	return cause
 
 
 static func _integrate(s: State, center: Vector2, req: BattleRequest, dt: float) -> void:
@@ -192,6 +221,8 @@ static func _resolve_disc_collision(
 
 	a.rps = maxf(a.rps - a_drain, 0.0)
 	b.rps = maxf(b.rps - b_drain, 0.0)
+	_mark_if_dead(a, "drain", req, t)
+	_mark_if_dead(b, "drain", req, t)
 
 
 ## 1体ぶんの土俵まわり: 壁・障害物・自然減衰。体ごとに独立しており、
@@ -205,6 +236,7 @@ static func _resolve_body_field(
 		_resolve_walls(s, walls, req, t, result)
 		_resolve_obstacles(s, req, t, result)
 	_apply_natural_decay(s, req, dt)
+	_mark_if_dead(s, "decay", req, t)
 
 
 static func _resolve_walls(
@@ -222,6 +254,7 @@ static func _resolve_walls(
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
 		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
+		_mark_if_dead(s, "wall", req, t)
 
 
 ## 障害物(固定円)との衝突。壁と同型で、法線が中心からの放射方向になるだけ。
@@ -242,6 +275,7 @@ static func _resolve_obstacles(
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
 		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
+		_mark_if_dead(s, "wall", req, t)
 
 
 static func _apply_natural_decay(s: State, req: BattleRequest, dt: float) -> void:

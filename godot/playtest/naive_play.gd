@@ -193,8 +193,11 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 		str(pos), vel.length(), rad_to_deg(vel.angle()), target, force])
 	print("結果: %s  決着=%.2fs 衝突=%d timed_out=%s" % [
 		result_label(result.outcome), result.finish_time, result.impacts.size(), result.timed_out])
-	print("  死因=%s loser=%s hits_taken=%s" % [
-		metrics.get("death_cause","?"), metrics.get("loser","?"), str(metrics.get("hits_taken","?"))])
+	# 死因(BattleMetrics)は最終rpsが最小の敗者の推定。決着死因はリゾルバが記録した
+	# 「最後に力尽きた体」の事実で、乱戦では別の敵になりうる(撃破ボーナスは後者で決まる)。
+	print("  死因=%s loser=%s hits_taken=%s 決着死因=%s" % [
+		metrics.get("death_cause","?"), metrics.get("loser","?"), str(metrics.get("hits_taken","?")),
+		result.loser_death_cause])
 	if won:
 		if tree.is_goal():
 			# 実ゲーム(Main._on_battle_finished)はボス撃破で即クリアし報酬はない。
@@ -208,13 +211,19 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			print("！！！全段突破・ラン完了！！！")
 		else:
 			# 実ゲーム(Main._on_battle_finished)と同じく、勝利のたびに回転が少し成長する。
+			# 接触で仕留めた勝ち(knockout)は撃破ボーナスで大きく育つ。
 			# 報酬(倍率札)より先に適用して保存する。
+			var knockout := result.finished_by_knockout()
 			var grown := stats_from(state["stats"])
-			grown.grow_rps_by_victory()
+			grown.grow_rps_by_victory(knockout)
 			state["stats"] = stats_dict(grown)
 			_save(state, path)
-			print("勝利の勢いで回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [
-				grown.rps, SpinnerStats.VICTORY_RPS_GROWTH, SpinnerStats.RPS_CAP])
+			if knockout:
+				print("★撃破ボーナス★ 接触で仕留めた勝利で回転が大きく成長 rps=%.1f (+%.1f, 上限%.0f)" % [
+					grown.rps, SpinnerStats.KNOCKOUT_RPS_GROWTH, SpinnerStats.RPS_CAP])
+			else:
+				print("勝利の勢いで回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [
+					grown.rps, SpinnerStats.VICTORY_RPS_GROWTH, SpinnerStats.RPS_CAP])
 			print("→ reward --bseed=<R> で報酬を見る")
 	else:
 		print("→ retry --bseed=<新B> (残機%d) か giveup" % state["continues"])

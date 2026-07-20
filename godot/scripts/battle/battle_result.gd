@@ -70,9 +70,21 @@ var timed_out: bool = false
 ## 再生はResultだけで完結する(サーバーが返すのもこれ)ので結果側にも持たせる。
 var ghost_duration: float = 0.0
 
+## 敗者(決着を付けられた側)がどう力尽きたか: "drain"(衝突削り)・"wall"(壁/障害物)・
+## "decay"(自然減衰)。引き分け・時間切れは空文字。リゾルバが解決時に記録する
+## 事実で、軌跡からの推定(BattleMetrics)ではない。撃破ボーナスの判定に使う。
+var loser_death_cause: String = ""
+
 
 func player_won() -> bool:
 	return outcome == Outcome.PLAYER_WIN
+
+
+## 勝利が「接触(衝突削り/壁への弾き飛ばし)で決まった」なら真。敵の自然減衰を
+## 待っただけの勝ち("decay")と区別し、当てにいった勝ちに撃破ボーナス
+## (SpinnerStats.KNOCKOUT_RPS_GROWTH)を与えるための判定。
+func finished_by_knockout() -> bool:
+	return player_won() and loser_death_cause in ["drain", "wall"]
 
 
 func duration() -> float:
@@ -119,6 +131,7 @@ func to_dict() -> Dictionary:
 		"time_step": time_step,
 		"timed_out": timed_out,
 		"ghost_duration": ghost_duration,
+		"loser_death_cause": loser_death_cause,
 	}
 
 
@@ -142,6 +155,7 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.time_step = d["time_step"]
 	r.timed_out = d["timed_out"]
 	r.ghost_duration = d.get("ghost_duration", 0.0)
+	r.loser_death_cause = d.get("loser_death_cause", "")
 	return r
 
 
