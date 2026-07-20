@@ -20,6 +20,7 @@ func run(check: Callable) -> void:
 	_test_ghost(check)
 	_test_rage(check)
 	_test_growth(check)
+	_test_dead_card_filter(check)
 
 
 func _stats() -> SpinnerStats:
@@ -589,3 +590,84 @@ func _test_set_lives(check: Callable) -> void:
 
 	gs.free()
 	TranslationServer.set_locale("ja")
+
+
+## 死にカード除外: 上限に達して効果ゼロになった札は、statsを渡した抽選から出ない。
+## 今回のコールドプレイでrps上限40到達後もSPIN_ENGINEが提示され続け、
+## 「取っても何も起きない札」で報酬選択が腐ったのが動機。
+func _test_dead_card_filter(check: Callable) -> void:
+	# rpsが上限40のとき: SPIN_ENGINE(id=7)は適用しても何も変わらない=死にカード。
+	var capped := _stats()
+	capped.rps = SpinnerStats.RPS_CAP
+	check.call(
+		not CustomPartCatalog.by_id(7).would_change_anything(capped),
+		"死にカード: rps上限でSPIN_ENGINEは効果なし判定"
+	)
+	# 初期性能なら全札が有効(死にカードなし)。
+	var fresh := SpinnerStats.default_player()
+	var all_alive := true
+	for part in CustomPartCatalog.all():
+		if not part.would_change_anything(fresh, 3):
+			all_alive = false
+	check.call(all_alive, "死にカード: 初期性能では全札が有効")
+
+	# 抽選: rps上限のstatsを渡すと、何度引いてもSPIN_ENGINEが出ない。
+	var rng := RandomNumberGenerator.new()
+	var spin_engine_offered := false
+	for trial in TRIALS:
+		rng.seed = trial + 20000
+		for part in CustomPartCatalog.pick_choices(3, rng, 5, capped, 3):
+			if part.id == 7:
+				spin_engine_offered = true
+	check.call(
+		not spin_engine_offered,
+		"死にカード: rps上限の抽選%d回でSPIN_ENGINEが一度も提示されない" % TRIALS
+	)
+	# statsを渡さない従来の呼び出しでは出る(除外はopt-in。既存挙動の回帰確認)。
+	var offered_without_stats := false
+	for trial in TRIALS:
+		rng.seed = trial + 20000
+		for part in CustomPartCatalog.pick_choices(3, rng, 5):
+			if part.id == 7:
+				offered_without_stats = true
+	check.call(
+		offered_without_stats,
+		"死にカード: statsなしの抽選では従来どおりSPIN_ENGINEも出る"
+	)
+
+	# 残機札(SPARE_CORE id=8): 残機が既に5なら死に、3なら有効、不明(-1)なら有効扱い。
+	check.call(
+		not CustomPartCatalog.by_id(8).would_change_anything(fresh, 5),
+		"死にカード: 残機5でSPARE_COREは効果なし判定"
+	)
+	check.call(
+		CustomPartCatalog.by_id(8).would_change_anything(fresh, 3),
+		"死にカード: 残機3ならSPARE_COREは有効"
+	)
+	check.call(
+		CustomPartCatalog.by_id(8).would_change_anything(fresh, -1),
+		"死にカード: 残機不明ならSPARE_COREは有効扱い"
+	)
+
+	# 全上限まで積んだビルド: 生き残るのはGHOST(常時有効)とFULL_STEAM(摩擦に
+	# 下限がない)だけ。提示枚数は3枚に満たなくてよい(死に札で埋めるより誠実)。
+	var maxed := _stats()
+	maxed.mass = CustomPartCatalog.MASS_CAP
+	maxed.radius = CustomPartCatalog.RADIUS_CAP
+	maxed.restitution = CustomPartCatalog.RESTITUTION_CAP
+	maxed.rps = SpinnerStats.RPS_CAP
+	maxed.wall_keep = CustomPartCatalog.RAGE_WALL_KEEP_MAX
+	maxed.hit_guard = CustomPartCatalog.GUARD_HIT_MAX
+	maxed.spin_decay = CustomPartCatalog.FULL_STEAM_FLOOR
+	var only_alive_ids := true
+	var sizes_ok := true
+	for trial in 50:
+		rng.seed = trial + 30000
+		var picks := CustomPartCatalog.pick_choices(3, rng, 5, maxed, 5)
+		if picks.size() != 2:
+			sizes_ok = false
+		for part in picks:
+			if part.id != 5 and part.id != 9:
+				only_alive_ids = false
+	check.call(only_alive_ids, "死にカード: 全上限ビルドの提示はGHOSTとFULL_STEAMだけ")
+	check.call(sizes_ok, "死にカード: 有効札が2枚しか無ければ提示も2枚に減る")

@@ -272,6 +272,40 @@ func apply_to(stats: SpinnerStats) -> void:
 	_write(stats, value)
 
 
+## この札を今取って、何かが実際に変わるか（死にカード判定）。
+##
+## 上限に達したステータスしか触らない札（例: rps=40でのSPIN_ENGINE）は、取っても
+## 文字どおり何も起きない。それでも抽選に出続けると「どれを選んでも意味がない」
+## 報酬画面ができてしまうので、CustomPartCatalog.pick_choicesが提示前にこれで弾く。
+## 判定は複製へ実際にapply_toして全フィールドを比較する——apply_toと別実装の
+## 予測ロジックを持つと、効果を変えたときに判定だけが古い嘘になるため。
+## livesは現在の残機。負なら「残機不明」としてSET_LIVES札は常に有効扱いにする。
+func would_change_anything(stats: SpinnerStats, lives_now: int = -1) -> bool:
+	# ゴーストは重ねるほど無敵時間が線形に伸びる(上限なし)ので常に意味がある。
+	if effect == Effect.GHOST:
+		return true
+	# 残機札はステータスに触らない。maxi適用で残機が実際に増えるときだけ有効。
+	if effect == Effect.SET_LIVES:
+		return lives_now < 0 or lives_now < lives
+	var probe := stats.duplicate_stats()
+	apply_to(probe)
+	return not _stats_equal(probe, stats)
+
+
+## 全フィールドの近似一致。would_change_anything専用（apply_toが触りうる値を全部見る）。
+static func _stats_equal(a: SpinnerStats, b: SpinnerStats) -> bool:
+	return (
+		is_equal_approx(a.mass, b.mass)
+		and is_equal_approx(a.radius, b.radius)
+		and is_equal_approx(a.friction, b.friction)
+		and is_equal_approx(a.restitution, b.restitution)
+		and is_equal_approx(a.rps, b.rps)
+		and is_equal_approx(a.spin_decay, b.spin_decay)
+		and is_equal_approx(a.wall_keep, b.wall_keep)
+		and is_equal_approx(a.hit_guard, b.hit_guard)
+	)
+
+
 ## レアカードの金色スタイルボックス。報酬選択とマップ一覧で共有する。
 static func rare_stylebox() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

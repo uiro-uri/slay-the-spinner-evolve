@@ -177,12 +177,29 @@ static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
 ## 順に引くので、引き直しが要らず個数も指定どおりになる。
 ## levelは倒した敵のレベル(1..5)。高いほどRAREが出やすい。省略時はレベル1相当
 ## (現行の重み)で、既存の呼び出し・テストの挙動を保つ。
-static func pick_choices(count: int, rng: RandomNumberGenerator = null, level: int = 1) -> Array[CustomPart]:
+##
+## statsを渡すと死にカード（取っても何も変わらない札。rps上限40での
+## SPIN_ENGINEなど。CustomPart.would_change_anything参照）を抽選から外す。
+## lives_nowは現在の残機（SET_LIVES札の死に判定に使う。負=不明なら常に有効扱い）。
+## 省略時(null)は従来どおり全札から引く。
+static func pick_choices(
+	count: int, rng: RandomNumberGenerator = null, level: int = 1,
+	stats: SpinnerStats = null, lives_now: int = -1
+) -> Array[CustomPart]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
 
 	var pool := all()
+	if stats != null:
+		var alive: Array[CustomPart] = []
+		for part in pool:
+			if part.would_change_anything(stats, lives_now):
+				alive.append(part)
+		# 全札が死んでいたら安全側で全札に戻す（現行カタログではGHOSTが常に有効
+		# なので起きないが、カタログ改変で空提示＝進行不能になるのを防ぐ）。
+		if not alive.is_empty():
+			pool = alive
 	var chosen: Array[CustomPart] = []
 	for i in mini(count, pool.size()):
 		var index := _weighted_index(pool, rng, level)

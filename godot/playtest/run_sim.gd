@@ -136,8 +136,10 @@ static func play_one(
 		# 各回: ステータス倍率に加え、SET_LIVES札(SPARE_CORE)は残機をmaxiで底上げする。
 		# 倒した敵のレベルほどレアが出やすい。
 		for _r in maxi(group.size(), 1):
+			# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを除外する。
 			var choices := CustomPartCatalog.pick_choices(
-				CustomPartCatalog.REWARD_CHOICES, rng, int(record["level"])
+				CustomPartCatalog.REWARD_CHOICES, rng, int(record["level"]),
+				stats, continues
 			)
 			var part := _choose_part(choices, reward_policy, rng, stats, force_part_id)
 			part.apply_to(stats)
