@@ -75,6 +75,16 @@ var ghost_duration: float = 0.0
 ## 事実で、軌跡からの推定(BattleMetrics)ではない。撃破ボーナスの判定に使う。
 var loser_death_cause: String = ""
 
+## プレイヤーが機構ごとに失ったrpsの内訳:
+## {"drain": 衝突削り, "wall": 壁/障害物, "decay": 自然減衰, "wall_hits": 壁回数}。
+## loser_death_causeは「閾値を割った最後の一撃」しか語らない(壁で大半を失っても
+## 最後の一滴が減衰なら"decay"になる)ため、敗因分析にはこちらの事実を使う。
+## drain+wall+decay = 初期rps - 最終rps。旧結果のdictには無いので空dictで互換。
+var player_rps_loss: Dictionary = {}
+
+## 敵ごとの同内訳。enemy_rps_loss[i] が i 番目の敵のDictionary。
+var enemy_rps_loss: Array = []
+
 
 func player_won() -> bool:
 	return outcome == Outcome.PLAYER_WIN
@@ -132,6 +142,8 @@ func to_dict() -> Dictionary:
 		"timed_out": timed_out,
 		"ghost_duration": ghost_duration,
 		"loser_death_cause": loser_death_cause,
+		"player_rps_loss": player_rps_loss,
+		"enemy_rps_loss": enemy_rps_loss,
 	}
 
 
@@ -156,6 +168,8 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.timed_out = d["timed_out"]
 	r.ghost_duration = d.get("ghost_duration", 0.0)
 	r.loser_death_cause = d.get("loser_death_cause", "")
+	r.player_rps_loss = d.get("player_rps_loss", {})
+	r.enemy_rps_loss = d.get("enemy_rps_loss", [])
 	return r
 
 

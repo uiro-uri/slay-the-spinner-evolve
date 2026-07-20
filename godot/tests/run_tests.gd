@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "victorygrowth", "hitguard", "deathcause", "battlemetrics"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "victorygrowth", "hitguard", "deathcause", "battlemetrics", "rpsloss"
 ]
 
 
@@ -130,6 +130,9 @@ func _init() -> void:
 
 	print("== battlemetrics ==")
 	_test_battle_metrics()
+
+	print("== rpsloss ==")
+	_test_rps_loss()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -415,6 +418,12 @@ func _test_battle_metrics() -> void:
 	var suite = load("res://tests/test_battle_metrics.gd").new()
 	suite.run(_check)
 	_done("battlemetrics")
+
+
+func _test_rps_loss() -> void:
+	var suite = load("res://tests/test_rps_loss.gd").new()
+	suite.run(_check)
+	_done("rpsloss")
 
 
 func _test_ghost_visual() -> void:

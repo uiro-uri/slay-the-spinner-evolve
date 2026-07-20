@@ -198,6 +198,13 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	print("  死因=%s loser=%s hits_taken=%s 決着死因=%s" % [
 		metrics.get("death_cause","?"), metrics.get("loser","?"), str(metrics.get("hits_taken","?")),
 		result.loser_death_cause])
+	# rps喪失の内訳(リゾルバが数えた事実)。死因ラベルは「閾値を割った最後の一撃」
+	# しか語らないので、壁で大半を削られた負けが「衝突0・死因decay」とだけ出て
+	# 敗因が読めないことがあった。機構別の内訳を必ず出す。
+	var loss_parts := [loss_text("自分", result.player_rps_loss)]
+	for i in result.enemy_rps_loss.size():
+		loss_parts.append(loss_text("enemy%d" % (i + 1), result.enemy_rps_loss[i]))
+	print("  rps喪失内訳: %s" % " / ".join(loss_parts))
 	if won:
 		if tree.is_goal():
 			# 実ゲーム(Main._on_battle_finished)はボス撃破で即クリアし報酬はない。
@@ -430,6 +437,14 @@ static func pick_allowed(offered: Array, id: int) -> bool:
 		if int(v) == id:
 			return true
 	return false
+
+
+## rps喪失内訳の1体ぶんの表示。BattleResultのloss dict(drain/wall/decay/wall_hits)を
+## そのまま読む。キー欠落(旧結果)は0扱いで落ちない。
+static func loss_text(label: String, loss: Dictionary) -> String:
+	return "%s 削り%.1f 壁%.1f(%d回) 減衰%.1f" % [label,
+		float(loss.get("drain", 0.0)), float(loss.get("wall", 0.0)),
+		int(loss.get("wall_hits", 0)), float(loss.get("decay", 0.0))]
 
 
 ## 勝敗表示。引き分け(相打ち・時間切れ)は進行上は敗北扱いだが、
