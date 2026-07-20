@@ -44,6 +44,16 @@ const RADIUS_CAP := 2.0
 ## 質量の上限。
 const MASS_CAP := 8.0
 
+## Giant Growthの倍率。直径だけ(×1.25)だった頃は自然減衰(radius×spin_decay比例)の
+## 悪化が上回り、単独計測でLv3 -6.4pt/枚・3枚で-26.9ptと唯一の純マイナス札=罠だった。
+## 「大きくなるなら重くもなる」の複合にして、質量の衝突耐性(削りは1/(質量×半径²))で
+## 代償を釣り合わせる。質量倍率は計測で決めた: ×1.25は単独でLv3 +15.6pt/枚と
+## RARE級の初動になり、ラン全体でもintercept+greedyクリア率76%・random+randomでも
+## 64%(勝利成長+1.0が「過剰」と却下された56%超え)までゲームが緩んだ。×1.15で
+## 中堅COMMON帯(FULL_STEAM +8.2/RAGE +6.5と同格)に収める。
+const GROWTH_RADIUS_MULT := 1.25
+const GROWTH_MASS_MULT := 1.15
+
 ## 回転数の上限。プロトタイプの min(40.0, ...) に相当。
 ## 実体は勝利成長と共有するSpinnerStats.RPS_CAP(値の由来もあちらのコメント参照)。
 const RPS_CAP := SpinnerStats.RPS_CAP
@@ -84,8 +94,9 @@ const GHOST_SECONDS_PER_STACK := 2.0
 ## 一方なので、上限がないとアリーナ(10x10)をコマが埋め尽くす。
 static func all() -> Array[CustomPart]:
 	return [
-		CustomPart.make(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
-			CustomPart.Stat.RADIUS, 1.25, RADIUS_CAP),
+		# Giant Growth: 直径と質量の複合(倍率の経緯はGROWTH_*_MULTのコメント参照)。
+		CustomPart.make_growth(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
+			GROWTH_RADIUS_MULT, RADIUS_CAP, GROWTH_MASS_MULT, MASS_CAP),
 		# 質量×1.5。改修前は最強札(×1.6)だったので微減。ボスは自滅(spin_decay=0.6)を
 		# 抑えたぶん削りで倒す設計になっており、greedyの主火力である質量を削るとボスは
 		# 硬くなる。uiroの判断でボス難化を許容(残機で緩和)し、札の突出を抑える方を採った。

@@ -399,6 +399,12 @@ static func card_text(c: CustomPart) -> String:
 		CustomPart.Effect.GUARD:
 			return "衝突で削られる回転を軽減+%.2f(上限%.2f) [GUARD]" % [
 				c.hit_guard_step, c.hit_guard_max]
+		CustomPart.Effect.GROWTH:
+			# 代償(自然減衰の悪化)も必ず書く。直径だけの旧版はCLIに代償が出ず、
+			# 効果文だけで選ぶコールドプレイの罠になっていた(実UIの注記はCLIに
+			# 出ないので、ここに書かないと嘘のままになる)。
+			return "直径 ×%.2f(上限%.2f)・質量 ×%.2f(上限%.2f)・代わりに自然減衰が速まる [GROWTH]" % [
+				c.multiplier, c.cap, c.mass_multiplier, c.mass_cap]
 		_:
 			var stat_name: String = ["質量","直径","摩擦","反発","回転"][c.stat]
 			var cap_txt := "" if c.cap <= 0.0 else "(上限%.2f)" % c.cap
