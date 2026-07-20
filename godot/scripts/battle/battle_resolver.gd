@@ -31,6 +31,16 @@ class State:
 	var death_cause: String = ""
 	var death_time: float = -1.0
 
+	## 機構ごとに実際に失ったrpsの累計と、壁・障害物にぶつかった回数。
+	## death_causeは「閾値を割った最後の一撃」しか語らないため、壁で6割削られて
+	## 最後の一滴が自然減衰だと死因が"decay"になり、敗因分析が壁を見落とす
+	## (実際にコールドプレイの一次証拠がこれで壊れた)。内訳は事実として
+	## ここで数え、BattleResultに載せて表示側が使う。
+	var lost_drain: float = 0.0
+	var lost_wall: float = 0.0
+	var lost_decay: float = 0.0
+	var wall_hits: int = 0
+
 	func _init(launch: BattleRequest.Launch) -> void:
 		stats = launch.stats
 		position = launch.position
@@ -100,6 +110,7 @@ static func resolve(request: BattleRequest) -> BattleResult:
 			result.player_frames.append(_snapshot(player))
 			for i in enemies.size():
 				result.enemy_tracks[i].append(_snapshot(enemies[i]))
+			_record_losses(player, enemies, result)
 			result.finish_time = t
 			if player_out and all_enemies_out:
 				result.outcome = BattleResult.Outcome.DRAW
@@ -114,6 +125,7 @@ static func resolve(request: BattleRequest) -> BattleResult:
 	# 上限に達した。自然減衰があるので普通は来ないが、調整次第では
 	# ありうるので黙って無限に回さない。残っている回転で決める。
 	# プレイヤーの回転が敵の最大より上なら勝ち。
+	_record_losses(player, enemies, result)
 	result.finish_time = t
 	result.timed_out = true
 	var top_enemy_rps := 0.0
@@ -219,8 +231,13 @@ static func _resolve_disc_collision(
 		b.position, a.position, b.stats.radius, b_drain, req.spin_kick_scale
 	)
 
+	# 内訳は「実際に減った量」で数える(rpsは0で床打ちするので理論削り量とは違いうる)。
+	var a_before := a.rps
+	var b_before := b.rps
 	a.rps = maxf(a.rps - a_drain, 0.0)
 	b.rps = maxf(b.rps - b_drain, 0.0)
+	a.lost_drain += a_before - a.rps
+	b.lost_drain += b_before - b.rps
 	_mark_if_dead(a, "drain", req, t)
 	_mark_if_dead(b, "drain", req, t)
 
@@ -253,7 +270,10 @@ static func _resolve_walls(
 			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
+		var before := s.rps
 		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
+		s.lost_wall += before - s.rps
+		s.wall_hits += 1
 		_mark_if_dead(s, "wall", req, t)
 
 
@@ -274,16 +294,38 @@ static func _resolve_obstacles(
 			BattleResult.Impact.new(t, s.position - normal * s.stats.radius)
 		)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
+		var before := s.rps
 		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
+		s.lost_wall += before - s.rps
+		s.wall_hits += 1
 		_mark_if_dead(s, "wall", req, t)
 
 
 static func _apply_natural_decay(s: State, req: BattleRequest, dt: float) -> void:
 	# 減衰率は土俵のnatural_dampingにコマ自身のspin_decay倍率を掛ける。
 	# Full Steam Aheadがspin_decayを下げると、ゆっくり回転を失う＝長く回る。
+	var before := s.rps
 	s.rps = maxf(
 		s.rps - SpinnerPhysics.natural_spin_decay(
 			s.stats.radius, req.natural_damping * s.stats.spin_decay, dt
 		),
 		0.0
 	)
+	s.lost_decay += before - s.rps
+
+
+## 全機構の内訳を結果へ写す。閾値割れ後・打ち切りまで含めた「そのコマが
+## 実際に失ったrps」の合計なので、drain+wall+decay = 初期rps - 最終rps が成り立つ。
+static func _record_losses(player: State, enemies: Array[State], result: BattleResult) -> void:
+	result.player_rps_loss = _loss_dict(player)
+	for enemy in enemies:
+		result.enemy_rps_loss.append(_loss_dict(enemy))
+
+
+static func _loss_dict(s: State) -> Dictionary:
+	return {
+		"drain": s.lost_drain,
+		"wall": s.lost_wall,
+		"decay": s.lost_decay,
+		"wall_hits": s.wall_hits,
+	}
