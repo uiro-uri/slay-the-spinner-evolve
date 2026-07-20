@@ -10,11 +10,14 @@ extends RefCounted
 ## そこで敗者1体ぶんのrps系列を歩き、各フレームの減り方を署名で分類する。
 ##
 ## リゾルバは1ステップで rps を次の順に動かす(battle_resolver.gd):
-##   1. 衝突削り     rps -= drain           (引き算、drainは任意)
-##   2. 壁/障害物     rps *= wall_damping    (乗算、0.75)
-##   3. 自然減衰     rps -= radius*rate*dt  (引き算、定数)
+##   1. 衝突削り     rps -= drain                                  (引き算、drainは任意)
+##   2. 壁/障害物     rps *= effective_wall_damping(基準, wall_keep) (乗算)
+##   3. 自然減衰     rps -= radius*(rate*spin_decay)*dt            (引き算、定数)
 ## いずれも maxf(., 0.0) でクランプされる。3つは署名が違うので、自然減衰ぶんを
 ## 差し引いた残りが「乗算に見えるか/任意の引き算か/ゼロか」で見分けられる。
+## 照合に使う減衰量と壁係数は**そのコマの実効値**でなければならない。土俵の素の
+## 値で照合すると、MOMENTUM(spin_decay)/RAGE(wall_keep) 札を持つコマの減衰・壁が
+## すべて "drain"(衝突削り)に化け、死因と被弾数が嘘になる。
 ## impacts/wall_impacts の共有リストは体を区別しないので使わない(相手の壁衝突が
 ## 混ざる)。体ごとに正しいのは、その体自身のrps系列だけ。
 
@@ -26,12 +29,12 @@ static func classify(request: BattleRequest, result: BattleResult) -> Dictionary
 		return {"loser": "none"}
 
 	var frames: Array[BattleResult.Snapshot]
-	var radius: float
+	var stats: SpinnerStats
 	var who: String
 	if result.outcome == BattleResult.Outcome.ENEMY_WIN:
 		# プレイヤーが力尽きた。
 		frames = result.player_frames
-		radius = request.player.stats.radius
+		stats = request.player.stats
 		who = "player"
 	else:
 		# プレイヤーの勝ち。最後に力尽きた敵(＝最終rpsが最小の敵)を敗者とする。
@@ -39,10 +42,10 @@ static func classify(request: BattleRequest, result: BattleResult) -> Dictionary
 		if idx < 0:
 			return {"loser": "none"}
 		frames = result.enemy_tracks[idx]
-		radius = request.enemies[idx].stats.radius
+		stats = request.enemies[idx].stats
 		who = "enemy"
 
-	return _classify_track(request, frames, radius, who)
+	return _classify_track(request, frames, stats, who)
 
 
 static func _lowest_final_enemy(result: BattleResult) -> int:
@@ -61,11 +64,14 @@ static func _lowest_final_enemy(result: BattleResult) -> int:
 
 static func _classify_track(
 	request: BattleRequest, frames: Array[BattleResult.Snapshot],
-	radius: float, who: String
+	stats: SpinnerStats, who: String
 ) -> Dictionary:
 	var dt := request.time_step
-	var decay_amt := radius * request.natural_damping * dt
-	var wall_damping := request.wall_damping
+	# リゾルバが実際に適用する式と同じ実効値で照合する(battle_resolver.gd参照)。
+	var decay_amt := SpinnerPhysics.natural_spin_decay(
+		stats.radius, request.natural_damping * stats.spin_decay, dt)
+	var wall_damping := SpinnerPhysics.effective_wall_damping(
+		request.wall_damping, stats.wall_keep)
 	var threshold := request.lose_threshold
 
 	# 死んだフレーム(初めて閾値以下になったところ)を探す。
