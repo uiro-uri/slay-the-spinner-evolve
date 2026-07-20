@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "victorygrowth", "hitguard", "deathcause", "battlemetrics", "rpsloss"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss"
 ]
 
 
@@ -124,6 +124,9 @@ func _init() -> void:
 
 	print("== hitguard ==")
 	_test_hit_guard()
+
+	print("== sharpedge ==")
+	_test_sharp_edge()
 
 	print("== deathcause ==")
 	_test_death_cause()
@@ -406,6 +409,12 @@ func _test_hit_guard() -> void:
 	var suite = load("res://tests/test_hit_guard.gd").new()
 	suite.run(_check)
 	_done("hitguard")
+
+
+func _test_sharp_edge() -> void:
+	var suite = load("res://tests/test_sharp_edge.gd").new()
+	suite.run(_check)
+	_done("sharpedge")
 
 
 func _test_death_cause() -> void:

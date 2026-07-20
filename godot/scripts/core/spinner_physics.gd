@@ -139,6 +139,14 @@ static func guarded_spin_drain(drain: float, hit_guard: float) -> float:
 	return drain * (1.0 - clampf(hit_guard, 0.0, 1.0))
 
 
+## 攻め手のedge(0..)のぶんだけ、相手に与えるrps削りを増やす。edge=0.2で+20%。
+## guarded_spin_drain(受け手の軽減)と対になる攻め側の係数で、両方掛かるときは
+## 乗算なので順序によらない。負のedgeは0でクランプ(削りを減らす方向には使わない。
+## デバフ札を置かないカタログの原則と同じ向き)。
+static func sharpened_spin_drain(drain: float, edge: float) -> float:
+	return drain * (1.0 + maxf(edge, 0.0))
+
+
 ## 障害物(固定された円)にめり込んでいて、かつ障害物へ向かって進んでいるか。
 ## 壁のwall_hitと同じ構造で、法線が固定でなく中心からの放射方向になるだけ。
 ## 反射は wall_bounce(vel, (pos - obstacle_center).normalized(), restitution) を使う。

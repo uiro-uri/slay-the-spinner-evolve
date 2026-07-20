@@ -75,6 +75,11 @@ const FULL_STEAM_FLOOR := 0.4
 const GUARD_HIT_STEP := 0.17
 const GUARD_HIT_MAX := 0.5
 
+## Sharp Edgeが1枚あたり上げる与ダメ増強量(edge)と、その上限。
+## 受け側のGUARD(0.17/0.5)と対になる攻め版。+20%/枚・3枚の上限+60%。
+const EDGE_STEP := 0.2
+const EDGE_MAX := 0.6
+
 ## ゴースト1枚あたりの無敵秒数。基準は開始後2秒間で、複数取得で線形に延長する
 ## (2枚=4秒、3枚=6秒…)。無敵時間の知識をここに閉じ込め、画面(Battle)も
 ## シミュ(RunSim)も同じ値を参照する。
@@ -128,6 +133,13 @@ static func all() -> Array[CustomPart]:
 		# 7枚プールでは3枚提示の顔ぶれが毎回同じになるため追加(報酬プール拡充)。
 		CustomPart.make_guard(10, "PART_SHOCK_ABSORBER", CustomPart.Rarity.COMMON,
 			GUARD_HIT_STEP, GUARD_HIT_MAX),
+		# Sharp Edge: 衝突で相手に与えるrps削りを増やす攻めのCOMMON札。既存プールは
+		# 防御(GUARD/RAGE)・寿命(MOMENTUM)・基礎値(質量/RPS)ばかりで「与える削り」の
+		# 軸が空白だった。撃破ボーナス(接触で仕留めた勝利は成長+1.0)と同じ、
+		# 当てにいくプレイを装備側から支える札。相手のspin_kickは受けた削り量に
+		# 比例するので、壁への弾き飛ばしも強くなる。
+		CustomPart.make_edge(11, "PART_SHARP_EDGE", CustomPart.Rarity.COMMON,
+			EDGE_STEP, EDGE_MAX),
 	]
 
 

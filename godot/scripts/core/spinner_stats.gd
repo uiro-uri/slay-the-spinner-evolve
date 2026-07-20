@@ -38,6 +38,12 @@ extends Resource
 ## 壁のwall_keepと対になる衝突版の防御。Shock Absorberが上げる。
 @export_range(0.0, 1.0, 0.01) var hit_guard: float = 0.0
 
+## コマ同士の衝突で相手に与えるrps削りを増やす度合い。0で従来どおり、0.2で+20%。
+## hit_guard(受け)と対になる攻めのステータス。Sharp Edgeが上げる。
+## 相手のspin_kickは受けた削り量に比例するので、削りが増えるぶん相手を強く
+## 弾き飛ばす=壁へ押し込む攻めとも噛み合う。
+@export_range(0.0, 2.0, 0.01) var edge: float = 0.0
+
 ## 回転数の上限。「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
 ## SPIN_ENGINE札の上限(CustomPartCatalog.RPS_CAP)も勝利成長もこれを参照する。
 const RPS_CAP := 40.0
@@ -77,6 +83,7 @@ func duplicate_stats() -> SpinnerStats:
 	copy.spin_decay = spin_decay
 	copy.wall_keep = wall_keep
 	copy.hit_guard = hit_guard
+	copy.edge = edge
 	return copy
 
 

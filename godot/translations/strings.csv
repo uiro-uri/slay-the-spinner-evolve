@@ -74,6 +74,7 @@ PART_EFFECT_GHOST,No enemy collision for first {0}s,開始{0}秒間 敵をすり
 PART_EFFECT_MOMENTUM,Friction & spin decay ×{0},摩擦と回転減衰 ×{0}
 PART_EFFECT_RAGE,Bounce ×{0} (max {1}) & less spin lost on walls,反発 ×{0}（上限 {1}）＆壁でrpsを失いにくい
 PART_EFFECT_GUARD,Spin lost to hits -{0}% (stacks up to -{1}%),衝突で削られる回転 -{0}%（重ねて最大 -{1}%）
+PART_EFFECT_EDGE,Spin drained from foes on hit +{0}% (stacks up to +{1}%),衝突で相手から削る回転 +{0}%（重ねて最大 +{1}%）
 PART_EFFECT_GROWTH,Diameter ×{0} (max {1}) & mass ×{2} (max {3}),直径 ×{0}（上限 {1}）＆質量 ×{2}（上限 {3}）
 PART_NOTE_GROWTH,"Shrugs off hits and knocks foes back harder, but natural decay rises and it's easier to hit","衝突に強くなり相手をより弾くが、自然減衰が上がり被弾しやすい"
 PART_NOTE_MASS_UP,Takes less spin loss on hits and knocks foes back harder,衝突で削られる回転が減り、相手をより弾く
@@ -100,3 +101,4 @@ PART_SPIN_ENGINE,Spin Engine,スピンエンジン
 PART_SPARE_CORE,Spare Core,スペアコア
 PART_GHOST,Ghost,ゴースト
 PART_SHOCK_ABSORBER,Shock Absorber,ショックアブソーバー
+PART_SHARP_EDGE,Sharp Edge,シャープエッジ
