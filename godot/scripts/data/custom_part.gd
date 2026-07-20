@@ -35,7 +35,14 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ##
 ## GUARD: コマ同士の衝突で受けるrps削りを減らす(hit_guardを hit_guard_step ぶん
 ## 加算、上限hit_guard_max)。壁のRAGE(wall_keep)と対になる衝突版の純防御。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD }
+##
+## GROWTH: 直径と質量の両方を倍にする「巨大化」。直径だけの倍率(旧GIANT_GROWTH)は
+## 自然減衰(radius×spin_decayに比例)の悪化が上回り、単独計測でLv3 -6.4pt/枚と
+## 唯一の純マイナス札だった=「報酬は全部プラス」の原則(CustomPartCatalog.all参照)に
+## 実測で反していた。大きくなるなら重くもなる方が直感にも合い、質量が衝突耐性
+## (削りは1/(質量×半径²))と弾き飛ばしを補って、寿命悪化と引き換えの本物の
+## トレードオフになる。
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -99,6 +106,12 @@ const _STAT_NAMES := {
 
 ## GUARD札のhit_guard上限。1.0(衝突削り無効)まで許すと無敵化するので1未満で頭打ち。
 @export var hit_guard_max: float = 1.0
+
+## GROWTH札が質量に掛ける倍率。直径側の倍率は multiplier / 上限は cap を使う。
+@export var mass_multiplier: float = 1.0
+
+## GROWTH札の質量上限。0以下なら上限なし。
+@export var mass_cap: float = 0.0
 
 
 static func make(
@@ -176,6 +189,26 @@ static func make_rage(
 	return part
 
 
+## 巨大化札を作る。直径を radius_mult_ 倍(radius_cap_上限)、質量を mass_mult_ 倍
+## (mass_cap_上限)にする複合。直径には自然減衰の悪化(radius×spin_decayに比例)が
+## あるので、質量側の上乗せで純マイナスにならないようにする(効果注記で代償も謳う)。
+static func make_growth(
+	id_: int, title_key_: String, rarity_: Rarity,
+	radius_mult_: float, radius_cap_: float,
+	mass_mult_: float, mass_cap_: float
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.GROWTH
+	part.multiplier = radius_mult_
+	part.cap = radius_cap_
+	part.mass_multiplier = mass_mult_
+	part.mass_cap = mass_cap_
+	return part
+
+
 ## 衝撃吸収札を作る。衝突で受けるrps削りの軽減(hit_guard)を step_ ぶん上げる。
 ## max_ は重ねがけの上限(1.0=削り無効の無敵化を防ぐためRAGEと同様1未満)。
 static func make_guard(
@@ -206,6 +239,18 @@ func apply_to(stats: SpinnerStats) -> void:
 	# して、重ねがけで削り無効(=衝突無敵)にならないようにする。
 	if effect == Effect.GUARD:
 		stats.hit_guard = minf(stats.hit_guard + hit_guard_step, hit_guard_max)
+		return
+	# 巨大化(GROWTH): 直径と質量の両方を倍にする。それぞれ上限でクランプ
+	# (直径はアリーナを埋め尽くさないよう、質量は青天井の複利を防ぐよう)。
+	if effect == Effect.GROWTH:
+		var grown_radius := stats.radius * multiplier
+		if cap > 0.0:
+			grown_radius = minf(grown_radius, cap)
+		stats.radius = grown_radius
+		var grown_mass := stats.mass * mass_multiplier
+		if mass_cap > 0.0:
+			grown_mass = minf(grown_mass, mass_cap)
+		stats.mass = grown_mass
 		return
 	# 怒りの反射(RAGE): 反発を上げつつ(cap上限)、壁rps喪失を減らす(wall_keep加算)。
 	if effect == Effect.RAGE:
@@ -260,6 +305,15 @@ func describe() -> String:
 	if effect == Effect.GUARD:
 		return tr("PART_EFFECT_GUARD").format(
 			[_trim(hit_guard_step * 100.0), _trim(hit_guard_max * 100.0)]
+		)
+	# 巨大化は直径と質量の複合。代償(自然減衰の悪化)を効果注記で必ず謳う——
+	# 直径だけの旧版は代償が読めない罠札で、効果文だけで選ぶと損をする札だった。
+	if effect == Effect.GROWTH:
+		return (
+			tr("PART_EFFECT_GROWTH").format(
+				[_trim(multiplier), _trim(cap), _trim(mass_multiplier), _trim(mass_cap)]
+			)
+			+ "\n" + tr("PART_NOTE_GROWTH")
 		)
 	var text: String = tr(_STAT_KEYS[stat]).format([_trim(multiplier)])
 	if cap > 0.0:

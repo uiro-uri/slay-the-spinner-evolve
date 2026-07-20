@@ -19,6 +19,7 @@ func run(check: Callable) -> void:
 	_test_set_lives(check)
 	_test_ghost(check)
 	_test_rage(check)
+	_test_growth(check)
 
 
 func _stats() -> SpinnerStats:
@@ -109,6 +110,12 @@ func _test_caps(check: Callable) -> void:
 				part.cap > 0.0,
 				"パーツ%d(%s): 強化札には上限がある" % [part.id, part.title_key]
 			)
+		# GROWTHの質量側も同じ理屈で上限が要る(青天井なら複利で発散する)。
+		if part.mass_multiplier > 1.0:
+			check.call(
+				part.mass_cap > 0.0,
+				"パーツ%d(%s): 質量強化にも上限がある" % [part.id, part.title_key]
+			)
 
 
 ## 説明文が実際の効果と食い違わないこと。
@@ -162,6 +169,25 @@ func _test_description_matches_effect(check: Callable) -> void:
 				text.contains(CustomPart._trim(part.hit_guard_step * 100.0))
 					and text.contains(CustomPart._trim(part.hit_guard_max * 100.0)),
 				"パーツ%d(%s): 衝撃吸収の説明に軽減率と上限が出ている (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			continue
+
+		# 巨大化は直径と質量の複合。両方の倍率と、代償(自然減衰の悪化)の注記が
+		# 出ていることを確かめる。旧版(直径のみ)は代償が読めない罠札だった。
+		if part.effect == CustomPart.Effect.GROWTH:
+			check.call(
+				text.contains(CustomPart._trim(part.multiplier))
+					and text.contains(CustomPart._trim(part.mass_multiplier)),
+				"パーツ%d(%s): 巨大化の説明に直径と質量の倍率が出ている (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			check.call(
+				not text.contains("PART_NOTE") and text.contains("\n")
+					and text.to_lower().contains("decay"),
+				"パーツ%d(%s): 巨大化の注記が自然減衰の代償に触れる (%s)" % [
 					part.id, part.title_key, text
 				]
 			)
@@ -445,6 +471,61 @@ func _test_rage(check: Callable) -> void:
 	check.call(
 		CustomPartCatalog.RAGE_WALL_KEEP_MAX < 1.0,
 		"怒りの反射: 壁rps保持の上限は1.0未満(完全無損失=無敵化を防ぐ) (%.2f)" % CustomPartCatalog.RAGE_WALL_KEEP_MAX
+	)
+
+
+## 巨大化(GROWTH)札。直径と質量の両方が上がる複合。直径だけ(旧GIANT_GROWTH)は
+## 自然減衰の悪化が上回る唯一の純マイナス札=罠だったので、質量で釣り合わせた。
+func _test_growth(check: Callable) -> void:
+	var growth := CustomPartCatalog.by_id(2)
+	check.call(growth.effect == CustomPart.Effect.GROWTH, "巨大化: 効果種別がGROWTH")
+
+	# 1枚で直径と質量の両方が上がる(複合)。
+	var s := _stats()
+	var before_radius := s.radius
+	var before_mass := s.mass
+	growth.apply_to(s)
+	check.call(
+		s.radius > before_radius,
+		"巨大化: 直径が上がる (%.3f -> %.3f)" % [before_radius, s.radius]
+	)
+	check.call(
+		s.mass > before_mass,
+		"巨大化: 質量も上がる (%.3f -> %.3f)" % [before_mass, s.mass]
+	)
+	check.call(
+		is_equal_approx(s.radius, before_radius * growth.multiplier),
+		"巨大化: 直径は倍率どおり (%.3f)" % s.radius
+	)
+	check.call(
+		is_equal_approx(s.mass, before_mass * growth.mass_multiplier),
+		"巨大化: 質量は倍率どおり (%.3f)" % s.mass
+	)
+
+	# 重ねがけしても両方の上限で止まる(直径はアリーナ埋め尽くし、質量は複利発散を防ぐ)。
+	s = _stats()
+	for i in 20:
+		growth.apply_to(s)
+	check.call(
+		s.radius <= CustomPartCatalog.RADIUS_CAP + EPS,
+		"巨大化: 直径が上限%.1fで止まる (%.3f)" % [CustomPartCatalog.RADIUS_CAP, s.radius]
+	)
+	check.call(
+		s.mass <= CustomPartCatalog.MASS_CAP + EPS,
+		"巨大化: 質量が上限%.1fで止まる (%.3f)" % [CustomPartCatalog.MASS_CAP, s.mass]
+	)
+
+	# 説明(ja)が両方の倍率を出し、注記が代償(自然減衰)に触れること。
+	TranslationServer.set_locale("ja")
+	var text := growth.describe()
+	check.call(
+		text.contains(CustomPart._trim(growth.multiplier))
+			and text.contains(CustomPart._trim(growth.mass_multiplier)),
+		"巨大化: 説明(ja)に直径と質量の倍率が出る (%s)" % text
+	)
+	check.call(
+		text.contains("減衰"),
+		"巨大化: 注記(ja)が自然減衰の代償に触れる (%s)" % text
 	)
 
 

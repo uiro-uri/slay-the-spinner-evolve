@@ -345,8 +345,13 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	var momentum_text: String = NaivePlay.card_text(momentum)
 	check.call("回転減衰" in momentum_text, "naive_play: MOMENTUM札は回転減衰を謳う (%s)" % momentum_text)
 	check.call(not ("質量" in momentum_text), "naive_play: MOMENTUM札の表記に質量が混ざらない")
-	var growth := CustomPartCatalog.by_id(2)    # 純ステータス札(直径)は従来表記のまま
-	check.call("直径" in NaivePlay.card_text(growth), "naive_play: 直径札は直径を謳う")
+	# GROWTH(直径+質量の複合)は両方の効果と、代償(自然減衰の悪化)まで謳うこと。
+	# 旧版(直径のみ)はCLIに代償が出ず、効果文だけで選ぶコールドプレイの罠だった。
+	var growth := CustomPartCatalog.by_id(2)
+	var growth_text: String = NaivePlay.card_text(growth)
+	check.call("直径" in growth_text, "naive_play: 巨大化札は直径を謳う (%s)" % growth_text)
+	check.call("質量" in growth_text, "naive_play: 巨大化札は質量も謳う (%s)" % growth_text)
+	check.call("減衰" in growth_text, "naive_play: 巨大化札は代償(自然減衰)も謳う (%s)" % growth_text)
 	var lives := CustomPartCatalog.by_id(8)
 	check.call("残機" in NaivePlay.card_text(lives), "naive_play: 残機札は残機を謳う")
 

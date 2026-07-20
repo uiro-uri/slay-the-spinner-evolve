@@ -20,7 +20,7 @@ const COPIES := [0, 1, 2, 3]
 # 測る札。SET_LIVES(id8)は1戦では無意味なので外す。
 const PART_IDS := [2, 3, 5, 6, 7, 9, 10]
 const PART_LABEL := {
-	2: "GIANT_GROWTH  半径×1.25",
+	2: "GIANT_GROWTH  半径+質量複合",
 	3: "OVERENCUMBERED 質量×1.5 ",
 	5: "FULL_STEAM     勢い維持×0.8",
 	6: "RAGE_REFLECT   反発+壁保持",
