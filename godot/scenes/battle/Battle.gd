@@ -68,7 +68,7 @@ const BAR_ROW_H := 60.0
 ## 壁の回転喪失を衝突の激しさに比例させる基準速度。法線方向の進入速度が
 ## この値以上の激突でwall_dampingそのまま、そっと触れるだけならほぼ無損失。
 ## 0でスケール無効(常にwall_damping)。
-@export_range(0.0, 40.0, 0.5) var wall_impact_ref_speed: float = 12.0
+@export_range(0.0, 40.0, 0.5) var wall_impact_ref_speed: float = 8.0
 
 ## これを下回ったら負け。
 @export_range(0.0, 1.0, 0.01) var lose_threshold: float = 0.03

@@ -87,7 +87,7 @@ var wall_damping: float = 0.75
 ## この値以上でwall_dampingそのまま(激突=従来の代償)、遅い接触ほど無損失に近づく。
 ## 0以下でスケール無効=常にwall_damping(旧挙動)。詳細はSpinnerPhysics.
 ## impact_scaled_wall_damping。
-var wall_impact_ref_speed: float = 12.0
+var wall_impact_ref_speed: float = 8.0
 var lose_threshold: float = 0.03
 
 ## ゴーストの無敵時間(秒)。開始からこの時刻までプレイヤーと敵の衝突判定を切る。
