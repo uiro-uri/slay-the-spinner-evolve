@@ -8,6 +8,8 @@ extends SceneTree
 ##   enter  --state=path --col=C --bseed=B    次ノードへ入り、敵の予告(テレグラフ)を出す
 ##   launch --state=path --bseed=B --from-deg=D --target=center|enemyK|x,y --force=F
 ##                                            自分の発射を決めて1戦解決。勝敗を出す
+##                                            (解決は enter/retry で予告した bseed で行う。
+##                                             勝敗は保存され、同じ戦闘は撃ち直せない)
 ##   reward --state=path --bseed=B            勝利後、報酬3枚の効果を出す
 ##                                            (最初の1回で確定。以後bseedを変えても同じ3枚)
 ##   pick   --state=path --id=ID              報酬を1枚取る。乱戦は倒した頭数ぶん
@@ -60,6 +62,9 @@ func _default_state(seed_value: int) -> Dictionary:
 		"parts": [],
 		"offered": null,       # 直前のrewardで提示した札id列 (pickの検証と再抽選防止)
 		"rewards_left": null,  # この勝利で残っている報酬選択回数 (乱戦=頭数ぶん)
+		"bseed": null,         # enter/retryで予告したbseed (launchは必ずこれで解決する)
+		"must_retry": false,   # 敗北済み。retry(残機消費)かgiveup以外を受け付けない
+		"won": false,          # 勝利済み。reward→pickでノードを確定するまで撃ち直せない
 		"continues": 3,
 		"cleared": false,
 		"dead": false,
@@ -130,6 +135,9 @@ func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
 	state["pending"] = col
 	state["offered"] = null    # 古い提示札で新ノードをpickできないように
 	state["rewards_left"] = null
+	state["bseed"] = bseed     # launchはこの予告と同じ敵で解決する
+	state["must_retry"] = false
+	state["won"] = false
 	_save(state, path)
 	# pathには勝ってから足す。ここでは表示のためadvanceした木を使う
 	tree.advance_to(target)
@@ -138,8 +146,12 @@ func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
 func _retry(state: Dictionary, path: String, bseed: int) -> void:
 	if int(state["continues"]) <= 0:
 		print("残機なし。giveupへ。"); return
+	if state.get("won", false):
+		print("勝利済み。reward → pick でノードを確定する。"); return
 	state["continues"] = int(state["continues"]) - 1
 	state["offered"] = null
+	state["bseed"] = bseed     # 新しい予告。launchはこのbseedで解決する
+	state["must_retry"] = false
 	_save(state, path)
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
@@ -151,8 +163,7 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
 	var field: FieldData = node.field
 	print("=== BATTLE 段%d %s ===" % [tree.current_step(), field.title_key])
-	print("土俵: 形状=%s 中心=%s 内接半径=%.2f 範囲=%s" % [
-		_wall_name(field.wall_shape), str(field.center()), field.inradius(), str(field.arena_bounds)])
+	print(field_text(field))
 	print("自分: mass=%.2f radius=%.2f rps=%.1f friction=%.3f rest=%.2f spin_decay=%.2f wall_keep=%.2f hit_guard=%.2f edge=%.2f  発射リング半径=%.2f" % [
 		state["stats"]["mass"], state["stats"]["radius"], state["stats"]["rps"],
 		state["stats"]["friction"], state["stats"]["restitution"],
@@ -172,11 +183,19 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 	print("→ launch --bseed=%d --from-deg=<0-360> --target=center|enemy1..|x,y --force=<0-1>" % bseed)
 
 func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float) -> void:
+	var block := launch_block_reason(state)
+	if block != "":
+		printerr(block); return
+	# 解決は予告(enter/retry)時のbseedで行う。以前は引数のbseedをそのまま使っており、
+	# 予告と違う敵で戦える=テレグラフを読んで狙いを決める工程が嘘になる穴があった。
+	var use_bseed := launch_bseed(state, bseed)
+	if use_bseed != bseed:
+		print("(予告済みの bseed=%d で解決する。--bseed=%d は無視)" % [use_bseed, bseed])
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
 	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
 	var field: FieldData = node.field
-	var plans := _enemy_plans(node.enemies, field, bseed)
+	var plans := _enemy_plans(node.enemies, field, use_bseed)
 	var pstats := stats_from(state["stats"])
 
 	var pos := _ring_pos(field, pstats.radius, from_deg)
@@ -234,6 +253,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			var grown := stats_from(state["stats"])
 			grown.grow_rps_by_victory(knockout)
 			state["stats"] = stats_dict(grown)
+			state["won"] = true    # 撃ち直しによる勝利成長の二重取りを防ぐ
 			_save(state, path)
 			if knockout:
 				print("★撃破ボーナス★ 接触で仕留めた勝利で回転が大きく成長 rps=%.1f (+%.1f, 上限%.0f)" % [
@@ -243,6 +263,10 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 					grown.rps, SpinnerStats.VICTORY_RPS_GROWTH, SpinnerStats.RPS_CAP])
 			print("→ reward --bseed=<R> で報酬を見る")
 	else:
+		# 敗北も保存する。以前は敗北が状態に残らず、残機を消費せずに同じノードを
+		# 何度でも撃ち直せた(「なかったこと」にできる敗北は一次証拠を汚す)。
+		mark_defeat(state)
+		_save(state, path)
 		print("→ retry --bseed=<新B> (残機%d) か giveup" % state["continues"])
 
 func _reward(state: Dictionary, path: String, bseed: int) -> void:
@@ -309,6 +333,7 @@ func _pick(state: Dictionary, path: String, id: int) -> void:
 	# ノード突破を確定
 	state["path"].append([tree.current_step(), col])
 	state["pending"] = null
+	state["won"] = false
 	if tree.is_goal():
 		state["cleared"] = true
 	_save(state, path)
@@ -453,6 +478,44 @@ static func pick_allowed(offered: Array, id: int) -> bool:
 	return false
 
 
+## 土俵の表示行。実ゲームでは画面に見えている情報(壁の形と柱)をCLIにも全部出す。
+## 以前は柱(障害物)が出ておらず、PILLARS土俵で見えない柱に向かって盲目で狙いを
+## 決めていた(実ゲームのArenaは柱を描いていてプレイヤーには見える。一次証拠の欠落)。
+static func field_text(field: FieldData) -> String:
+	var line := "土俵: 形状=%s 中心=%s 内接半径=%.2f 範囲=%s" % [
+		_wall_name(field.wall_shape), str(field.center()), field.inradius(), str(field.arena_bounds)]
+	if not field.obstacles.is_empty():
+		var pillars := []
+		for o in field.obstacles:
+			pillars.append("(%.1f,%.1f)r%.1f" % [o.x, o.y, o.z])
+		line += "  柱=%s" % " ".join(pillars)
+	return line
+
+
+## 敗北を状態に記録する。retry(残機消費)かgiveupを選ぶまでlaunchを受け付けない。
+static func mark_defeat(state: Dictionary) -> void:
+	state["must_retry"] = true
+
+
+## launchを受け付けられない理由。空文字なら撃てる。
+## 旧state(キー欠落)は従来どおり撃てる(後方互換)。
+static func launch_block_reason(state: Dictionary) -> String:
+	if state.get("pending") == null:
+		return "交戦中のノードがない。enter してから launch"
+	if state.get("must_retry", false):
+		return "敗北済み。retry --bseed=<新B> で残機を消費するか giveup"
+	if state.get("won", false):
+		return "勝利済み。reward → pick でノードを確定する"
+	return ""
+
+
+## launchで使うbseed。enter/retryで予告したbseedが保存されていればそれを使う。
+## 旧state(キー欠落)は引数のbseedを使う(後方互換)。
+static func launch_bseed(state: Dictionary, passed: int) -> int:
+	var stored = state.get("bseed")
+	return int(stored) if stored != null else passed
+
+
 ## rps喪失内訳の1体ぶんの表示。BattleResultのloss dict(drain/wall/decay/wall_hits)を
 ## そのまま読む。キー欠落(旧結果)は0扱いで落ちない。
 static func loss_text(label: String, loss: Dictionary) -> String:
@@ -475,7 +538,7 @@ static func result_label(outcome: int) -> String:
 func _rarity(r: int) -> String:
 	return "RARE" if r == CustomPart.Rarity.RARE else "COMMON"
 
-func _wall_name(w: int) -> String:
+static func _wall_name(w: int) -> String:
 	var names := ["RECT","CIRCLE","OCT"]
 	return names[w] if w >= 0 and w < names.size() else str(w)
 
