@@ -16,13 +16,22 @@ func run(check: Callable) -> void:
 	_test_from_pull(check)
 
 
-## レンジの妥当性。MINは自機と同じ下限(0)、MAXが上限。MIN>=0でMIN<MAX。
+## レンジの妥当性。MINは自機の下限(0)、ENEMY_MINは敵の抽選下限、MAXが上限。
 func _test_constants(check: Callable) -> void:
 	check.call(LaunchSpeed.MIN < LaunchSpeed.MAX, "MIN(%.1f) < MAX(%.1f)" % [LaunchSpeed.MIN, LaunchSpeed.MAX])
 	check.call(LaunchSpeed.MIN >= 0.0, "MIN(%.1f) は0以上(負の速度は無い)" % LaunchSpeed.MIN)
+	check.call(
+		LaunchSpeed.ENEMY_MIN > LaunchSpeed.MIN,
+		"ENEMY_MIN(%.1f) > MIN(%.1f) (置物スポーンを許さない)" % [LaunchSpeed.ENEMY_MIN, LaunchSpeed.MIN]
+	)
+	check.call(
+		LaunchSpeed.ENEMY_MIN < LaunchSpeed.MAX * 0.5,
+		"ENEMY_MIN(%.1f) はMAXの半分未満(低速帯の読み合いを残す)" % LaunchSpeed.ENEMY_MIN
+	)
 
 
-## 敵の抽選は必ず[MIN,MAX]に収まること。多数サンプルで両端も踏む。
+## 敵の抽選は必ず[ENEMY_MIN,MAX]に収まること。多数サンプルで両端も踏む。
+## 下限がENEMY_MINなのが本質: 下限0に戻すと「ほぼ静止の無料キル」が復活する。
 func _test_random_in_range(check: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 12345
@@ -31,14 +40,14 @@ func _test_random_in_range(check: Callable) -> void:
 	var all_in := true
 	for i in 5000:
 		var s := LaunchSpeed.random(rng)
-		if s < LaunchSpeed.MIN - EPS or s > LaunchSpeed.MAX + EPS:
+		if s < LaunchSpeed.ENEMY_MIN - EPS or s > LaunchSpeed.MAX + EPS:
 			all_in = false
 		lo = minf(lo, s)
 		hi = maxf(hi, s)
-	check.call(all_in, "random(): 全サンプルが[MIN,MAX]に収まる (観測 %.2f〜%.2f)" % [lo, hi])
+	check.call(all_in, "random(): 全サンプルが[ENEMY_MIN,MAX]に収まる (観測 %.2f〜%.2f)" % [lo, hi])
 	# レンジをちゃんと使い切っている(両端近くまで出る)ことも確認。
 	check.call(
-		lo < LaunchSpeed.MIN + 0.5 and hi > LaunchSpeed.MAX - 0.5,
+		lo < LaunchSpeed.ENEMY_MIN + 0.5 and hi > LaunchSpeed.MAX - 0.5,
 		"random(): レンジの両端近くまで抽選される (%.2f〜%.2f)" % [lo, hi]
 	)
 
