@@ -26,6 +26,9 @@ func run(check: Callable) -> void:
 	_test_naive_play_result_label(check)
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
+	_test_naive_play_field_text(check)
+	_test_naive_play_launch_lock(check)
+	_test_naive_play_bseed_pin(check)
 
 
 func _request() -> BattleRequest:
@@ -436,6 +439,73 @@ func _test_naive_play_group_rewards(check: Callable) -> void:
 	check.call(NaivePlay.rewards_for_group(2) == 2, "naive_play: 2体乱戦は報酬2回")
 	check.call(NaivePlay.rewards_for_group(3) == 3, "naive_play: 3体乱戦は報酬3回")
 	check.call(NaivePlay.rewards_for_group(0) == 1, "naive_play: 0体でも最低1回(Mainのmaxiと同じ)")
+
+
+## 土俵表示に柱(障害物)が出ること。発見の経緯: 実ゲームではArenaが柱を描いて
+## プレイヤーに見えているのに、CLIの土俵行には出ておらず、PILLARS土俵で見えない
+## 柱に向かって盲目で狙いを決めていた(コールドプレイの一次証拠の欠落)。
+func _test_naive_play_field_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var pillars: FieldData = null
+	var classic: FieldData = null
+	for field in FieldRoster.all():
+		if field.title_key == "FIELD_PILLARS":
+			pillars = field
+		elif field.title_key == "FIELD_CLASSIC":
+			classic = field
+	var text: String = NaivePlay.field_text(pillars)
+	check.call("柱" in text, "naive_play: PILLARS土俵は柱を表示する (%s)" % text)
+	check.call(
+		pillars.obstacles.size() > 0,
+		"前提: PILLARS土俵に障害物がある")
+	for o in pillars.obstacles:
+		check.call(
+			("(%.1f,%.1f)r%.1f" % [o.x, o.y, o.z]) in text,
+			"naive_play: 柱の位置と半径が表示に載る (%.1f,%.1f)r%.1f" % [o.x, o.y, o.z])
+	var plain: String = NaivePlay.field_text(classic)
+	check.call(not ("柱" in plain), "naive_play: 柱の無い土俵に柱表記は出ない (%s)" % plain)
+	check.call("形状=RECT" in plain, "naive_play: 従来の土俵情報(壁形状)も出る")
+
+
+## launchの結果(勝敗)が状態に保存され、確定後の撃ち直しを受け付けないこと。
+## 発見の経緯: 敗北が状態に残らず、残機を消費せずに同じノードを何度でも
+## 撃ち直せた(勝利側も撃ち直すたびに勝利成長rpsを二重取りできた)。
+func _test_naive_play_launch_lock(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var state := {"pending": 2, "must_retry": false, "won": false}
+	check.call(NaivePlay.launch_block_reason(state) == "", "naive_play: 交戦中は撃てる")
+	NaivePlay.mark_defeat(state)
+	check.call(
+		NaivePlay.launch_block_reason(state) != "",
+		"naive_play: 敗北後はretry/giveup以外を受け付けない")
+	var won_state := {"pending": 2, "must_retry": false, "won": true}
+	check.call(
+		NaivePlay.launch_block_reason(won_state) != "",
+		"naive_play: 勝利後の撃ち直し(勝利成長の二重取り)を受け付けない")
+	check.call(
+		NaivePlay.launch_block_reason({"pending": null}) != "",
+		"naive_play: 交戦外では撃てない")
+	check.call(
+		NaivePlay.launch_block_reason({"pending": 1}) == "",
+		"naive_play: 旧state(キー欠落)は従来どおり撃てる(後方互換)")
+
+
+## launchは予告(enter/retry)時のbseedで解決すること。発見の経緯: 引数のbseedを
+## そのまま使っており、予告と違う敵で戦える=テレグラフを読む工程が嘘になる穴。
+func _test_naive_play_bseed_pin(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	check.call(
+		NaivePlay.launch_bseed({"bseed": 1111}, 9999) == 1111,
+		"naive_play: 保存済みbseedを優先する(予告と同じ敵で解決)")
+	check.call(
+		NaivePlay.launch_bseed({"bseed": 1111.0}, 9999) == 1111,
+		"naive_play: JSON経由のfloat bseedも整数で読める")
+	check.call(
+		NaivePlay.launch_bseed({"bseed": null}, 9999) == 9999,
+		"naive_play: bseed未保存(旧state)は引数を使う")
+	check.call(
+		NaivePlay.launch_bseed({}, 7) == 7,
+		"naive_play: キー欠落(旧state)も引数を使う")
 
 
 ## 引き分けは進行上は敗北扱いだが、表示では区別する。発見の経緯: DRAWが
