@@ -11,15 +11,17 @@ extends RefCounted
 ##
 ## リゾルバは1ステップで rps を次の順に動かす(battle_resolver.gd):
 ##   1. 衝突削り     rps -= drain                                  (引き算、drainは任意)
-##   2. 壁/障害物     rps *= effective_wall_damping(基準, wall_keep) (乗算)
+##   2. 壁/障害物     rps *= effective_wall_damping(衝突の激しさでスケールした基準, wall_keep)
 ##   3. 自然減衰     rps -= radius*(rate*spin_decay)*dt            (引き算、定数)
-## いずれも maxf(., 0.0) でクランプされる。3つは署名が違うので、自然減衰ぶんを
-## 差し引いた残りが「乗算に見えるか/任意の引き算か/ゼロか」で見分けられる。
-## 照合に使う減衰量と壁係数は**そのコマの実効値**でなければならない。土俵の素の
-## 値で照合すると、MOMENTUM(spin_decay)/RAGE(wall_keep) 札を持つコマの減衰・壁が
-## すべて "drain"(衝突削り)に化け、死因と被弾数が嘘になる。
-## impacts/wall_impacts の共有リストは体を区別しないので使わない(相手の壁衝突が
-## 混ざる)。体ごとに正しいのは、その体自身のrps系列だけ。
+## いずれも maxf(., 0.0) でクランプされる。自然減衰は定数なので値で照合できるが、
+## 壁は損失が進入速度に比例するようになり(impact_scaled_wall_damping)、rps系列の
+## 値照合では衝突削りと見分けられない。そこで壁だけは、リゾルバが記録した事実
+## (wall_impacts の時刻と接触点)をその体のフレームと突き合わせて見分ける。接触点は
+## 「その体の中心から壁法線方向へ半径ぶん」に置かれるため、該当フレームの自分の
+## 中心との距離がちょうど自分の半径のものだけが自分の壁衝突になる。
+## 照合に使う減衰量は**そのコマの実効値**でなければならない。土俵の素の値で照合
+## すると、MOMENTUM(spin_decay) 札を持つコマの減衰が "drain"(衝突削り)に化け、
+## 死因と被弾数が嘘になる。
 
 
 ## 敗者の死因を1レコードにまとめて返す。決着が付いていない(引き分け/打ち切り)
@@ -45,7 +47,7 @@ static func classify(request: BattleRequest, result: BattleResult) -> Dictionary
 		stats = request.enemies[idx].stats
 		who = "enemy"
 
-	return _classify_track(request, frames, stats, who)
+	return _classify_track(request, frames, stats, who, result.wall_impacts)
 
 
 static func _lowest_final_enemy(result: BattleResult) -> int:
@@ -64,14 +66,17 @@ static func _lowest_final_enemy(result: BattleResult) -> int:
 
 static func _classify_track(
 	request: BattleRequest, frames: Array[BattleResult.Snapshot],
-	stats: SpinnerStats, who: String
+	stats: SpinnerStats, who: String, wall_impacts: Array[BattleResult.Impact]
 ) -> Dictionary:
 	var dt := request.time_step
 	# リゾルバが実際に適用する式と同じ実効値で照合する(battle_resolver.gd参照)。
 	var decay_amt := SpinnerPhysics.natural_spin_decay(
 		stats.radius, request.natural_damping * stats.spin_decay, dt)
-	var wall_damping := SpinnerPhysics.effective_wall_damping(
+	# 壁損失は速度スケールで変動するが、この値より深くは削れない(損失の上限側)。
+	# 壁だけでは説明できない喪失を衝突削りへ振り分けるのに使う。
+	var wall_damping_floor := SpinnerPhysics.effective_wall_damping(
 		request.wall_damping, stats.wall_keep)
+	var own_walls := _own_wall_transitions(frames, stats.radius, wall_impacts, dt)
 	var threshold := request.lose_threshold
 
 	# 死んだフレーム(初めて閾値以下になったところ)を探す。
@@ -97,7 +102,8 @@ static func _classify_track(
 	for i in range(1, fatal + 1):
 		var prev := frames[i - 1].rps
 		var cur := frames[i].rps
-		var kind := _event_kind(prev, cur, decay_amt, wall_damping)
+		var kind := _event_kind(
+			prev, cur, decay_amt, own_walls.has(i), wall_damping_floor)
 
 		if kind == "wall":
 			wall_hits += 1
@@ -136,12 +142,16 @@ static func _classify_track(
 
 
 ## 1フレームぶんのrps変化を分類する。自然減衰を差し引いた残りが
-##  - ほぼゼロ            → "decay"(減衰のみ)
-##  - prev*wall_damping^k → "wall"(壁/障害物、1〜2回)
-##  - それ以外の引き算    → "drain"(衝突削り)
-## 衝突と壁が同フレームで重なると "drain" に寄る(衝突が起きた事実を優先)。
+##  - ほぼゼロ                        → "decay"(減衰のみ)
+##  - 自分の壁衝突が記録されたフレーム → "wall"(壁/障害物)
+##  - それ以外の引き算                → "drain"(衝突削り)
+## 壁損失は進入速度でスケールするため値では見分けず、リゾルバの記録(has_wall)で
+## 見分ける。衝突と壁が同フレームで重なった場合、壁の下限係数(wall_damping_floor)
+## でも説明できない大きさの喪失なら "drain" に寄せる(衝突が起きた事実を優先する
+## 旧実装と同じ向き。壁だけの喪失は同フレーム2回でも prev*(1-floor²) を超えない)。
 static func _event_kind(
-	prev: float, cur: float, decay_amt: float, wall_damping: float
+	prev: float, cur: float, decay_amt: float,
+	has_wall: bool, wall_damping_floor: float
 ) -> String:
 	if prev <= 0.0:
 		return "decay"
@@ -152,8 +162,30 @@ static func _event_kind(
 
 	if absf(before_decay - prev) <= tol:
 		return "decay"
-	# 壁は乗算。1回または2回(同フレーム複数衝突)を許す。
-	for k in [1, 2]:
-		if absf(before_decay - prev * pow(wall_damping, k)) <= tol:
-			return "wall"
+	if has_wall:
+		var max_wall_loss := prev * (1.0 - wall_damping_floor * wall_damping_floor)
+		if prev - before_decay > max_wall_loss + tol:
+			return "drain"
+		return "wall"
 	return "drain"
+
+
+## そのコマ自身の壁/障害物衝突が映っているフレーム遷移(prev→cur の cur 側index)の
+## 集合を返す。時刻tの壁衝突はステップ t/dt の積分後の状態に効くので、次の
+## スナップショット(index = t/dt + 1)に映る。wall_impacts は全部の体で共有のため、
+## 接触点とそのフレームの自分の中心との距離が自分の半径に一致するものだけを拾う
+## (接触点は必ず「その体の中心から法線方向へ半径ぶん」に記録される)。
+static func _own_wall_transitions(
+	frames: Array[BattleResult.Snapshot], radius: float,
+	wall_impacts: Array[BattleResult.Impact], dt: float
+) -> Dictionary:
+	var out := {}
+	if dt <= 0.0:
+		return out
+	for imp in wall_impacts:
+		var i := int(round(imp.time / dt)) + 1
+		if i < 1 or i >= frames.size():
+			continue
+		if absf(imp.point.distance_to(frames[i].position) - radius) <= 1e-3:
+			out[i] = true
+	return out

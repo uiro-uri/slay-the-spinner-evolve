@@ -131,6 +131,21 @@ static func effective_wall_damping(base: float, wall_keep: float) -> float:
 	return base + (1.0 - base) * clampf(wall_keep, 0.0, 1.0)
 
 
+## 壁ダンピングを衝突の激しさ(壁法線方向の進入速度)でスケールした値。
+## 従来は壁に触れるだけで一律 base 倍(0.75なら25%喪失)で、そっと縁を擦った
+## 接触と全力の激突が同じ代償だった。その理不尽さが「壁こそが真の敵」の手触りと
+## 「当てにいかず低速で待つのが最適」という逆立ちした戦略の原因になっていたので、
+## normal_speed が ref_speed 以上の激突でちょうど base(従来どおり)、それ未満は
+## 無損失(1.0)へ線形に寄せる。ref_speed<=0 は速度スケール無効=常に base
+## (旧挙動と厳密一致。古い保存データの再現用)。
+static func impact_scaled_wall_damping(
+	base: float, normal_speed: float, ref_speed: float
+) -> float:
+	if ref_speed <= 0.0:
+		return base
+	return lerpf(1.0, base, clampf(normal_speed / ref_speed, 0.0, 1.0))
+
+
 ## 衝突で受けるrps削りの実効値。hit_guard(0..1)のぶんだけ削りを打ち消す。
 ## 壁のeffective_wall_dampingと対になる、コマ同士の衝突版の防御(Shock Absorber)。
 ## 削りが減るぶんspin_kick(削り量に比例する弾き)も弱まる=回転を守る代わりに

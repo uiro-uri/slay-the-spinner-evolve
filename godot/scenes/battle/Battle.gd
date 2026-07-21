@@ -65,6 +65,11 @@ const BAR_ROW_H := 60.0
 ## 壁にぶつかった時に残る回転の割合。
 @export_range(0.0, 1.0, 0.01) var wall_damping: float = 0.75
 
+## 壁の回転喪失を衝突の激しさに比例させる基準速度。法線方向の進入速度が
+## この値以上の激突でwall_dampingそのまま、そっと触れるだけならほぼ無損失。
+## 0でスケール無効(常にwall_damping)。
+@export_range(0.0, 40.0, 0.5) var wall_impact_ref_speed: float = 8.0
+
 ## これを下回ったら負け。
 @export_range(0.0, 1.0, 0.01) var lose_threshold: float = 0.03
 
@@ -513,6 +518,7 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 	request.spin_kick_scale = spin_kick_scale
 	request.natural_damping = natural_damping
 	request.wall_damping = wall_damping
+	request.wall_impact_ref_speed = wall_impact_ref_speed
 	request.lose_threshold = lose_threshold
 	# 取得済みのゴースト札から無敵時間を決める。単体調整時は取得0で0秒になり従来どおり。
 	request.ghost_duration = CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)
