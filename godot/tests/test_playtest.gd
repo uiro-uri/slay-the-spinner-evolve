@@ -21,6 +21,7 @@ func run(check: Callable) -> void:
 	_test_run_sim_continues(check)
 	_test_run_sim_spare_core(check)
 	_test_naive_play_card_text(check)
+	_test_naive_play_launch_speed(check)
 	_test_naive_play_pick_guard(check)
 	_test_naive_play_result_label(check)
 	_test_naive_play_stats_roundtrip(check)
@@ -354,6 +355,35 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	check.call("減衰" in growth_text, "naive_play: 巨大化札は代償(自然減衰)も謳う (%s)" % growth_text)
 	var lives := CustomPartCatalog.by_id(8)
 	check.call("残機" in NaivePlay.card_text(lives), "naive_play: 残機札は残機を謳う")
+
+
+## naive_play(コールドプレイCLI)の発射速度が実ゲームと同じレンジであることを固定する。
+## 実ゲーム(LaunchController)は full pull で LaunchSpeed.MAX を出す。発見の経緯:
+## CLIに旧仕様(0〜20)の上限20.0が残り、実ゲームでは出せない1.67倍速の発射で全戦を
+## 戦えていた(bot統計は正しく12で走っており、コールドプレイの実感だけが緩く汚れる)。
+func _test_naive_play_launch_speed(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var pos := Vector2(8.0, 2.0)
+	var tgt := Vector2(5.0, 5.0)
+	var full: Vector2 = NaivePlay.launch_velocity(pos, tgt, 1.0)
+	check.call(
+		absf(full.length() - LaunchSpeed.MAX) < EPS,
+		"naive_play: force=1の発射速度が実ゲームの上限(%.1f)と一致 (%.1f)" % [LaunchSpeed.MAX, full.length()]
+	)
+	check.call(
+		full.normalized().dot((tgt - pos).normalized()) > 1.0 - EPS,
+		"naive_play: 発射は狙い点へ向く"
+	)
+	var over: Vector2 = NaivePlay.launch_velocity(pos, tgt, 5.0)
+	check.call(
+		absf(over.length() - LaunchSpeed.MAX) < EPS,
+		"naive_play: force>1でも実ゲームの上限を超えない"
+	)
+	var half: Vector2 = NaivePlay.launch_velocity(pos, tgt, 0.5)
+	check.call(
+		absf(half.length() - LaunchSpeed.MAX * 0.5) < EPS,
+		"naive_play: forceは速度に線形(0.5で半分)"
+	)
 
 
 ## pickは直前のrewardで提示された札しか取れない。発見の経緯: 提示されていない
