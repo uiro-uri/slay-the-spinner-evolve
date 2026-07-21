@@ -287,9 +287,16 @@ static func _resolve_walls(
 		result.wall_impacts.append(
 			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
 		)
+		# 進入速度(法線方向)は反射前に測る。wall_hitが通った時点で必ず正。
+		var normal_speed := -wall.normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
 		var before := s.rps
-		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
+		s.rps *= SpinnerPhysics.effective_wall_damping(
+			SpinnerPhysics.impact_scaled_wall_damping(
+				req.wall_damping, normal_speed, req.wall_impact_ref_speed
+			),
+			s.stats.wall_keep
+		)
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
 		_mark_if_dead(s, "wall", req, t)
@@ -311,9 +318,16 @@ static func _resolve_obstacles(
 		result.wall_impacts.append(
 			BattleResult.Impact.new(t, s.position - normal * s.stats.radius)
 		)
+		# 壁と同じく、反射前の法線方向進入速度で損失をスケールする。
+		var normal_speed := -normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
 		var before := s.rps
-		s.rps *= SpinnerPhysics.effective_wall_damping(req.wall_damping, s.stats.wall_keep)
+		s.rps *= SpinnerPhysics.effective_wall_damping(
+			SpinnerPhysics.impact_scaled_wall_damping(
+				req.wall_damping, normal_speed, req.wall_impact_ref_speed
+			),
+			s.stats.wall_keep
+		)
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
 		_mark_if_dead(s, "wall", req, t)

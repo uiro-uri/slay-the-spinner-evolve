@@ -82,6 +82,12 @@ var violence: float = 0.04
 var spin_kick_scale: float = 2.0
 var natural_damping: float = 1.0
 var wall_damping: float = 0.75
+
+## 壁ダンピングを衝突の激しさに比例させる基準速度。壁法線方向の進入速度が
+## この値以上でwall_dampingそのまま(激突=従来の代償)、遅い接触ほど無損失に近づく。
+## 0以下でスケール無効=常にwall_damping(旧挙動)。詳細はSpinnerPhysics.
+## impact_scaled_wall_damping。
+var wall_impact_ref_speed: float = 12.0
 var lose_threshold: float = 0.03
 
 ## ゴーストの無敵時間(秒)。開始からこの時刻までプレイヤーと敵の衝突判定を切る。
@@ -112,6 +118,7 @@ func to_dict() -> Dictionary:
 		"spin_kick_scale": spin_kick_scale,
 		"natural_damping": natural_damping,
 		"wall_damping": wall_damping,
+		"wall_impact_ref_speed": wall_impact_ref_speed,
 		"lose_threshold": lose_threshold,
 		"ghost_duration": ghost_duration,
 		"time_step": time_step,
@@ -138,6 +145,9 @@ static func from_dict(d: Dictionary) -> BattleRequest:
 	r.spin_kick_scale = d["spin_kick_scale"]
 	r.natural_damping = d["natural_damping"]
 	r.wall_damping = d["wall_damping"]
+	# 旧い保存データにキーが無いときは0(スケール無効=旧挙動)で補い、当時の
+	# 結果をそのまま再現できるようにする(ghost_durationの既定0と同じ向き)。
+	r.wall_impact_ref_speed = d.get("wall_impact_ref_speed", 0.0)
 	r.lose_threshold = d["lose_threshold"]
 	# 旧い保存データにキーが無くても壊れないよう既定0で補う。
 	r.ghost_duration = d.get("ghost_duration", 0.0)
