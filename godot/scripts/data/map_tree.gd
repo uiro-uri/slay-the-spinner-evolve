@@ -145,6 +145,69 @@ func _build(rng: RandomNumberGenerator) -> void:
 
 	for step in range(1, 8):
 		_assign_arrows_for_step(step, rng)
+		_widen_single_choices(step, rng)
+
+
+## その段の「進める先が1本しかない」ノードへ、足せるなら2本目の矢印を足す。
+##
+## 1択のノードが続くと「選択肢のないまま詰み部屋へ強制される」体験になるため
+## （分岐マップなのに分岐がない）、矢印の交差を作らない範囲で全ノード2択以上を
+## 保証する。先のノードが無ければ作ってよい——この段の矢印確定直後
+## （＝次の段の矢印確定前）に呼ばれるので、作られたノードは次の反復で
+## 普通に矢印を貰い、行き止まりにならない。ただし段7だけはゴール手前の
+## 3ノードへ着地する必要があるので、実在するノードにしか足せない。
+## 幾何的に足せない場合（例: 右端の列で、左隣が右下へ出している）だけ
+## 1本のまま残る。段0は3本固定、段8はゴールへ集約する設計なので触らない。
+func _widen_single_choices(step: int, rng: RandomNumberGenerator) -> void:
+	var columns: Array[int] = []
+	for coord in nodes:
+		if coord.x == step:
+			columns.append(coord.y)
+	columns.sort()
+
+	for column in columns:
+		var node: MapNode = nodes[Vector2i(step, column)]
+		if node.arrows.size() >= 2:
+			continue
+		var candidates := _addable_arrows(step, column)
+		if candidates.is_empty():
+			continue
+		# 右下を足すと右隣ノードの左下候補を潰す(交差になる)ので、
+		# 後続を制約しない左下/真下を優先し、右下は他に無いときだけ。
+		if candidates.size() > 1:
+			candidates.erase(Arrow.RIGHT)
+		var arrow: Arrow = candidates[rng.randi_range(0, candidates.size() - 1)]
+		node.arrows.append(arrow)
+		var target := node.target_of(arrow)
+		if not nodes.has(target):
+			nodes[target] = MapNode.new(target)
+
+
+## (step, column) のノードにいま足せる矢印。持っていないもののうち、
+## 盤面の内側に収まり、隣列の既存矢印と交差しないものだけ。
+## 段7だけは着地先(ゴール手前の3ノード)が実在することも要求する。
+func _addable_arrows(step: int, column: int) -> Array[Arrow]:
+	var node: MapNode = nodes[Vector2i(step, column)]
+	var result: Array[Arrow] = []
+	for arrow in [Arrow.LEFT, Arrow.STRAIGHT, Arrow.RIGHT]:
+		if arrow in node.arrows:
+			continue
+		var target := node.target_of(arrow)
+		if target.y < 0 or target.y >= COLUMN_COUNT:
+			continue
+		if step == 7 and not nodes.has(target):
+			continue
+		if arrow == Arrow.LEFT and _neighbor_has(step, column - 1, Arrow.RIGHT):
+			continue
+		if arrow == Arrow.RIGHT and _neighbor_has(step, column + 1, Arrow.LEFT):
+			continue
+		result.append(arrow)
+	return result
+
+
+func _neighbor_has(step: int, column: int, arrow: Arrow) -> bool:
+	var neighbor: MapNode = nodes.get(Vector2i(step, column))
+	return neighbor != null and arrow in neighbor.arrows
 
 
 ## 全戦闘ノード（段1以降）に敵グループと土俵を確定して持たせる。段ごとの抽選は
@@ -168,10 +231,14 @@ func _assign_arrows_for_step(step: int, rng: RandomNumberGenerator) -> void:
 	columns.sort()
 
 	# ひとつ左のノードが右下へ進んだ場合、このノードが左下へ進むと矢印が交差する。
-	var cant_go_left := false
+	# 交差しうるのは隣接した列だけ——列の間に空きがあれば矢印は届かないので、
+	# 制約を粘着させず「直前に処理した列が本当にひとつ左か」を見る。
+	var last_column := -99
+	var last_took_right := false
 	var is_last := step == 7
 
 	for column in columns:
+		var cant_go_left := last_took_right and last_column == column - 1
 		var node: MapNode = nodes[Vector2i(step, column)]
 		node.arrows = _pick_arrows(step, column, cant_go_left, is_last, rng)
 
@@ -180,8 +247,8 @@ func _assign_arrows_for_step(step: int, rng: RandomNumberGenerator) -> void:
 				if not nodes.has(coord):
 					nodes[coord] = MapNode.new(coord)
 
-		if Arrow.RIGHT in node.arrows:
-			cant_go_left = true
+		last_column = column
+		last_took_right = Arrow.RIGHT in node.arrows
 
 
 func _pick_arrows(
