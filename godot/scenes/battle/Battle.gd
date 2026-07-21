@@ -53,14 +53,18 @@ const BAR_ROW_H := 60.0
 @export var stage_shape: SpinnerPhysics.StageShape = SpinnerPhysics.StageShape.DISH
 
 ## ぶつかり合いの激しさ。大きいほど1回の衝突で削れるRPSが増える。
-@export_range(0.0, 1.0, 0.01) var violence: float = 0.04
+## 0.04→0.06は「減衰と削りの比」の再設計(2026-07-21): 旧比ではLv4-5の敵死因の
+## 8割が自然減衰で、当てにいかない受け身が最適解だった。決着を接触寄りに。
+## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
+@export_range(0.0, 1.0, 0.01) var violence: float = 0.06
 
 ## 削れたRPSがどれだけ弾き飛ばしに変わるか。
-## violenceを半減したぶん、弾き合いの勢いは維持するため2倍にして相殺している。
-@export_range(0.0, 5.0, 0.05) var spin_kick_scale: float = 2.0
+## 弾きは削り量に比例するので、violenceを1.5倍した際に1/1.5倍(2.0→1.35)して
+## 弾き飛ばしの勢いを従来と同等に保っている(過去にviolence半減×2倍の前例)。
+@export_range(0.0, 5.0, 0.05) var spin_kick_scale: float = 1.35
 
-## 何もしなくても失われる回転(毎秒、半径に比例)。
-@export_range(0.0, 5.0, 0.05) var natural_damping: float = 1.0
+## 何もしなくても失われる回転(毎秒、半径に比例)。1.0→0.75はviolenceと対の再設計。
+@export_range(0.0, 5.0, 0.05) var natural_damping: float = 0.75
 
 ## 壁にぶつかった時に残る回転の割合。
 @export_range(0.0, 1.0, 0.01) var wall_damping: float = 0.75

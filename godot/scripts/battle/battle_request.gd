@@ -76,11 +76,18 @@ var wall_shape: ArenaWall.WallShape = ArenaWall.WallShape.RECT
 var obstacles: Array[Vector3] = []
 
 ## ステージの傾斜と、ぶつかり合いの調整値。Battle.tscnの@exportから来る。
+## 既定値はBattle.gdの@export既定値と一致していること(tests/test_battle_defaults.gd
+## が照合する)。ズレると実UI・bot統計・コールドプレイCLIが別のゲームを遊ぶことになる。
+##
+## violence/natural_damping/spin_kick_scaleの現行値は「減衰と削りの比」の再設計
+## (2026-07-21): 旧比(violence=0.04, damping=1.0)ではLv4-5の敵死因の8割が自然減衰で、
+## 当てにいかず低速で待つ受け身が最適解だった。削りを1.5倍・自然減衰を0.75倍にして
+## 決着を接触寄りに。spin_kick_scaleは削り比例なので1/1.5倍で弾きの勢いを維持する。
 var stage_strength: float = 4.9
 var stage_shape: SpinnerPhysics.StageShape = SpinnerPhysics.StageShape.DISH
-var violence: float = 0.04
-var spin_kick_scale: float = 2.0
-var natural_damping: float = 1.0
+var violence: float = 0.06
+var spin_kick_scale: float = 1.35
+var natural_damping: float = 0.75
 var wall_damping: float = 0.75
 
 ## 壁ダンピングを衝突の激しさに比例させる基準速度。壁法線方向の進入速度が
