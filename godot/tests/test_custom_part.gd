@@ -683,3 +683,49 @@ func _test_dead_card_filter(check: Callable) -> void:
 				only_alive_ids = false
 	check.call(only_alive_ids, "死にカード: 全上限ビルドの提示はGHOSTとFULL_STEAMだけ")
 	check.call(sizes_ok, "死にカード: 有効札が2枚しか無ければ提示も2枚に減る")
+
+	# ほぼ死にカード: RAGE3枚後の実ビルド。反発は0.75×1.1³=0.99825(表示は1.00)、
+	# wall_keepは上限0.5に到達済みで、4枚目の効果は反発+0.00175だけ——表示にすら
+	# 現れない。厳密比較(is_equal_approx)では「変化あり」とされ提示され続けた
+	# (2026-07-21のコールドプレイで上限到達後の段7・段8にRAGEが並び、報酬が実質
+	# 2択になった)。意味のある変化(相対1%)未満は死に札として弾く。
+	var nearly_capped := _stats()
+	nearly_capped.restitution = 0.75 * 1.1 * 1.1 * 1.1
+	nearly_capped.wall_keep = CustomPartCatalog.RAGE_WALL_KEEP_MAX
+	check.call(
+		not CustomPartCatalog.by_id(6).would_change_anything(nearly_capped),
+		"ほぼ死にカード: 反発+0.002しか動かないRAGEは効果なし判定"
+	)
+	var rage_offered := false
+	for trial in TRIALS:
+		rng.seed = trial + 40000
+		for part in CustomPartCatalog.pick_choices(3, rng, 4, nearly_capped, 3):
+			if part.id == 6:
+				rage_offered = true
+	check.call(
+		not rage_offered,
+		"ほぼ死にカード: 抽選%d回でRAGEが一度も提示されない" % TRIALS
+	)
+	# 回帰: RAGE2枚後(反発0.9075・wall_keep0.34)は反発+0.09と保持+0.16が本物に
+	# 動くので、閾値導入後も有効なまま。
+	var two_rage := _stats()
+	two_rage.restitution = 0.75 * 1.1 * 1.1
+	two_rage.wall_keep = CustomPartCatalog.RAGE_WALL_KEEP_STEP * 2.0
+	check.call(
+		CustomPartCatalog.by_id(6).would_change_anything(two_rage),
+		"ほぼ死にカード: 上限までまだ遠いRAGEは有効なまま"
+	)
+	# SPIN_ENGINEも同じ構図: rps39.9では上限40まで+0.1(0.25%)しか動かず死に札。
+	var rps_shy := _stats()
+	rps_shy.rps = 39.9
+	check.call(
+		not CustomPartCatalog.by_id(7).would_change_anything(rps_shy),
+		"ほぼ死にカード: rps39.9のSPIN_ENGINEは+0.1しか動かず効果なし判定"
+	)
+	# 回帰: rps35なら+5.0の本物の成長なので有効なまま。
+	var rps_room := _stats()
+	rps_room.rps = 35.0
+	check.call(
+		CustomPartCatalog.by_id(7).would_change_anything(rps_room),
+		"ほぼ死にカード: rps35のSPIN_ENGINEは有効なまま"
+	)

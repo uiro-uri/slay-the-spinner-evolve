@@ -304,6 +304,16 @@ func apply_to(stats: SpinnerStats) -> void:
 	_write(stats, value)
 
 
+## 死にカード判定で「意味のある変化」とみなす相対閾値(1%)。
+##
+## 厳密比較(is_equal_approx、誤差~1e-5)だと、上限クランプ間際の微小な残りが
+## 「変化あり」扱いになる: RAGE3枚で反発は0.75×1.1³=0.99825(表示は1.00)・
+## wall_keepは上限0.5に達し、4枚目の効果は反発+0.00175だけ——小数2桁の表示にすら
+## 現れない実質死に札が、上限到達後も提示され続けていた。値の1%未満しか動かない
+## 変化は「何も変わらない」とみなして弾く。
+const MEANINGFUL_CHANGE_RATIO := 0.01
+
+
 ## この札を今取って、何かが実際に変わるか（死にカード判定）。
 ##
 ## 上限に達したステータスしか触らない札（例: rps=40でのSPIN_ENGINE）は、取っても
@@ -311,6 +321,7 @@ func apply_to(stats: SpinnerStats) -> void:
 ## 報酬画面ができてしまうので、CustomPartCatalog.pick_choicesが提示前にこれで弾く。
 ## 判定は複製へ実際にapply_toして全フィールドを比較する——apply_toと別実装の
 ## 予測ロジックを持つと、効果を変えたときに判定だけが古い嘘になるため。
+## 比較は厳密一致ではなくMEANINGFUL_CHANGE_RATIOの相対閾値(上のコメント参照)。
 ## livesは現在の残機。負なら「残機不明」としてSET_LIVES札は常に有効扱いにする。
 func would_change_anything(stats: SpinnerStats, lives_now: int = -1) -> bool:
 	# ゴーストは重ねるほど無敵時間が線形に伸びる(上限なし)ので常に意味がある。
@@ -324,19 +335,29 @@ func would_change_anything(stats: SpinnerStats, lives_now: int = -1) -> bool:
 	return not _stats_equal(probe, stats)
 
 
-## 全フィールドの近似一致。would_change_anything専用（apply_toが触りうる値を全部見る）。
+## 全フィールドに「意味のある変化」が無いか。would_change_anything専用
+## （apply_toが触りうる値を全部見る）。
 static func _stats_equal(a: SpinnerStats, b: SpinnerStats) -> bool:
 	return (
-		is_equal_approx(a.mass, b.mass)
-		and is_equal_approx(a.radius, b.radius)
-		and is_equal_approx(a.friction, b.friction)
-		and is_equal_approx(a.restitution, b.restitution)
-		and is_equal_approx(a.rps, b.rps)
-		and is_equal_approx(a.spin_decay, b.spin_decay)
-		and is_equal_approx(a.wall_keep, b.wall_keep)
-		and is_equal_approx(a.hit_guard, b.hit_guard)
-		and is_equal_approx(a.edge, b.edge)
+		_nearly_same(a.mass, b.mass)
+		and _nearly_same(a.radius, b.radius)
+		and _nearly_same(a.friction, b.friction)
+		and _nearly_same(a.restitution, b.restitution)
+		and _nearly_same(a.rps, b.rps)
+		and _nearly_same(a.spin_decay, b.spin_decay)
+		and _nearly_same(a.wall_keep, b.wall_keep)
+		and _nearly_same(a.hit_guard, b.hit_guard)
+		and _nearly_same(a.edge, b.edge)
 	)
+
+
+## 2値の差がMEANINGFUL_CHANGE_RATIO(相対1%)未満なら「同じ」とみなす。
+## 基準は両値の大きい方。ただし0近傍のフィールド(wall_keep/edgeの初期0など)で
+## 相対比較が過敏にならないよう、基準には1.0の下駄を敷く(=絶対0.01が最低ライン。
+## 現行カタログの加算刻みは最小0.17なので本物の効果を誤爆で弾くことはない)。
+static func _nearly_same(a: float, b: float) -> bool:
+	var scale := maxf(maxf(absf(a), absf(b)), 1.0)
+	return absf(a - b) <= MEANINGFUL_CHANGE_RATIO * scale
 
 
 ## レアカードの金色スタイルボックス。報酬選択とマップ一覧で共有する。
