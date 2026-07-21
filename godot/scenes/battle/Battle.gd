@@ -580,10 +580,16 @@ func _physics_process(delta: float) -> void:
 		_finish()
 
 
-## ゴースト(無敵)の見た目とSEを、時刻tが無敵時間の内か外かに合わせる。
+## ゴースト(すり抜け)の見た目とSEを、時刻tが窓の内か外かに合わせる。
+## 窓はリゾルバが記録した「最初の衝突(ghost_start)の直後からghost_duration秒」。
+## 窓が開かなかった戦い(ghost_start<0)は常に不活性。
 ## 境目をまたいだ瞬間だけSEを鳴らし、コマのシマー表示を切り替える。
 func _update_ghost(t: float) -> void:
-	var active := t < _result.ghost_duration
+	var active := (
+		_result.ghost_start >= 0.0
+		and t > _result.ghost_start
+		and t < _result.ghost_start + _result.ghost_duration
+	)
 	if active == _ghost_active:
 		return
 	_ghost_active = active

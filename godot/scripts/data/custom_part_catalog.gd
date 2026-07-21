@@ -127,8 +127,10 @@ static func all() -> Array[CustomPart]:
 		# 残機を5へ引き上げるレア札。コマの性能ではなくコンティニュー回数
 		# (GameState.continues_left、初期3)を底上げする。下げはしない(apply_partのmaxi)。
 		CustomPart.make_set_lives(8, "PART_SPARE_CORE", CustomPart.Rarity.RARE, 5),
-		# ゴースト: 開始後GHOST_SECONDS_PER_STACK秒だけ敵との衝突を無効化する。
-		# ステータスは変えず、重ねて取るほど無敵時間が伸びる(線形)。
+		# ゴースト: 最初の衝突の直後からGHOST_SECONDS_PER_STACK秒だけ敵との衝突を
+		# 無効化する(ヒット&ラン)。開始直後を無敵にする旧仕様は自分の初撃まで
+		# 消していて、単独計測でLv1 -54.5pt/枚の自傷札だった。
+		# ステータスは変えず、重ねて取るほどすり抜け時間が伸びる(線形)。
 		CustomPart.make_ghost(9, "PART_GHOST", CustomPart.Rarity.COMMON,
 			GHOST_SECONDS_PER_STACK),
 		# Shock Absorber: 衝突で受けるrps削りを軽減する純防御札。防御の選択肢が

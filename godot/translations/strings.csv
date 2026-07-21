@@ -71,7 +71,7 @@ PART_EFFECT_RESTITUTION,Bounce ×{0},反発 ×{0}
 PART_EFFECT_RPS,Spin ×{0},回転 ×{0}
 PART_EFFECT_CAP," (max {0})",（上限 {0}）
 PART_EFFECT_SET_LIVES,Lives set to {0},残機を{0}にする
-PART_EFFECT_GHOST,No enemy collision for first {0}s,開始{0}秒間 敵をすり抜ける
+PART_EFFECT_GHOST,After your first clash: pass through enemies for {0}s,最初の衝突後{0}秒間 敵をすり抜ける
 PART_EFFECT_MOMENTUM,Friction & spin decay ×{0},摩擦と回転減衰 ×{0}
 PART_EFFECT_RAGE,Bounce ×{0} (max {1}) & less spin lost on walls,反発 ×{0}（上限 {1}）＆壁でrpsを失いにくい
 PART_EFFECT_GUARD,Spin lost to hits -{0}% (stacks up to -{1}%),衝突で削られる回転 -{0}%（重ねて最大 -{1}%）

@@ -23,8 +23,9 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ## STAT_MULTIPLY以外は非ステータス効果で、SpinnerStatsのどの値にも乗らない:
 ##  - SET_LIVES: コマの性能ではなくランの残機(GameState.continues_left)を触る。
 ##    適用はGameState.apply_partが担う（CustomPartは純ResourceのままGameStateを参照しない）。
-##  - GHOST: 開始直後の一定時間だけ敵との衝突を無効化する時間効果。無敵時間はBattleが
-##    戦闘へ渡す（CustomPartCatalog.total_ghost_seconds）。
+##  - GHOST: 最初の衝突の直後から一定時間だけ敵との衝突を無効化する時間効果
+##    (ヒット&ラン: 初撃は通り、直後の報復をすり抜けて離脱する)。すり抜け時間は
+##    BattleがCustomPartCatalog.total_ghost_secondsで戦闘へ渡す。
 ## MOMENTUM: 摩擦(速度減衰)と回転減衰率の両方を multiplier 倍にする「勢い維持」効果。
 ## 単一ステータス倍率では摩擦しか触れず戦績がほぼ0だったので、回転減衰にも効かせる。
 ## cap は spin_decay の下限(これ以上は減らさない=青天井/無限HP化を防ぐ)。
@@ -96,7 +97,7 @@ const _STAT_NAMES := {
 ## SET_LIVESで引き上げる残機。他の札では0（GameState.apply_partのmaxiが無害になる）。
 @export var lives: int = 0
 
-## ゴースト1枚あたりの無敵秒数。effectがGHOSTのときだけ意味を持つ。
+## ゴースト1枚あたりのすり抜け秒数(最初の衝突後に効く)。effectがGHOSTのときだけ意味を持つ。
 ## 合計時間(=枚数×これ)はCustomPartCatalog.total_ghost_secondsが出す。
 @export var ghost_seconds: float = 0.0
 
@@ -324,7 +325,7 @@ const MEANINGFUL_CHANGE_RATIO := 0.01
 ## 比較は厳密一致ではなくMEANINGFUL_CHANGE_RATIOの相対閾値(上のコメント参照)。
 ## livesは現在の残機。負なら「残機不明」としてSET_LIVES札は常に有効扱いにする。
 func would_change_anything(stats: SpinnerStats, lives_now: int = -1) -> bool:
-	# ゴーストは重ねるほど無敵時間が線形に伸びる(上限なし)ので常に意味がある。
+	# ゴーストは重ねるほどすり抜け時間が線形に伸びる(上限なし)ので常に意味がある。
 	if effect == Effect.GHOST:
 		return true
 	# 残機札はステータスに触らない。maxi適用で残機が実際に増えるときだけ有効。

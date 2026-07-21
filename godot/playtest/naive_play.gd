@@ -170,7 +170,7 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		float(state["stats"].get("spin_decay", 1.0)), float(state["stats"].get("wall_keep", 0.0)),
 		float(state["stats"].get("hit_guard", 0.0)), float(state["stats"].get("edge", 0.0)),
 		field.inradius() - float(state["stats"]["radius"]) - 0.5])
-	print("ゴースト無敵: %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
+	print("ゴースト(初衝突後すり抜け): %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
 	var plans := _enemy_plans(node.enemies, field, bseed)
 	print("敵 %d体 (bseed=%d):" % [node.enemies.size(), bseed])
 	for i in node.enemies.size():
@@ -437,7 +437,7 @@ static func card_text(c: CustomPart) -> String:
 		CustomPart.Effect.SET_LIVES:
 			return "残機を%dにする" % c.lives
 		CustomPart.Effect.GHOST:
-			return "開始%.0f秒間 敵をすり抜ける" % c.ghost_seconds
+			return "最初の衝突後%.0f秒間 敵をすり抜ける" % c.ghost_seconds
 		CustomPart.Effect.MOMENTUM:
 			return "摩擦と回転減衰 ×%.2f(回転減衰の下限%.2f) [MOMENTUM]" % [c.multiplier, c.cap]
 		CustomPart.Effect.RAGE:
