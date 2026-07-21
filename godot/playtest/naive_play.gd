@@ -18,9 +18,17 @@ extends SceneTree
 ##
 ## 予告(enter/retry)と解決(launch)は同じ --bseed を渡すこと(敵の出現が一致する)。
 
-const MAX_SPEED := 20.0
 const SPAWN_RING := 4.0
 const SPAWN_SPREAD_DEG := 30.0
+
+
+## 自機の発射速度ベクトル。実ゲーム(LaunchController)は full pull で LaunchSpeed.MAX を
+## 出すので、CLIの force=1 も同じ上限に揃える(bot側の launch_policy.gd と同じ参照)。
+## かつて旧仕様(引き量×pull_to_speedで0〜20)時代の上限20.0がここに残り、CLIだけ
+## 実ゲームでは出せない1.67倍速で発射できていた(コールドプレイの一次証拠を汚す嘘)。
+## 共通レンジ(LaunchSpeed)への参照で再発を防ぐ。
+static func launch_velocity(pos: Vector2, tgt: Vector2, force: float) -> Vector2:
+	return (tgt - pos).normalized() * clampf(force, 0.0, 1.0) * LaunchSpeed.MAX
 
 
 func _init() -> void:
@@ -173,7 +181,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 
 	var pos := _ring_pos(field, pstats.radius, from_deg)
 	var tgt := _target_point(field, plans, target)
-	var vel := (tgt - pos).normalized() * clampf(force, 0.0, 1.0) * MAX_SPEED
+	var vel := launch_velocity(pos, tgt, force)
 
 	var req := BattleRequest.new()
 	req.arena_bounds = field.arena_bounds
