@@ -16,6 +16,7 @@ func run(check: Callable) -> void:
 	_test_navigation(check)
 	_test_encounters(check)
 	_test_encounters_deterministic(check)
+	_test_no_needless_single_choice(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -232,6 +233,71 @@ func _test_encounters(check: Callable) -> void:
 			TRIALS, "" if failures.is_empty() else " / 例: " + failures[0]
 		]
 	)
+
+
+## 「進める先が1択」のノードは、幾何的に矢印を足せない場合にだけ許される。
+##
+## 分岐マップなのに1択の段が続くと選択の余地なく詰み部屋へ強制されるため、
+## 生成器は1本矢印のノードへ可能な限り2本目を足す(_widen_single_choices)。
+## ここでは実装側のヘルパーを使わず、独立に「まだ足せた矢印」を探す
+## （同じ関数で自己照合すると、ヘルパーのバグごと素通りするため）。
+## 段0は3本固定・段8はゴール集約の1本固定なので対象外。
+func _test_no_needless_single_choice(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var failures: Array[String] = []
+	var single_total := 0
+	var node_total := 0
+
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			failures.append("seed=%d: 生成に失敗" % trial)
+			continue
+		for coord in tree.nodes:
+			if coord.x < 1 or coord.x > 7:
+				continue
+			node_total += 1
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if node.arrows.size() != 1:
+				continue
+			single_total += 1
+			var missed := _find_addable_arrow(tree, coord)
+			if missed != "":
+				failures.append("seed=%d: %s に足せた矢印が残っている(%s)" % [trial, coord, missed])
+
+	check.call(
+		failures.is_empty(),
+		"マップ分岐保証: %d回の生成で1択ノードは幾何的に不可避な場合だけ(残存1択 %d/%d)%s" % [
+			TRIALS, single_total, node_total,
+			"" if failures.is_empty() else " / 例: " + failures[0]
+		]
+	)
+
+
+## そのノードにまだ合法に足せる矢印があれば名前を返す。なければ空文字。
+## 合法 = 盤面の内側に収まり、隣列の矢印と交差しない。生成器は段7より前なら
+## 足りないノードを作ってよい約束なので、先の実在は段7でだけ要求する。
+func _find_addable_arrow(tree: MapTree, coord: Vector2i) -> String:
+	var node: MapTree.MapNode = tree.nodes[coord]
+	for arrow in [MapTree.Arrow.LEFT, MapTree.Arrow.STRAIGHT, MapTree.Arrow.RIGHT]:
+		if arrow in node.arrows:
+			continue
+		var target := node.target_of(arrow)
+		if target.y < 0 or target.y >= MapTree.COLUMN_COUNT:
+			continue
+		if coord.x == 7 and not tree.nodes.has(target):
+			continue
+		if arrow == MapTree.Arrow.LEFT:
+			var left: MapTree.MapNode = tree.nodes.get(Vector2i(coord.x, coord.y - 1))
+			if left != null and MapTree.Arrow.RIGHT in left.arrows:
+				continue
+		if arrow == MapTree.Arrow.RIGHT:
+			var right: MapTree.MapNode = tree.nodes.get(Vector2i(coord.x, coord.y + 1))
+			if right != null and MapTree.Arrow.LEFT in right.arrows:
+				continue
+		return ["LEFT", "STRAIGHT", "RIGHT"][arrow]
+	return ""
 
 
 ## 同じシードなら遭遇まで一致すること。ノードごとに敵数・実レベル・土俵名を照合する。
