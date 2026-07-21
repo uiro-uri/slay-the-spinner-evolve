@@ -65,10 +65,15 @@ var time_step: float = 1.0 / 60.0
 ## 上限に達して打ち切ったか。真なら決着が付かないまま終わっている。
 var timed_out: bool = false
 
-## ゴーストの無敵時間(秒)。再生側がこの時刻までプレイヤーのコマを半透明シマーで
-## 描いて「すり抜け中」を見せる。入力(BattleRequest.ghost_duration)の写しだが、
+## ゴーストのすり抜け時間(秒)。窓は最初の衝突(ghost_start)の直後から
+## この秒数だけ続く。入力(BattleRequest.ghost_duration)の写しだが、
 ## 再生はResultだけで完結する(サーバーが返すのもこれ)ので結果側にも持たせる。
 var ghost_duration: float = 0.0
+
+## ゴースト窓が開いた時刻(=最初のプレイヤー対敵の衝突時刻)。リゾルバが記録し、
+## 再生側は(ghost_start, ghost_start+ghost_duration)の間プレイヤーのコマを
+## 半透明シマーで描いて「すり抜け中」を見せる。窓が開かなかったら-1。
+var ghost_start: float = -1.0
 
 ## 敗者(決着を付けられた側)がどう力尽きたか: "drain"(衝突削り)・"wall"(壁/障害物)・
 ## "decay"(自然減衰)。引き分け・時間切れは空文字。リゾルバが解決時に記録する
@@ -141,6 +146,7 @@ func to_dict() -> Dictionary:
 		"time_step": time_step,
 		"timed_out": timed_out,
 		"ghost_duration": ghost_duration,
+		"ghost_start": ghost_start,
 		"loser_death_cause": loser_death_cause,
 		"player_rps_loss": player_rps_loss,
 		"enemy_rps_loss": enemy_rps_loss,
@@ -167,6 +173,7 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.time_step = d["time_step"]
 	r.timed_out = d["timed_out"]
 	r.ghost_duration = d.get("ghost_duration", 0.0)
+	r.ghost_start = d.get("ghost_start", -1.0)
 	r.loser_death_cause = d.get("loser_death_cause", "")
 	r.player_rps_loss = d.get("player_rps_loss", {})
 	r.enemy_rps_loss = d.get("enemy_rps_loss", [])

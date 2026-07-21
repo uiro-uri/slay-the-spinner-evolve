@@ -25,7 +25,7 @@ const PART_LABEL := {
 	5: "FULL_STEAM     勢い維持×0.8",
 	6: "RAGE_REFLECT   反発+壁保持",
 	7: "SPIN_ENGINE    RPS ×1.25",
-	9: "GHOST          無敵2s/枚",
+	9: "GHOST          初衝突後すり抜け2s/枚",
 	10: "SHOCK_ABSORB   衝突削り-17%/枚",
 	11: "SHARP_EDGE     与ダメ+20%/枚",
 }
