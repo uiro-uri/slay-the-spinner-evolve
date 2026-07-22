@@ -11,7 +11,8 @@ extends SceneTree
 ##                                            (解決は enter/retry で予告した bseed で行う。
 ##                                             勝敗は保存され、同じ戦闘は撃ち直せない)
 ##   reward --state=path --bseed=B            勝利後、報酬3枚の効果を出す
-##                                            (最初の1回で確定。以後bseedを変えても同じ3枚)
+##                                            (最初の1回で確定。以後bseedを変えても同じ3枚。
+##                                             勝利済みの戦闘でのみ受け付ける)
 ##   pick   --state=path --id=ID              報酬を1枚取る。乱戦は倒した頭数ぶん
 ##                                            reward→pickを繰り返す(実ゲームと同じ)
 ##                                            (直前のrewardで提示された札しか取れない)
@@ -279,9 +280,12 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 		# 何度でも撃ち直せた(「なかったこと」にできる敗北は一次証拠を汚す)。
 		mark_defeat(state)
 		_save(state, path)
-		print("→ retry --bseed=<新B> (残機%d) か giveup" % state["continues"])
+		print(defeat_prompt(int(state["continues"])))
 
 func _reward(state: Dictionary, path: String, bseed: int) -> void:
+	var block := reward_block_reason(state)
+	if block != "":
+		printerr(block); return
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
 	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
@@ -319,6 +323,9 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	print("→ pick --id=<ID>")
 
 func _pick(state: Dictionary, path: String, id: int) -> void:
+	var block := reward_block_reason(state)
+	if block != "":
+		printerr(block); return
 	var offered = state.get("offered")
 	if offered == null:
 		printerr("先に reward で提示を見ること"); return
@@ -544,6 +551,30 @@ static func launch_block_reason(state: Dictionary) -> String:
 	if state.get("won", false):
 		return "勝利済み。reward → pick でノードを確定する"
 	return ""
+
+
+## reward/pickを受け付けられない理由。空文字なら受け付ける。
+## launch側のロックだけでは片手落ちで、敗北後(must_retry)や発射前(won=false)でも
+## reward→pickが通り、負けた/戦っていないノードを残機を減らさず突破確定できる
+## 裏口があった。勝利済み(won)の戦闘に限る。乱戦の2枚目以降はノード確定まで
+## wonが立ったままなので通る。旧state(キー欠落)は従来どおり(後方互換)。
+static func reward_block_reason(state: Dictionary) -> String:
+	if state.get("pending") == null:
+		return "交戦中のノードがない。enter → launch で勝ってから"
+	if state.get("must_retry", false):
+		return "敗北済み。報酬はない。retry --bseed=<新B> で残機を消費するか giveup"
+	if state.has("won") and not state["won"]:
+		return "まだ勝っていない。launch で勝ってから reward"
+	return ""
+
+
+## 敗北直後の案内。retryは残機を1消費するので、消費前の所持数だけを出すと
+## 「(残機3)→retryすると残り2」と数字が食い違って見える。消費後に残る数まで
+## 書く。残機0はretryできない(される前に拒否される)のでgiveupだけを案内する。
+static func defeat_prompt(continues: int) -> String:
+	if continues <= 0:
+		return "→ 残機なし。giveup で終了"
+	return "→ retry --bseed=<新B> (残機%d、1消費して残り%d) か giveup" % [continues, continues - 1]
 
 
 ## launchで使うbseed。enter/retryで予告したbseedが保存されていればそれを使う。

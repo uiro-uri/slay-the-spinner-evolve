@@ -28,6 +28,8 @@ func run(check: Callable) -> void:
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
 	_test_naive_play_launch_lock(check)
+	_test_naive_play_reward_guard(check)
+	_test_naive_play_defeat_prompt(check)
 	_test_naive_play_bseed_pin(check)
 
 
@@ -491,6 +493,47 @@ func _test_naive_play_launch_lock(check: Callable) -> void:
 	check.call(
 		NaivePlay.launch_block_reason({"pending": 1}) == "",
 		"naive_play: 旧state(キー欠落)は従来どおり撃てる(後方互換)")
+
+
+## rewardとpickは勝利済みの戦闘でしか受け付けないこと。発見の経緯: launch側の
+## ロックだけで、敗北後(must_retry)や発射前(won=false)でも reward→pick が通り、
+## 負けた/戦っていないノードを残機を減らさず突破確定できる裏口があった。
+func _test_naive_play_reward_guard(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var won_state := {"pending": 2, "must_retry": false, "won": true}
+	check.call(
+		NaivePlay.reward_block_reason(won_state) == "",
+		"naive_play: 勝利後はrewardを受け付ける")
+	var defeated := {"pending": 2, "must_retry": true, "won": false}
+	check.call(
+		NaivePlay.reward_block_reason(defeated) != "",
+		"naive_play: 敗北後のreward/pickは拒否(負けたノードの突破の裏口)")
+	var before_launch := {"pending": 2, "must_retry": false, "won": false}
+	check.call(
+		NaivePlay.reward_block_reason(before_launch) != "",
+		"naive_play: 発射前のreward/pickは拒否(戦闘スキップの裏口)")
+	check.call(
+		NaivePlay.reward_block_reason({"pending": null}) != "",
+		"naive_play: 交戦外のreward/pickは拒否")
+	check.call(
+		NaivePlay.reward_block_reason({"pending": 1}) == "",
+		"naive_play: 旧state(キー欠落)は従来どおり(後方互換)")
+
+
+## 敗北直後の案内は「retryで1消費して残る数」まで出すこと。発見の経緯: 消費前の
+## 所持数だけが出ており、「(残機3)」表示→retryすると「残り2」と数字が食い違って
+## 見えた。残機0はretryできないのでgiveupだけを案内する。
+func _test_naive_play_defeat_prompt(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var p: String = NaivePlay.defeat_prompt(3)
+	check.call(
+		"retry" in p and "残り2" in p,
+		"naive_play: 敗北案内は消費後に残る残機を明示する")
+	check.call("giveup" in p, "naive_play: 敗北案内はgiveupも常に出す")
+	var zero: String = NaivePlay.defeat_prompt(0)
+	check.call(
+		not "retry" in zero and "giveup" in zero,
+		"naive_play: 残機0の敗北案内はgiveupのみ")
 
 
 ## launchは予告(enter/retry)時のbseedで解決すること。発見の経緯: 引数のbseedを
