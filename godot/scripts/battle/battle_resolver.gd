@@ -126,7 +126,11 @@ static func resolve(request: BattleRequest) -> BattleResult:
 			_record_losses(player, enemies, result)
 			result.finish_time = t
 			if player_out and all_enemies_out:
-				result.outcome = BattleResult.Outcome.DRAW
+				# 相打ち(同一ステップ内で自分と最後の敵が力尽きた)はプレイヤーの勝ち。
+				# 敵を全滅させたのに残機を失うのは理不尽で、当てにいくプレイを報いる
+				# 方針(撃破ボーナス)とも逆行するため。DRAWは時間切れ同点にのみ残る。
+				result.outcome = BattleResult.Outcome.PLAYER_WIN
+				result.loser_death_cause = _decisive_enemy_cause(enemies)
 			elif player_out:
 				result.outcome = BattleResult.Outcome.ENEMY_WIN
 				result.loser_death_cause = player.death_cause
