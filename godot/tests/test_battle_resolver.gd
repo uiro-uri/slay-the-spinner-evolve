@@ -17,6 +17,7 @@ func run(check: Callable) -> void:
 	_test_wall_impacts(check)
 	_test_sampling(check)
 	_test_outcome(check)
+	_test_mutual_ko(check)
 	_test_multi_enemy(check)
 	_test_dead_ignores_walls(check)
 	_test_ghost_hit_and_run(check)
@@ -279,6 +280,48 @@ func _test_outcome(check: Callable) -> void:
 		"解決: 回転で大きく負けていれば負ける (%s)" % ["draw", "player", "enemy"][weak.outcome]
 	)
 	check.call(not weak.player_won(), "解決: 負けたらplayer_won()は偽")
+
+
+## 相打ち(同一ステップ内で自分と最後の敵が同時に力尽きる)はプレイヤーの勝ち。
+## 発見の経緯: コールドプレイの乱戦で敵3体を全滅させたのに「引き分け(敗北扱い)」で
+## 残機を失った。全滅させた側が罰されるのは理不尽で、当てにいくプレイを報いる方針
+## (撃破ボーナス)とも逆行するため、相打ちは勝ちに倒す。DRAWは時間切れ同点にのみ残る。
+func _test_mutual_ko(check: Callable) -> void:
+	# 双方rpsが閾値すれすれの正面衝突。1回の衝突で両者が同時に閾値を割る
+	# (削り量は相手の速さに比例し自分のrpsに依らないので、低rps同士でも確実に削れる)。
+	var r := BattleRequest.new()
+	r.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 0.4), Vector2(4.7, 5), Vector2(3, 0))
+	r.enemies = [BattleRequest.Launch.new(_stats(1.0, 0.5, 0.4), Vector2(5.3, 5), Vector2(-3, 0))]
+	var result := BattleResolver.resolve(r)
+
+	check.call(not result.timed_out, "相打ち: 時間切れではなく決着している")
+	check.call(
+		result.outcome == BattleResult.Outcome.PLAYER_WIN,
+		"相打ち: 同時に力尽きたらプレイヤーの勝ち (%s)" % ["draw", "player", "enemy"][result.outcome]
+	)
+	check.call(
+		result.loser_death_cause == "drain",
+		"相打ち: 敗者(敵)の死因が記録される (%s)" % result.loser_death_cause
+	)
+	check.call(
+		result.finished_by_knockout(),
+		"相打ち: 衝突削りの相打ちは撃破ボーナスの対象になる"
+	)
+
+	# 乱戦版: 1体は正面衝突の相打ち、もう1体は同じステップ内に自然減衰で落ちる。
+	# 全員が同一ステップで力尽きても勝ち扱いになること。
+	var r2 := BattleRequest.new()
+	r2.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 0.4), Vector2(4.7, 5), Vector2(3, 0))
+	r2.enemies = [
+		BattleRequest.Launch.new(_stats(1.0, 0.5, 0.4), Vector2(5.3, 5), Vector2(-3, 0)),
+		# rps 0.033: 1ステップの自然減衰(半径0.5×0.75×1/60=0.00625)で閾値0.03を割る
+		BattleRequest.Launch.new(_stats(1.0, 0.5, 0.033), Vector2(2, 8), Vector2.ZERO),
+	]
+	var brawl := BattleResolver.resolve(r2)
+	check.call(
+		brawl.outcome == BattleResult.Outcome.PLAYER_WIN,
+		"相打ち(乱戦): 全員同時に力尽きてもプレイヤーの勝ち (%s)" % ["draw", "player", "enemy"][brawl.outcome]
+	)
 
 
 ## 複数敵(乱戦)。全敵を倒したときだけ勝ち、プレイヤーが落ちれば残っていても負け。
