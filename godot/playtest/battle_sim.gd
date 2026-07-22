@@ -69,6 +69,7 @@ static func play_one(
 
 	# Battle._spawn_enemy と同じ手順で、各敵の出現を index順に決める。
 	var plans: Array[EnemySpawn.Plan] = []
+	var enemy_radii := PackedFloat32Array()
 	var enemy_launches: Array[BattleRequest.Launch] = []
 	var top_level := 0
 	for enemy in enemies:
@@ -78,14 +79,14 @@ static func play_one(
 			SPAWN_SPREAD_DEG, rng, enemy.stats.radius, field.inradius()
 		)
 		plans.append(plan)
+		enemy_radii.append(enemy.stats.radius)
 		enemy_launches.append(
 			BattleRequest.Launch.new(enemy.stats, plan.position, plan.velocity)
 		)
 		top_level = maxi(top_level, enemy.level)
 
-	# 発射方針には先頭の敵の予告を渡す。乱戦でもプレイヤーの発射は1回きりなので、
-	# 狙う基準を1つに固定して決定性を保つ。
-	var launch := LaunchPolicy.decide(policy, field, player_stats.radius, plans[0], rng)
+	# 全敵の予告を渡す(狙う基準は先頭、間合いは全敵に効く)。
+	var launch := LaunchPolicy.decide(policy, field, player_stats.radius, plans, enemy_radii, rng)
 
 	request.player = BattleRequest.Launch.new(player_stats, launch.position, launch.velocity)
 	request.enemies = enemy_launches

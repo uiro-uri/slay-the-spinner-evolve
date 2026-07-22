@@ -179,10 +179,13 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		var dir := pl.velocity.normalized()
 		# 寿命目安は自分のステータス行と同じ式(rps/(radius*spin_decay))。実UIでは
 		# 敵の減衰の速さはゲージの減りとして見えるので、CLIにも数字で出す。
-		print("  enemy%d Lv%d '%s': 出現=%s 速度=%.1f 向き=%.0f° radius=%.2f rps=%.1f 寿命目安=%.1f" % [
+		# 間合いは発射位置がこの敵に近づける限界の中心距離(実UIでは予告の円)。
+		print("  enemy%d Lv%d '%s': 出現=%s 速度=%.1f 向き=%.0f° radius=%.2f rps=%.1f 寿命目安=%.1f 間合い=%.1f" % [
 			i + 1, e.level, e.display_name, str(pl.position), pl.velocity.length(),
 			rad_to_deg(dir.angle()), e.stats.radius, e.stats.rps,
-			e.stats.rps / maxf(e.stats.radius * e.stats.spin_decay, 0.001)])
+			e.stats.rps / maxf(e.stats.radius * e.stats.spin_decay, 0.001),
+			LaunchStandoff.required_distance(
+				float(state["stats"]["radius"]), e.stats.radius, field.inradius())])
 	print("→ launch --bseed=%d --from-deg=<0-360> --target=center|enemy1..|x,y --force=<0-1>" % bseed)
 
 func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float) -> void:
@@ -201,7 +204,13 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	var plans := _enemy_plans(node.enemies, field, use_bseed)
 	var pstats := stats_from(state["stats"])
 
-	var pos := _ring_pos(field, pstats.radius, from_deg)
+	# 発射位置は壁の内側かつ敵予告の間合い(LaunchStandoff)の外。実UIと同じ制約で、
+	# 予告の真横に置いて動く前に殴る「至近スポーン殴り」はできない。
+	var want := _ring_pos(field, pstats.radius, from_deg)
+	var pos := field.clamp_launch(
+		want, spawn_points_of(plans), enemy_radii_of(node.enemies), pstats.radius)
+	if pos.distance_to(want) > 0.05:
+		print("(間合い: 敵の予告の至近には置けない。%s → %s へ退避)" % [str(want), str(pos)])
 	var tgt := _target_point(field, plans, target)
 	var vel := launch_velocity(pos, tgt, force)
 
@@ -384,6 +393,20 @@ func _ring_pos(field: FieldData, prad: float, from_deg: float) -> Vector2:
 	if field.wall_shape == ArenaWall.WallShape.RECT:
 		return ArenaWall.clamp_inside(field.arena_bounds, p, prad)
 	return ArenaWall.clamp_inside_circle(field.center(), field.inradius(), p, prad)
+
+## 予告(plans)から間合いクランプ用の出現中心の列を作る。
+static func spawn_points_of(plans: Array) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for pl in plans:
+		points.append(pl.position)
+	return points
+
+## 敵の列から間合いクランプ用の半径の列を作る(plansと同index)。
+static func enemy_radii_of(enemies: Array) -> PackedFloat32Array:
+	var radii := PackedFloat32Array()
+	for e in enemies:
+		radii.append(e.stats.radius)
+	return radii
 
 func _target_point(field: FieldData, plans: Array, target: String) -> Vector2:
 	if target == "center":

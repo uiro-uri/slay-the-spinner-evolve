@@ -41,6 +41,13 @@ extends Node2D
 ## disc.stats.radius を入れる。0なら余白ぶんだけを最小可視長とする。
 var readable_radius: float = 0.0
 
+## 立ち合いの間合い(発射位置がこの敵に近づける限界の中心距離)。0で非表示。
+## Battleが出現時にLaunchStandoff.required_distance()を入れる。円は確定値でなく
+## 表示位置に描く——確定中心に描くと揺れの意味(真の出現点を読み切らせない)が
+## 壊れるため。実際のクランプは確定値基準なので揺れ幅ぶんずれうるが、狙い側の
+## コマ自身も境界で滑って見えるので「入れない範囲」は伝わる。
+var standoff_radius: float = 0.0
+
 ## 明滅の速さ。止まっている三角形より、脈打っている方が
 ## 「これから飛ぶ」ことが伝わる。
 @export_range(0.0, 10.0, 0.5) var pulse_speed: float = 4.0
@@ -144,3 +151,10 @@ func _draw() -> void:
 	var shown := color
 	shown.a *= 0.65 + 0.35 * (0.5 + 0.5 * sin(_pulse))
 	draw_colored_polygon(points, shown)
+
+	# 間合いの境界線。発射位置がこの円の中に入れないことを薄い線で示す。
+	# 明滅させると警告に見えて主張しすぎるので、一定の薄さで置いておく。
+	if standoff_radius > 0.0:
+		var ring := color
+		ring.a = 0.16
+		draw_arc(display_position(), standoff_radius, 0.0, TAU, 96, ring, 0.05)

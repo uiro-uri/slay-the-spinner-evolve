@@ -405,6 +405,10 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	var inward := to_center.normalized() if to_center.length() > 0.001 else Vector2.UP
 	var bias_dir := inward.rotated(rng.randf_range(-BIAS_DIR_SPREAD, BIAS_DIR_SPREAD))
 	telegraph.show_plan(plan.position, plan.velocity, bias_dir)
+	# 立ち合いの間合い(発射位置がこの敵に近づける限界)を予告に描かせる。
+	telegraph.standoff_radius = LaunchStandoff.required_distance(
+		_player.stats.radius, disc.stats.radius, _inradius()
+	)
 
 	_enemies.append(disc)
 	_telegraphs.append(telegraph)
@@ -454,10 +458,25 @@ func _inradius() -> float:
 
 
 ## 発射地点を土俵の内側へ寄せる。矩形は矩形クランプ、非矩形は内接円クランプ。
-func _clamp_launch(pos: Vector2) -> Vector2:
+func _wall_clamp(pos: Vector2) -> Vector2:
 	if _wall_shape() == ArenaWall.WallShape.RECT:
 		return ArenaWall.clamp_inside(_bounds(), pos, _player.stats.radius)
 	return ArenaWall.clamp_inside_circle(_center(), _inradius(), pos, _player.stats.radius)
+
+
+## 発射地点のクランプ: 壁の内側 かつ 敵予告の間合い(LaunchStandoff)の外。
+## 狙い中のコマ(aim_moved)も同じ経路を通るので、間合いに入れないことが
+## 撃つ前からコマの動きで見える。
+func _clamp_launch(pos: Vector2) -> Vector2:
+	var spawn_points := PackedVector2Array()
+	var spawn_radii := PackedFloat32Array()
+	for i in _enemy_plans.size():
+		spawn_points.append(_enemy_plans[i].position)
+		spawn_radii.append(_enemies[i].stats.radius)
+	return LaunchStandoff.clamp_away(
+		pos, spawn_points, spawn_radii, _player.stats.radius,
+		_inradius(), _center(), _wall_clamp
+	)
 
 
 ## 狙っている間、コマを三角形の頂点(＝発射地点)へ置く。ここから飛ぶ、が

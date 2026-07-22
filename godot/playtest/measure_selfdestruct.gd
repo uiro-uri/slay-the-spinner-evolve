@@ -72,7 +72,10 @@ func _resolve(enemy: EnemyData, speed: float, player_stats: SpinnerStats, policy
 	var plan := EnemySpawn.plan(
 		field.center(), SPAWN_RING, speed, SPAWN_SPREAD_DEG,
 		rng, enemy.stats.radius, field.inradius())
-	var launch := LaunchPolicy.decide(policy, field, player_stats.radius, plan, rng)
+	var plans: Array[EnemySpawn.Plan] = [plan]
+	var launch := LaunchPolicy.decide(
+		policy, field, player_stats.radius, plans,
+		PackedFloat32Array([enemy.stats.radius]), rng)
 	request.player = BattleRequest.Launch.new(player_stats, launch.position, launch.velocity)
 	request.enemies = [BattleRequest.Launch.new(enemy.stats, plan.position, plan.velocity)]
 
