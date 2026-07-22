@@ -149,7 +149,10 @@ func _test_policies_stay_legal(check: Callable) -> void:
 				var plan := EnemySpawn.plan(
 					field.center(), 4.0, 5.0, 30.0, rng, 0.5, field.inradius()
 				)
-				var launch := LaunchPolicy.decide(kind, field, radius, plan, rng)
+				var plans: Array[EnemySpawn.Plan] = [plan]
+				var launch := LaunchPolicy.decide(
+					kind, field, radius, plans, PackedFloat32Array([0.5]), rng
+				)
 				worst_speed = maxf(worst_speed, launch.velocity.length())
 				if field.wall_shape == ArenaWall.WallShape.RECT:
 					var b := field.arena_bounds

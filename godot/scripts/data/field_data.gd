@@ -50,3 +50,25 @@ func inradius() -> float:
 ## アリーナの中心。
 func center() -> Vector2:
 	return arena_bounds.get_center()
+
+
+## コマ全体が壁の内側に収まる位置へ寄せる。矩形は矩形クランプ、非矩形は内接円。
+## Battle._clamp_launch と同じ寄せ方の一本化(bot・CLIはこちらを使う)。
+func clamp_inside(pos: Vector2, radius: float) -> Vector2:
+	if wall_shape == ArenaWall.WallShape.RECT:
+		return ArenaWall.clamp_inside(arena_bounds, pos, radius)
+	return ArenaWall.clamp_inside_circle(center(), inradius(), pos, radius)
+
+
+## 発射位置のクランプ: 壁の内側 かつ 全ての敵予告から間合い(LaunchStandoff)以上。
+## spawn_points/spawn_radii は予告済みの敵の出現中心と半径(同indexで対応)。
+func clamp_launch(
+	pos: Vector2,
+	spawn_points: PackedVector2Array,
+	spawn_radii: PackedFloat32Array,
+	player_radius: float
+) -> Vector2:
+	return LaunchStandoff.clamp_away(
+		pos, spawn_points, spawn_radii, player_radius, inradius(), center(),
+		func(p: Vector2) -> Vector2: return clamp_inside(p, player_radius)
+	)

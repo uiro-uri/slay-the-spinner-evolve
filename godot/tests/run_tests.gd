@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "battledefaults"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "battledefaults"
 ]
 
 
@@ -118,6 +118,9 @@ func _init() -> void:
 
 	print("== launchspeed ==")
 	_test_launch_speed()
+
+	print("== standoff ==")
+	_test_launch_standoff()
 
 	print("== victorygrowth ==")
 	_test_victory_growth()
@@ -406,6 +409,12 @@ func _test_launch_speed() -> void:
 	var suite = load("res://tests/test_launch_speed.gd").new()
 	suite.run(_check)
 	_done("launchspeed")
+
+
+func _test_launch_standoff() -> void:
+	var suite = load("res://tests/test_launch_standoff.gd").new()
+	suite.run(_check)
+	_done("standoff")
 
 
 func _test_victory_growth() -> void:
