@@ -44,6 +44,14 @@ const RADIUS_CAP := 2.0
 ## 質量の上限。
 const MASS_CAP := 8.0
 
+## Overencumbered(質量アップ)の倍率。質量は与える削り(×倍率)と受ける削り(÷倍率)の
+## 両側に効くため、接触トレードは倍率の2乗で動く: ×1.5では1枚でスイング2.25倍になり、
+## 単独計測でLv3 +45.9pt/枚(次点RAREのSPIN_ENGINE +13.5の3.4倍)・2枚で勝率6.6%→92.6%の
+## 実質勝ち確定札だった。コールドプレイでも「2枚引いたら全戦一発勝利で緊張感ゼロ」を再現。
+## ×1.3(スイング1.69倍)でRARE帯(SPIN_ENGINE同格)に収める。値の照合はテストの
+## 質量倍率天井(倍率²≦2.0)を参照。
+const OVERENCUMBERED_MASS_MULT := 1.3
+
 ## Giant Growthの倍率。直径だけ(×1.25)だった頃は自然減衰(radius×spin_decay比例)の
 ## 悪化が上回り、単独計測でLv3 -6.4pt/枚・3枚で-26.9ptと唯一の純マイナス札=罠だった。
 ## 「大きくなるなら重くもなる」の複合にして、質量の衝突耐性(削りは1/(質量×半径²))で
@@ -105,11 +113,12 @@ static func all() -> Array[CustomPart]:
 		# Giant Growth: 直径と質量の複合(倍率の経緯はGROWTH_*_MULTのコメント参照)。
 		CustomPart.make_growth(2, "PART_GIANT_GROWTH", CustomPart.Rarity.COMMON,
 			GROWTH_RADIUS_MULT, RADIUS_CAP, GROWTH_MASS_MULT, MASS_CAP),
-		# 質量×1.5。改修前は最強札(×1.6)だったので微減。ボスは自滅(spin_decay=0.6)を
-		# 抑えたぶん削りで倒す設計になっており、greedyの主火力である質量を削るとボスは
-		# 硬くなる。uiroの判断でボス難化を許容(残機で緩和)し、札の突出を抑える方を採った。
+		# 質量アップ。倍率の経緯と根拠はOVERENCUMBERED_MASS_MULTのコメント参照。
+		# ボスは自滅(spin_decay=0.65)を抑えたぶん削りで倒す設計になっており、greedyの
+		# 主火力である質量を削るとボスは硬くなる。uiroの判断でボス難化を許容(残機で
+		# 緩和)し、札の突出を抑える方を採った(×1.6→×1.5→今回)。
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
-			CustomPart.Stat.MASS, 1.5, MASS_CAP),
+			CustomPart.Stat.MASS, OVERENCUMBERED_MASS_MULT, MASS_CAP),
 		# Full Steam Ahead: 勢いを保つ札。摩擦(速度減衰)だけを下げていた頃は
 		# 戦績がほぼ0の死に札だった(摩擦は勝敗にほとんど効かない)。名前どおり
 		# 「勢いを保つ」よう、摩擦と回転減衰率(自然にRPSが落ちる速さ)の両方を

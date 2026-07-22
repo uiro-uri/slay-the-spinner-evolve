@@ -22,6 +22,7 @@ func run(check: Callable) -> void:
 	_test_growth(check)
 	_test_dead_card_filter(check)
 	_test_rejected_cooldown(check)
+	_test_contact_trade_ceiling(check)
 
 
 func _stats() -> SpinnerStats:
@@ -812,3 +813,54 @@ func _test_rejected_cooldown(check: Callable) -> void:
 		not spin_offered,
 		"見送り札: 死にカード除外と併用しても両方とも提示されない"
 	)
+
+
+## 1枚の札が接触トレードを一方的にしないこと(質量倍率の天井)。
+##
+## 衝突で削られるrpsは violence×(相手質量×相手速さ)÷(自質量×自半径²) なので、
+## 質量は「与える削り×倍率」と「受ける削り÷倍率」の両側に効き、接触トレードは
+## 倍率の2乗で動く。OVERENCUMBERED ×1.5時代は1枚でスイング2.25倍となり、単独計測で
+## Lv3 +45.9pt/枚(次点RAREのSPIN_ENGINE +13.5の3.4倍)・2枚で勝率6.6%→92.6%の
+## 実質勝ち確定札だった。ここが割れると「引けたら勝ち確」の運ゲー札が生まれる。
+## 寿命(rps÷(半径×spin_decay))に代償を払う札(GIANT_GROWTHの半径経由の減衰悪化など)は
+## トレードと寿命の交換なので対象外。
+func _test_contact_trade_ceiling(check: Callable) -> void:
+	const SWING_CAP := 2.0
+	const ENEMY_MASS := 2.0
+	const ENEMY_RADIUS := 0.8
+	const SPEED := 6.0
+	const VIOLENCE := 0.07
+	for part in CustomPartCatalog.all():
+		var before := SpinnerStats.default_player()
+		var after := SpinnerStats.default_player()
+		part.apply_to(after)
+
+		# 寿命に代償を払う札はこの天井の対象外(スイングは寿命との交換)。
+		var life_before := before.rps / (before.radius * before.spin_decay)
+		var life_after := after.rps / (after.radius * after.spin_decay)
+		if life_after < life_before - EPS:
+			continue
+
+		var dealt_before := SpinnerPhysics.sharpened_spin_drain(
+			SpinnerPhysics.spin_drain(before.mass, SPEED, ENEMY_MASS, ENEMY_RADIUS, VIOLENCE),
+			before.edge
+		)
+		var dealt_after := SpinnerPhysics.sharpened_spin_drain(
+			SpinnerPhysics.spin_drain(after.mass, SPEED, ENEMY_MASS, ENEMY_RADIUS, VIOLENCE),
+			after.edge
+		)
+		var recv_before := SpinnerPhysics.guarded_spin_drain(
+			SpinnerPhysics.spin_drain(ENEMY_MASS, SPEED, before.mass, before.radius, VIOLENCE),
+			before.hit_guard
+		)
+		var recv_after := SpinnerPhysics.guarded_spin_drain(
+			SpinnerPhysics.spin_drain(ENEMY_MASS, SPEED, after.mass, after.radius, VIOLENCE),
+			after.hit_guard
+		)
+		var swing := (dealt_after / dealt_before) * (recv_before / recv_after)
+		check.call(
+			swing <= SWING_CAP + EPS,
+			"パーツ%d(%s): 1枚の接触トレードスイング%.2f倍が天井%.1f以下" % [
+				part.id, part.title_key, swing, SWING_CAP
+			]
+		)
