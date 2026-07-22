@@ -287,10 +287,15 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (残り%d回, 提示済み・再掲) ===" % [tree.current_step(), level, left])
 	else:
 		var rng := RandomNumberGenerator.new(); rng.seed = bseed
-		# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを除外する。
+		# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを、
+		# 直前の画面で見送った札(last_rejected)も除外する。旧stateはキー無し=除外なし。
+		var skip: Array[int] = []
+		if state.get("last_rejected") != null:
+			for v in state["last_rejected"]:
+				skip.append(int(v))
 		choices = CustomPartCatalog.pick_choices(
 			CustomPartCatalog.REWARD_CHOICES, rng, level,
-			stats_from(state["stats"]), int(state["continues"])
+			stats_from(state["stats"]), int(state["continues"]), skip
 		)
 		var ids := []
 		for c in choices: ids.append(c.id)
@@ -319,6 +324,12 @@ func _pick(state: Dictionary, path: String, id: int) -> void:
 	state["stats"] = stats_dict(stats)
 	state["continues"] = maxi(int(state["continues"]), part.lives)
 	state["parts"].append(id)
+	# 見送った札(提示から選ばなかった残り)を覚え、次の報酬抽選で除外する。
+	var rejected := []
+	for v in offered:
+		if int(v) != id:
+			rejected.append(int(v))
+	state["last_rejected"] = rejected
 	state["offered"] = null
 	# 乱戦は倒した頭数ぶん報酬を選べる。まだ残っていれば次のrewardへ(ノードは未確定のまま)。
 	var left: int = (int(state["rewards_left"]) if state.get("rewards_left") != null else 1) - 1

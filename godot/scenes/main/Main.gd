@@ -18,6 +18,10 @@ const SOUNDTEST_SCENE: PackedScene = preload("res://scenes/soundtest/SoundTest.t
 ## 勝った戦闘で倒した頭数ぶん、報酬選択を繰り返す残り回数。
 var _rewards_remaining: int = 0
 
+## いま報酬画面に提示している札。選択時に見送り札(選ばなかった残り)を割り出し、
+## 次の報酬抽選から除外する(GameState.last_rejected_ids)ために覚えておく。
+var _reward_offer: Array[CustomPart] = []
+
 ## ランを通して出しっぱなしにするビルド表示HUD。ScreenHolderの外(Main直下)に置いて
 ## 画面差し替えで消えないようにし、_swap_screenのたびに現在のGameStateへ追従させる。
 var _stat_panel: StatPanel
@@ -136,15 +140,19 @@ func goto_reward() -> void:
 	reward.part_chosen.connect(_on_part_chosen)
 	# 今倒した段のレベルほどレアが出やすい。current_step()は段選択時と同じ値。
 	# 現在のステータスと残機を渡し、上限到達で効果ゼロの死にカードは提示しない。
+	# 直前の画面で見送った札も除外し、同じ顔ぶれの連続を防ぐ。
 	var level := EnemyRoster.level_for_step(GameState.map_tree.current_step())
-	reward.setup(CustomPartCatalog.pick_choices(
+	_reward_offer = CustomPartCatalog.pick_choices(
 		CustomPartCatalog.REWARD_CHOICES, null, level,
-		GameState.player_stats, GameState.continues_left
-	))
+		GameState.player_stats, GameState.continues_left,
+		GameState.last_rejected_ids
+	)
+	reward.setup(_reward_offer)
 
 
 func _on_part_chosen(part: CustomPart) -> void:
 	AudioManager.play("ui_confirm")
+	GameState.last_rejected_ids = CustomPartCatalog.rejected_ids(_reward_offer, part.id)
 	GameState.apply_part(part)
 	# まだ倒した頭数ぶんの報酬が残っていれば、次の報酬選択へ。無ければマップへ戻る。
 	_rewards_remaining -= 1

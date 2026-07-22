@@ -27,6 +27,11 @@ var acquired_part_ids: Array[int] = []
 ## このランで残っているコンティニュー回数。0で打ち止め。
 var continues_left: int = MAX_CONTINUES
 
+## 直前の報酬画面で見送った(提示されたが選ばなかった)札のID。
+## 次の報酬抽選(CustomPartCatalog.pick_choices)がこれを除外して、同じ顔ぶれが
+## 画面をまたいで続くのを防ぐ。取った札は入らない=重ね取り戦略は妨げない。
+var last_rejected_ids: Array[int] = []
+
 ## 連続クリア記録（連勝数）。ランをまたいで持ち越すので reset_run() では消さない。
 ## クリアで +1、ギブアップ（ランを勝ち切れず終了）で 0 に戻る。メモリ上のみ＝
 ## アプリを閉じると消えるのは、このプロジェクトのセーブなし方針に合わせている。
@@ -40,6 +45,7 @@ func reset_run() -> void:
 	pending_field = null
 	acquired_part_ids = []
 	continues_left = MAX_CONTINUES
+	last_rejected_ids = []
 
 
 ## 選んだパーツをランに適用する。ステータス強化と残機の引き上げ、取得記録をまとめる。

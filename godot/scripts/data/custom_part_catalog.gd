@@ -199,9 +199,13 @@ static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
 ## SPIN_ENGINEなど。CustomPart.would_change_anything参照）を抽選から外す。
 ## lives_nowは現在の残機（SET_LIVES札の死に判定に使う。負=不明なら常に有効扱い）。
 ## 省略時(null)は従来どおり全札から引く。
+## rejected_idsは直前の報酬画面で見送った札のID（rejected_ids()で作る）。
+## 渡すとその札を今回の提示から外し、同じ顔ぶれが画面をまたいで続くのを防ぐ。
+## 取った札はここに入らないので、同じ札を重ねて取る戦略は妨げない。
 static func pick_choices(
 	count: int, rng: RandomNumberGenerator = null, level: int = 1,
-	stats: SpinnerStats = null, lives_now: int = -1
+	stats: SpinnerStats = null, lives_now: int = -1,
+	rejected_ids: Array[int] = []
 ) -> Array[CustomPart]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
@@ -217,12 +221,31 @@ static func pick_choices(
 		# なので起きないが、カタログ改変で空提示＝進行不能になるのを防ぐ）。
 		if not alive.is_empty():
 			pool = alive
+	if not rejected_ids.is_empty():
+		var fresh: Array[CustomPart] = []
+		for part in pool:
+			if not rejected_ids.has(part.id):
+				fresh.append(part)
+		# 見送り札は死にカードと違い、取れば効く。除外すると提示枚数を満たせない
+		# ときは枚数を痩せさせず、除外を諦めて再掲する方を取る。
+		if fresh.size() >= count:
+			pool = fresh
 	var chosen: Array[CustomPart] = []
 	for i in mini(count, pool.size()):
 		var index := _weighted_index(pool, rng, level)
 		chosen.append(pool[index])
 		pool.remove_at(index)
 	return chosen
+
+
+## 提示(offered)からプレイヤーが選ばなかった札のID＝見送り札を返す。
+## 次の報酬画面のpick_choicesにrejected_idsとして渡すと、連続提示を防げる。
+static func rejected_ids(offered: Array[CustomPart], picked_id: int) -> Array[int]:
+	var out: Array[int] = []
+	for part in offered:
+		if part.id != picked_id:
+			out.append(part.id)
+	return out
 
 
 static func _weight_for(part: CustomPart, level: int) -> int:
