@@ -6,6 +6,9 @@ extends RefCounted
 ##  - 乱戦メンバーが弱められないこと: 頭数でrpsを割らず、各体を1段下のレベルの
 ##    まま戦わせる(手強さの見返りは頭数ぶんの報酬。pick_group_for_step参照)。
 ##    ここが1未満に落ちたら、どこかで頭数割りが復活している。
+##  - 寿命の床と梯子: 寿命目安(rps÷(半径×spin_decay))がLv3以上でプレイヤー初期を
+##    明確に上回り、レベル間で逆転しないこと。逆転すると「待てば自滅」が強敵ほど
+##    有効になる(受け身支配)。
 ##  - レベルの梯子: 耐久(rps×質量×半径²=「耐えられる衝突回数の目安」)がレベルが
 ##    上がるほど強くなること。rpsもレベル順に上げているが(回転ゲージ=強さの見た目)、
 ##    強さは硬さ・質量・rpsの複合なので、レベルの梯子は複合結果である耐久で見る。
@@ -19,6 +22,9 @@ const EPS := 1e-4
 func run(check: Callable) -> void:
 	_test_swarm_members_unweakened(check)
 	_test_toughness_ladder(check)
+	_test_lifetime_sane_decay(check)
+	_test_lifetime_floor(check)
+	_test_lifetime_ladder(check)
 
 
 ## 乱戦メンバーはどれも頭数で弱められていないこと。各体の耐久(=rps×質量×半径²)が、
@@ -70,3 +76,55 @@ func _test_toughness_ladder(check: Callable) -> void:
 			here_max < next_min,
 			"耐久の梯子: Lv%d最大(%.1f) < Lv%d最小(%.1f)" % [level, here_max, level + 1, next_min]
 		)
+
+
+## 寿命目安 = rps ÷ (半径 × spin_decay)。自然減衰が「半径×spin_decay」に比例するため、
+## 殴られなくてもこの目安(を土俵のnatural_dampingで割った秒数)で力尽きる。
+## プレイヤーと同じ土俵の上での比較なので、natural_dampingは共通で約分できる。
+static func lifetime(stats: SpinnerStats) -> float:
+	return stats.rps / maxf(stats.radius * stats.spin_decay, 0.0001)
+
+
+## 全敵のspin_decayが(0,1]に収まること。0以下は不死身、1超えは意図しない自滅加速。
+func _test_lifetime_sane_decay(check: Callable) -> void:
+	var all_sane := true
+	for e in EnemyRoster.all():
+		if e.stats.spin_decay <= 0.0 or e.stats.spin_decay > 1.0:
+			all_sane = false
+	check.call(all_sane, "全敵のspin_decayが(0,1]に収まる")
+
+
+## Lv3以上の敵の寿命目安が、プレイヤー初期寿命を明確に(1.15倍以上)上回ること。
+## ここが割れると「弱発射で離れて置き、敵の自然減衰を待つ」だけで強敵に勝てる
+## 受け身支配が復活する(かつて寿命がLv1≈42→Lv5≈19と逆転しており、Lv4+戦とボス戦の
+## 最適解が放置だった)。低レベル(Lv1〜2)は接触で瞬殺できる導入なので対象外。
+func _test_lifetime_floor(check: Callable) -> void:
+	var player_life := lifetime(SpinnerStats.default_player())
+	var floor_life := player_life * 1.15
+	for level in range(3, 6):
+		var worst := INF
+		for e in EnemyRoster.of_level(level):
+			worst = minf(worst, lifetime(e.stats))
+		check.call(
+			worst >= floor_life,
+			"寿命の床: Lv%d最小(%.1f) ≧ プレイヤー初期(%.1f)×1.15=%.1f" % [
+				level, worst, player_life, floor_life]
+		)
+
+
+## レベル平均の寿命目安がLv3→4→5で下がらないこと(高レベルほど短命の逆転を防ぐ)。
+## spin_decayを1.0に戻す(または高レベルだけ上げる)とここが落ちる。
+func _test_lifetime_ladder(check: Callable) -> void:
+	var prev_avg := 0.0
+	for level in range(3, 6):
+		var total := 0.0
+		var n := 0
+		for e in EnemyRoster.of_level(level):
+			total += lifetime(e.stats)
+			n += 1
+		var avg := total / maxf(n, 1)
+		check.call(
+			avg >= prev_avg,
+			"寿命の梯子: Lv%d平均(%.1f) ≧ Lv%d平均(%.1f)" % [level, avg, level - 1, prev_avg]
+		)
+		prev_avg = avg

@@ -82,11 +82,12 @@ var obstacles: Array[Vector3] = []
 ## violence/natural_damping/spin_kick_scaleの現行値は「減衰と削りの比」の再設計
 ## (2026-07-21): 旧比(violence=0.04, damping=1.0)ではLv4-5の敵死因の8割が自然減衰で、
 ## 当てにいかず低速で待つ受け身が最適解だった。削りを1.5倍・自然減衰を0.75倍にして
-## 決着を接触寄りに。spin_kick_scaleは削り比例なので1/1.5倍で弾きの勢いを維持する。
+## 決着を接触寄りに。第2弾(2026-07-22)はLv3+の敵spin_decay<1(寿命の逆転解消)と対で
+## violence 0.06→0.07。spin_kick_scaleは削り比例なので反比例(1.35→1.15)で勢いを維持。
 var stage_strength: float = 4.9
 var stage_shape: SpinnerPhysics.StageShape = SpinnerPhysics.StageShape.DISH
-var violence: float = 0.06
-var spin_kick_scale: float = 1.35
+var violence: float = 0.07
+var spin_kick_scale: float = 1.15
 var natural_damping: float = 0.75
 var wall_damping: float = 0.75
 

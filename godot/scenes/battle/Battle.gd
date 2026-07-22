@@ -55,13 +55,15 @@ const BAR_ROW_H := 60.0
 ## ぶつかり合いの激しさ。大きいほど1回の衝突で削れるRPSが増える。
 ## 0.04→0.06は「減衰と削りの比」の再設計(2026-07-21): 旧比ではLv4-5の敵死因の
 ## 8割が自然減衰で、当てにいかない受け身が最適解だった。決着を接触寄りに。
+## 0.06→0.07は第2弾(2026-07-22): Lv3+の敵spin_decay<1(寿命の逆転解消)と対で、
+## 敵が長生きになるぶん削りを増やし、接触で決めきれる速さを保つ。
 ## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
-@export_range(0.0, 1.0, 0.01) var violence: float = 0.06
+@export_range(0.0, 1.0, 0.01) var violence: float = 0.07
 
 ## 削れたRPSがどれだけ弾き飛ばしに変わるか。
-## 弾きは削り量に比例するので、violenceを1.5倍した際に1/1.5倍(2.0→1.35)して
-## 弾き飛ばしの勢いを従来と同等に保っている(過去にviolence半減×2倍の前例)。
-@export_range(0.0, 5.0, 0.05) var spin_kick_scale: float = 1.35
+## 弾きは削り量に比例するので、violenceを上げた際に反比例で下げて
+## 弾き飛ばしの勢いを従来と同等に保つ(2.0→1.35→1.15。過去にviolence半減×2倍の前例)。
+@export_range(0.0, 5.0, 0.05) var spin_kick_scale: float = 1.15
 
 ## 何もしなくても失われる回転(毎秒、半径に比例)。1.0→0.75はviolenceと対の再設計。
 @export_range(0.0, 5.0, 0.05) var natural_damping: float = 0.75
