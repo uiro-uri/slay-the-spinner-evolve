@@ -17,6 +17,7 @@ func run(check: Callable) -> void:
 	_test_encounters(check)
 	_test_encounters_deterministic(check)
 	_test_no_needless_single_choice(check)
+	_test_single_escape_guarantee(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -272,6 +273,68 @@ func _test_no_needless_single_choice(check: Callable) -> void:
 			TRIALS, single_total, node_total,
 			"" if failures.is_empty() else " / 例: " + failures[0]
 		]
+	)
+
+
+## 段5以降(Lv3+)へ進むノードの進める先に「1体部屋」が最低1つあること。
+##
+## 複数体戦は頭数ぶん報酬が増える「選べるリスク」であって、進める先が全部
+## 複数体だと強制になる(生成器は _ensure_single_escape で1つを単体へ引き直す)。
+## 序盤(Lv1-2)の乱戦はほぼ無料の追加報酬なので保証対象外。
+## ここでは生成器のヘルパーを使わず、対象ノードの進める先を独立に数えて照合する。
+## ついでに引き直しの副作用も見張る: 全戦闘ノードのレベルは段相応
+## (level_for_step)のまま、体数は1〜3のままであること。
+func _test_single_escape_guarantee(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var failures: Array[String] = []
+	var multi_total := 0
+
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			failures.append("seed=%d: 生成に失敗" % trial)
+			continue
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if coord.x >= 1:
+				if node.enemy_count() < 1 or node.enemy_count() > 3:
+					failures.append("seed=%d: %s の体数が%d" % [trial, coord, node.enemy_count()])
+				elif node.level() != EnemyRoster.level_for_step(coord.x):
+					failures.append(
+						"seed=%d: %s のレベルが段相応でない(Lv%d)" % [trial, coord, node.level()]
+					)
+				if node.enemy_count() >= 2:
+					multi_total += 1
+			if coord.x < MapTree.SINGLE_ESCAPE_FROM_STEP - 1:
+				continue
+			var targets := node.targets()
+			if targets.is_empty():
+				continue
+			var has_single := false
+			for t in targets:
+				var tn: MapTree.MapNode = tree.nodes.get(t)
+				if tn != null and tn.enemy_count() == 1:
+					has_single = true
+					break
+			if not has_single:
+				failures.append("seed=%d: %s の進める先が全部複数体" % [trial, coord])
+
+	check.call(
+		failures.is_empty(),
+		"マップ1体部屋保証: %d回の生成で段%d以降への進める先に必ず1体部屋がある%s" % [
+			TRIALS, MapTree.SINGLE_ESCAPE_FROM_STEP,
+			"" if failures.is_empty() else " / 例: " + failures[0]
+		]
+	)
+	# 保証が「複数体を減らす」形で満たされていたら本末転倒なので、複数体の総量も
+	# 見張る。引き直し(demote)だけの実装だと約4割減って頭数ぶん報酬のパーツ経済が
+	# 痩せる(bot計測でクリア率58%→46%)。交換(demote+同段のpromote)なら保たれる。
+	# シード固定(0..TRIALS-1)なので決定的: 保証なしの素の生成は2710個、
+	# 段5以降のdemoteだけは2045個、段5以降の交換は2414個。2200はその分水嶺。
+	check.call(
+		multi_total >= 2200,
+		"マップ1体部屋保証: 複数体の総量が保存されている(%d個, 2200以上)" % multi_total
 	)
 
 

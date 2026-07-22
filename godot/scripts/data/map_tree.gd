@@ -21,6 +21,11 @@ const GOAL_COORD := Vector2i(STEP_GOAL, 2)
 ## 妥当なマップができるまで作り直す。無限ループを避けるための上限。
 const MAX_ATTEMPTS := 200
 
+## この段以降の戦闘ノードへの進路には必ず「1体部屋」の逃げ道を保証する
+## (_ensure_single_escape)。段5=敵Lv3から。それより前の乱戦は強制されても
+## ほぼ無料の追加報酬なので保証しない(経済を痩せさせない)。
+const SINGLE_ESCAPE_FROM_STEP := 5
+
 
 class MapNode:
 	extends RefCounted
@@ -221,6 +226,104 @@ func _assign_encounters(rng: RandomNumberGenerator) -> void:
 		var node: MapNode = nodes[coord]
 		node.enemies = EnemyRoster.pick_group_for_step(coord.x, rng)
 		node.field = FieldRoster.pick_for_step(coord.x, rng)
+	_ensure_single_escape(rng)
+
+
+## 段SINGLE_ESCAPE_FROM_STEP以降のノードの進める先に「1体部屋」を最低1つ保証する。
+##
+## 遭遇はノードごとに独立抽選(2体30%/3体10%)なので、「進める先が全部複数体」が
+## 選択局面の約2割・ラン全体では8割超で最低1回起きていた(段7→段8は3割)。複数体戦は
+## 頭数ぶん報酬が増える「選べるリスク」の設計なのに、選択肢が全部複数体だと強制に
+## なってしまう。ここでは強制になっているノードの進める先から1つを単体へ引き直し、
+## **同じ段の別の単体ノードを同じ頭数へ昇格して複数体の総量を保存する**。
+## 引き直すだけだと複数体ノードが4割減り、頭数ぶん報酬のパーツ経済が痩せて
+## ラン全体が弱くなってしまう(bot計測でクリア率58%→46%)。交換なら強制だけが消える。
+##
+## 保証は段5以降(Lv3+)への進路だけ。序盤(Lv1-2)の乱戦は勝率92〜96%の
+## 「ほぼ無料の追加報酬」で、強制されても害がなく、実際の強制詰みの不満は
+## 全て段5以降の複数体部屋だった。全段に保証を張ると、ランダム進路が乱戦を
+## 踏む率そのものが下がって(38%→24%)経済が痩せる副作用も出る。
+##
+## 昇格先は「昇格してもその親全員に1体部屋の逃げ道が残る」単体ノードに限る。
+## 昇格は1件ずつ現在の盤面で判定するので、複数回の昇格が重なって逃げ道を
+## 潰すことはない。候補が無ければ昇格を諦める(保証が優先)。
+##
+## 段の昇順・列の昇順で舐めるのは決定性のため(Dictionaryの挿入順に依存させない)。
+## 先の段の引き直しを後続の親も見るので、同じ子が2度引き直されることはない。
+func _ensure_single_escape(rng: RandomNumberGenerator) -> void:
+	for step in range(SINGLE_ESCAPE_FROM_STEP - 1, STEP_GOAL):
+		var columns: Array[int] = []
+		for coord in nodes:
+			if coord.x == step:
+				columns.append(coord.y)
+		columns.sort()
+
+		for column in columns:
+			var node: MapNode = nodes[Vector2i(step, column)]
+			var targets := node.targets()
+			if targets.is_empty():
+				continue
+			var all_multi := true
+			for t in targets:
+				var tn: MapNode = nodes.get(t)
+				if tn == null or tn.enemy_count() <= 1:
+					all_multi = false
+					break
+			if not all_multi:
+				continue
+			var chosen: Vector2i = targets[rng.randi_range(0, targets.size() - 1)]
+			var chosen_node: MapNode = nodes[chosen]
+			var demoted_count := chosen_node.enemy_count()
+			chosen_node.enemies = [EnemyRoster.pick_for_step(chosen.x, rng)]
+			_promote_compensation(chosen.x, chosen, demoted_count, rng)
+
+
+## 引き直しの補償: child_step の単体ノードを1つ、count 体の乱戦へ昇格する。
+## 「昇格しても、その全親に1体部屋の逃げ道が残る」ノードだけが候補。
+## 候補が無ければ何もしない(1体部屋保証が複数体の総量保存より優先)。
+func _promote_compensation(
+	child_step: int, exclude: Vector2i, count: int, rng: RandomNumberGenerator
+) -> void:
+	var candidates: Array[Vector2i] = []
+	for coord in nodes:
+		if coord.x != child_step or coord == exclude:
+			continue
+		var node: MapNode = nodes[coord]
+		if node.enemy_count() != 1 or coord == GOAL_COORD:
+			continue
+		if _parents_keep_escape_without(coord):
+			candidates.append(coord)
+	if candidates.is_empty():
+		return
+	candidates.sort()  # 決定性: Dictionaryの列挙順に依存しない
+	var chosen: Vector2i = candidates[rng.randi_range(0, candidates.size() - 1)]
+	var members := EnemyRoster.of_level(EnemyRoster.level_for_step(child_step))
+	var group: Array[EnemyData] = []
+	for _i in count:
+		group.append(members[rng.randi_range(0, members.size() - 1)])
+	nodes[chosen].enemies = group
+
+
+## coord が複数体になっても、coord を進める先に持つ全ノードに
+## 別の1体部屋が残るか。
+func _parents_keep_escape_without(coord: Vector2i) -> bool:
+	for parent_coord in nodes:
+		if parent_coord.x != coord.x - 1:
+			continue
+		var parent: MapNode = nodes[parent_coord]
+		if not coord in parent.targets():
+			continue
+		var has_other_single := false
+		for t in parent.targets():
+			if t == coord:
+				continue
+			var tn: MapNode = nodes.get(t)
+			if tn != null and tn.enemy_count() <= 1:
+				has_other_single = true
+				break
+		if not has_other_single:
+			return false
+	return true
 
 
 func _assign_arrows_for_step(step: int, rng: RandomNumberGenerator) -> void:
