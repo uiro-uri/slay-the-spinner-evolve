@@ -177,9 +177,12 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		var e: EnemyData = node.enemies[i]
 		var pl: EnemySpawn.Plan = plans[i]
 		var dir := pl.velocity.normalized()
-		print("  enemy%d Lv%d '%s': 出現=%s 速度=%.1f 向き=%.0f° radius=%.2f rps=%.1f" % [
+		# 寿命目安は自分のステータス行と同じ式(rps/(radius*spin_decay))。実UIでは
+		# 敵の減衰の速さはゲージの減りとして見えるので、CLIにも数字で出す。
+		print("  enemy%d Lv%d '%s': 出現=%s 速度=%.1f 向き=%.0f° radius=%.2f rps=%.1f 寿命目安=%.1f" % [
 			i + 1, e.level, e.display_name, str(pl.position), pl.velocity.length(),
-			rad_to_deg(dir.angle()), e.stats.radius, e.stats.rps])
+			rad_to_deg(dir.angle()), e.stats.radius, e.stats.rps,
+			e.stats.rps / maxf(e.stats.radius * e.stats.spin_decay, 0.001)])
 	print("→ launch --bseed=%d --from-deg=<0-360> --target=center|enemy1..|x,y --force=<0-1>" % bseed)
 
 func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float) -> void:
