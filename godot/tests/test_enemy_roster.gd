@@ -25,6 +25,7 @@ func run(check: Callable) -> void:
 	_test_lifetime_sane_decay(check)
 	_test_lifetime_floor(check)
 	_test_lifetime_ladder(check)
+	_test_contact_trade_floor(check)
 
 
 ## 乱戦メンバーはどれも頭数で弱められていないこと。各体の耐久(=rps×質量×半径²)が、
@@ -110,6 +111,36 @@ func _test_lifetime_floor(check: Callable) -> void:
 			"寿命の床: Lv%d最小(%.1f) ≧ プレイヤー初期(%.1f)×1.15=%.1f" % [
 				level, worst, player_life, floor_life]
 		)
+
+
+## 接触トレードの床: Lv4以下の敵は、攻めを積み切ったプレイヤーにとって接触戦が
+## 一方的すぎないこと。等速衝突1回の「受ける削り ÷ 与える削り(edge上限込み)」が
+## TRADE_RATIO_CAP を超えない。削りは speed と violence に線形なので比は両者に
+## 依存しない(v=1, violence=1で評価)。
+##
+## ここが割れると「攻め札を上限まで積んでも接触するだけ損」なレベルが生まれ、
+## 回避はすり鉢が許さないので、そのレベル帯が全戦法詰みの崖になる(段7の
+## Lv4戦がコールドプレイで5連敗した一次証拠。当時の比は2.1〜3.2だった)。
+## ボス(Lv5)は据え置き原則(接触では追い詰めきれず、壁・減衰で仕留める設計)の
+## ため対象外。
+const TRADE_RATIO_CAP := 2.7
+
+
+func _test_contact_trade_floor(check: Callable) -> void:
+	var player := SpinnerStats.default_player()
+	var pierce := SpinnerPhysics.spin_drain(player.mass, 1.0, player.mass, player.radius, 1.0)
+	for level in range(1, 5):
+		for e in EnemyRoster.of_level(level):
+			var received := SpinnerPhysics.spin_drain(
+				e.stats.mass, 1.0, player.mass, player.radius, 1.0)
+			var dealt := SpinnerPhysics.sharpened_spin_drain(
+				SpinnerPhysics.spin_drain(player.mass, 1.0, e.stats.mass, e.stats.radius, 1.0),
+				CustomPartCatalog.EDGE_MAX, pierce)
+			check.call(
+				dealt > 0.0 and received / dealt <= TRADE_RATIO_CAP,
+				"接触トレードの床: %s の被/与比(%.2f) ≦ %.1f" % [
+					e.display_name, received / maxf(dealt, EPS), TRADE_RATIO_CAP]
+			)
 
 
 ## レベル平均の寿命目安がLv3→4→5で下がらないこと(高レベルほど短命の逆転を防ぐ)。
