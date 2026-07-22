@@ -58,6 +58,9 @@ static func play_one(
 
 	var battles: Array = []
 	var parts: Array[int] = []
+	# 直前の報酬画面で見送った札(GameState.last_rejected_idsに相当)。
+	# 次の抽選から除外して、実ゲームと同じ提示ルールで測る。
+	var last_rejected: Array[int] = []
 	# 残機(コンティニュー)。実プレイのGameStateと同じく開始3。敗北しても残機が
 	# あれば同じ相手・同じ土俵で再挑戦する(Main._on_continue_requested)。
 	var continues := START_CONTINUES
@@ -136,12 +139,14 @@ static func play_one(
 		# 各回: ステータス倍率に加え、SET_LIVES札(SPARE_CORE)は残機をmaxiで底上げする。
 		# 倒した敵のレベルほどレアが出やすい。
 		for _r in maxi(group.size(), 1):
-			# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを除外する。
+			# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを、
+			# 直前の画面で見送った札(last_rejected)も除外する。
 			var choices := CustomPartCatalog.pick_choices(
 				CustomPartCatalog.REWARD_CHOICES, rng, int(record["level"]),
-				stats, continues
+				stats, continues, last_rejected
 			)
 			var part := _choose_part(choices, reward_policy, rng, stats, force_part_id)
+			last_rejected = CustomPartCatalog.rejected_ids(choices, part.id)
 			part.apply_to(stats)
 			continues = maxi(continues, part.lives)
 			parts.append(part.id)

@@ -21,6 +21,7 @@ func run(check: Callable) -> void:
 	_test_rage(check)
 	_test_growth(check)
 	_test_dead_card_filter(check)
+	_test_rejected_cooldown(check)
 
 
 func _stats() -> SpinnerStats:
@@ -728,4 +729,86 @@ func _test_dead_card_filter(check: Callable) -> void:
 	check.call(
 		CustomPartCatalog.by_id(7).would_change_anything(rps_room),
 		"ほぼ死にカード: rps35のSPIN_ENGINEは有効なまま"
+	)
+
+
+## 見送り札のクールダウン: 直前の報酬画面で選ばなかった札は次の画面に出さない。
+## 発見の経緯: 2026-07-22のコールドプレイで、8回の報酬画面のうちGIANT_GROWTHが
+## 5回・SHOCK_ABSORBERが5回提示され、顔ぶれの繰り返しが選択の退屈に直結していた
+## (過去サイクルでもGHOST 6/9・RAGE 5/9と再発し続けた積み残し)。
+func _test_rejected_cooldown(check: Callable) -> void:
+	# 純関数rejected_ids: 提示から選んだ1枚を除いた残り=見送り札。
+	var offered: Array[CustomPart] = [
+		CustomPartCatalog.by_id(2), CustomPartCatalog.by_id(10), CustomPartCatalog.by_id(11),
+	]
+	var rejected := CustomPartCatalog.rejected_ids(offered, 10)
+	check.call(
+		rejected == ([2, 11] as Array[int]),
+		"見送り札: rejected_idsは選ばなかった2枚のidを返す (%s)" % str(rejected)
+	)
+	check.call(
+		CustomPartCatalog.rejected_ids([] as Array[CustomPart], 10).is_empty(),
+		"見送り札: 提示が空ならrejected_idsも空"
+	)
+
+	# 抽選: 見送り札を渡すと、その札は何度引いても提示されない。
+	var rng := RandomNumberGenerator.new()
+	var cooled_offered := false
+	for trial in TRIALS:
+		rng.seed = trial + 50000
+		for part in CustomPartCatalog.pick_choices(3, rng, 3, null, -1, [2, 10] as Array[int]):
+			if part.id == 2 or part.id == 10:
+				cooled_offered = true
+	check.call(
+		not cooled_offered,
+		"見送り札: 抽選%d回で見送った2枚が一度も提示されない" % TRIALS
+	)
+	# 取った札(見送りに入らない)は普通に出る=重ね取り戦略は妨げない。
+	var picked_again := false
+	for trial in TRIALS:
+		rng.seed = trial + 50000
+		for part in CustomPartCatalog.pick_choices(3, rng, 3, null, -1, [2, 10] as Array[int]):
+			if part.id == 11:
+				picked_again = true
+	check.call(picked_again, "見送り札: 直前に取った札は次の画面にも出る")
+	# 既定(見送りなし)は従来どおり全札から出る(回帰)。
+	var default_offered := false
+	for trial in TRIALS:
+		rng.seed = trial + 50000
+		for part in CustomPartCatalog.pick_choices(3, rng, 3):
+			if part.id == 2:
+				default_offered = true
+	check.call(default_offered, "見送り札: 除外なしの抽選では従来どおり全札が出る")
+
+	# 提示枚数を満たせないほど除外が広いときは、枚数を痩せさせず除外を諦める。
+	# 全9枚中7枚を見送り扱いにすると残り2枚<3枚なので、見送り札も再掲される。
+	var wide: Array[int] = []
+	for part in CustomPartCatalog.all():
+		if part.id != 9 and part.id != 5:
+			wide.append(part.id)
+	var sizes_ok := true
+	var refill_seen := false
+	for trial in 50:
+		rng.seed = trial + 60000
+		var picks := CustomPartCatalog.pick_choices(3, rng, 3, null, -1, wide)
+		if picks.size() != 3:
+			sizes_ok = false
+		for part in picks:
+			if wide.has(part.id):
+				refill_seen = true
+	check.call(sizes_ok, "見送り札: 除外で3枚を切るときも提示は3枚のまま")
+	check.call(refill_seen, "見送り札: そのときは見送り札も再掲される(除外を諦める)")
+
+	# 死にカード除外との共存: rps上限のSPIN_ENGINE除外は見送りと無関係に効き続ける。
+	var capped := _stats()
+	capped.rps = SpinnerStats.RPS_CAP
+	var spin_offered := false
+	for trial in TRIALS:
+		rng.seed = trial + 70000
+		for part in CustomPartCatalog.pick_choices(3, rng, 5, capped, 3, [2] as Array[int]):
+			if part.id == 7 or part.id == 2:
+				spin_offered = true
+	check.call(
+		not spin_offered,
+		"見送り札: 死にカード除外と併用しても両方とも提示されない"
 	)
