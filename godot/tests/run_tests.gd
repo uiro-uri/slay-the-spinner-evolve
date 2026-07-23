@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "battledefaults"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "sparkscale", "battledefaults"
 ]
 
 
@@ -145,6 +145,9 @@ func _init() -> void:
 
 	print("== bitefloor ==")
 	_test_bite_floor()
+
+	print("== sparkscale ==")
+	_test_spark_scale()
 
 	print("== rpsloss ==")
 	_test_rps_loss()
@@ -469,6 +472,12 @@ func _test_bite_floor() -> void:
 	var suite = load("res://tests/test_bite_floor.gd").new()
 	suite.run(_check)
 	_done("bitefloor")
+
+
+func _test_spark_scale() -> void:
+	var suite = load("res://tests/test_spark_scale.gd").new()
+	suite.run(_check)
+	_done("sparkscale")
 
 
 func _test_rps_loss() -> void:
