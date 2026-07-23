@@ -380,6 +380,18 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	check.call("直径" in growth_text, "naive_play: 巨大化札は直径を謳う (%s)" % growth_text)
 	check.call("質量" in growth_text, "naive_play: 巨大化札は質量も謳う (%s)" % growth_text)
 	check.call("減衰" in growth_text, "naive_play: 巨大化札は代償(自然減衰)も謳う (%s)" % growth_text)
+	# 利点(衝突耐性と弾き)も実UIの注記と同様に謳うこと。発見の経緯: 代償だけの表記を
+	# 読んで、タンク型(硬さ1.76)に5連敗している最中に唯一の対抗札を2回見送った。
+	check.call(
+		"衝突に強く" in growth_text and "弾く" in growth_text,
+		"naive_play: 巨大化札は利点(衝突耐性と弾き)も謳う (%s)" % growth_text
+	)
+	# 代償は「大きくなるぶん」と機構を明示すること(自然減衰は半径経由で悪化するので、
+	# ステータス行のspin_decay=1.00と食い違って見える混乱があった)。
+	check.call(
+		"大きくなる" in growth_text,
+		"naive_play: 巨大化札の代償は大きさ由来だと分かる (%s)" % growth_text
+	)
 	var lives := CustomPartCatalog.by_id(8)
 	check.call("残機" in NaivePlay.card_text(lives), "naive_play: 残機札は残機を謳う")
 	# SPIN_UP(回転加算)は加算量と上限、挙動(寿命)まで謳うこと。STAT_MULTIPLYの
