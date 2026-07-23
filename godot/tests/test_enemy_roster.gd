@@ -113,23 +113,28 @@ func _test_lifetime_floor(check: Callable) -> void:
 		)
 
 
-## 接触トレードの床: Lv4以下の敵は、攻めを積み切ったプレイヤーにとって接触戦が
+## 接触トレードの床: 敵との接触戦が、攻めを積み切ったプレイヤーにとって
 ## 一方的すぎないこと。等速衝突1回の「受ける削り ÷ 与える削り(edge上限込み)」が
-## TRADE_RATIO_CAP を超えない。削りは speed と violence に線形なので比は両者に
-## 依存しない(v=1, violence=1で評価)。
+## 上限を超えない。削りは speed と violence に線形なので比は両者に依存しない
+## (v=1, violence=1で評価)。
 ##
 ## ここが割れると「攻め札を上限まで積んでも接触するだけ損」なレベルが生まれ、
 ## 回避はすり鉢が許さないので、そのレベル帯が全戦法詰みの崖になる(段7の
 ## Lv4戦がコールドプレイで5連敗した一次証拠。当時の比は2.1〜3.2だった)。
-## ボス(Lv5)は据え置き原則(接触では追い詰めきれず、壁・減衰で仕留める設計)の
-## ため対象外。
+##
+## ボス(Lv5)は「最強の敵」として上限を別に持つ(接触だけで楽に沈まないが、
+## 接触が常に大損でもない帯)。かつては据え置き原則で対象外だったが、比4.0〜5.3の
+## 時代にコールドプレイでボス5連敗×2サイクル(全て惜敗・戦法の影響が消える)が続き、
+## 「壁・減衰でしか仕留められない」が理不尽側に振れていたため上限を敷いた。
 const TRADE_RATIO_CAP := 2.7
+const BOSS_TRADE_RATIO_CAP := 4.5
 
 
 func _test_contact_trade_floor(check: Callable) -> void:
 	var player := SpinnerStats.default_player()
 	var pierce := SpinnerPhysics.spin_drain(player.mass, 1.0, player.mass, player.radius, 1.0)
-	for level in range(1, 5):
+	for level in range(1, 6):
+		var cap := TRADE_RATIO_CAP if level < 5 else BOSS_TRADE_RATIO_CAP
 		for e in EnemyRoster.of_level(level):
 			var received := SpinnerPhysics.spin_drain(
 				e.stats.mass, 1.0, player.mass, player.radius, 1.0)
@@ -137,9 +142,9 @@ func _test_contact_trade_floor(check: Callable) -> void:
 				SpinnerPhysics.spin_drain(player.mass, 1.0, e.stats.mass, e.stats.radius, 1.0),
 				CustomPartCatalog.EDGE_MAX, pierce)
 			check.call(
-				dealt > 0.0 and received / dealt <= TRADE_RATIO_CAP,
+				dealt > 0.0 and received / dealt <= cap,
 				"接触トレードの床: %s の被/与比(%.2f) ≦ %.1f" % [
-					e.display_name, received / maxf(dealt, EPS), TRADE_RATIO_CAP]
+					e.display_name, received / maxf(dealt, EPS), cap]
 			)
 
 
