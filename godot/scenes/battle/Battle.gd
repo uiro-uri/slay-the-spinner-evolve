@@ -76,6 +76,12 @@ const BAR_ROW_H := 60.0
 ## 0でスケール無効(常にwall_damping)。
 @export_range(0.0, 40.0, 0.5) var wall_impact_ref_speed: float = 8.0
 
+## 衝突削りの計算に使う速さの床。相手がこれより遅くても、この速さぶんは削れる
+## (=遅い接触でも噛み合う)。長引いた低速の微衝突が何も生まず決着が壁・減衰
+## 任せになる泥仕合対策。0で床なし(旧挙動)。
+## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
+@export_range(0.0, 12.0, 0.5) var bite_floor_speed: float = 4.0
+
 ## これを下回ったら負け。
 @export_range(0.0, 1.0, 0.01) var lose_threshold: float = 0.03
 
@@ -544,6 +550,7 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 	request.natural_damping = natural_damping
 	request.wall_damping = wall_damping
 	request.wall_impact_ref_speed = wall_impact_ref_speed
+	request.bite_floor_speed = bite_floor_speed
 	request.lose_threshold = lose_threshold
 	# 取得済みのゴースト札から無敵時間を決める。単体調整時は取得0で0秒になり従来どおり。
 	request.ghost_duration = CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)

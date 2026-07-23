@@ -170,6 +170,21 @@ static func sharpened_spin_drain(drain: float, edge: float, pierce_drain: float 
 	return drain + maxf(edge, 0.0) * maxf(drain, pierce_drain)
 
 
+## 衝突削りの計算に使う速さの床。相手の速さがfloor_speed未満でも、floor_speed
+## ぶんの削りが出る=遅い接触でも最低限「噛み合う」。
+##
+## 泥仕合対策(2026-07-23): 速度は摩擦・非弾性衝突・すり鉢の引き戻しで単調に沈む
+## ため、長引いた戦いは相対速度1〜5の微衝突の応酬になり、削り(∝相手の速さ)が
+## ゼロへ痩せて決着が壁と自然減衰任せになっていた(ボス戦16秒26衝突で削り計7、
+## 死因の主成分が減衰、という一次証拠)。壁のimpact_scaled_wall_damping(速い激突
+## ほど痛い)と対になる「遅い接触にも最低限の噛み合い」で、長引いた削り合いを
+## 接触決着へ寄せる。床は削り量(とそれに比例するspin_kick)にだけ効き、
+## 弾性衝突の速度交換そのものは実速度のまま。
+## floor_speed<=0 で床なし=旧挙動と厳密一致(古い保存データの再現用)。
+static func bitten_speed(speed: float, floor_speed: float) -> float:
+	return maxf(speed, maxf(floor_speed, 0.0))
+
+
 ## 障害物(固定された円)にめり込んでいて、かつ障害物へ向かって進んでいるか。
 ## 壁のwall_hitと同じ構造で、法線が固定でなく中心からの放射方向になるだけ。
 ## 反射は wall_bounce(vel, (pos - obstacle_center).normalized(), restitution) を使う。

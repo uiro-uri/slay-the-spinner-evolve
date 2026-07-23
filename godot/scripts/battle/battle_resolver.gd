@@ -219,8 +219,11 @@ static func _resolve_disc_collision(
 	result.impacts.append(BattleResult.Impact.new(t, contact))
 
 	# 削り量は衝突前の速さで決める。弾性衝突で速度が変わる前に取っておく。
-	var a_speed := a.velocity.length()
-	var b_speed := b.velocity.length()
+	# 速さにはbite_floor_speedの床を敷く: 長引いた戦いの微衝突は削りがゼロへ
+	# 痩せて決着が壁・減衰任せになる(泥仕合)ため、遅い接触でも最低限噛み合わ
+	# せる。床は削りとspin_kick(削り比例)にだけ効き、弾性衝突は実速度のまま。
+	var a_speed := SpinnerPhysics.bitten_speed(a.velocity.length(), req.bite_floor_speed)
+	var b_speed := SpinnerPhysics.bitten_speed(b.velocity.length(), req.bite_floor_speed)
 
 	# コマ同士の衝突の反発係数は両者restitutionの積。低い方に引きずられ、
 	# プレイヤーの基礎restitution(0.75)ぶんだけ非弾性になる。Rage Reflectionで
