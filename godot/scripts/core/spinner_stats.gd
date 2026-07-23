@@ -44,6 +44,13 @@ extends Resource
 ## 弾き飛ばす=壁へ押し込む攻めとも噛み合う。
 @export_range(0.0, 2.0, 0.01) var edge: float = 0.0
 
+## 衝突ごとに相手の硬さ(質量×半径²)に依存しない追加削りを与える度合い。
+## 0で従来どおり。追加量は pierce(自分と同じ硬さの相手への素の削り)×drill で、
+## 相手がどれだけ硬くても減らない=対巨体の攻め軸。Drill Bitが上げる。
+## edge(素の削りの乗算強化)は硬い相手ほどボーナスの絶対量が細るが、こちらは
+## 相手の硬さと無関係に一定量が食い込む、という住み分け。
+@export_range(0.0, 2.0, 0.01) var drill: float = 0.0
+
 ## 回転数の上限。「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
 ## SPIN_ENGINE札の上限(CustomPartCatalog.RPS_CAP)も勝利成長もこれを参照する。
 const RPS_CAP := 40.0
@@ -84,6 +91,7 @@ func duplicate_stats() -> SpinnerStats:
 	copy.wall_keep = wall_keep
 	copy.hit_guard = hit_guard
 	copy.edge = edge
+	copy.drill = drill
 	return copy
 
 

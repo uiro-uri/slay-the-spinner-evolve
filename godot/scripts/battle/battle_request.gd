@@ -37,6 +37,7 @@ class Launch:
 			"wall_keep": stats.wall_keep,
 			"hit_guard": stats.hit_guard,
 			"edge": stats.edge,
+			"drill": stats.drill,
 			"pos": [position.x, position.y],
 			"vel": [velocity.x, velocity.y],
 		}
@@ -48,11 +49,12 @@ class Launch:
 		stats_.friction = d["friction"]
 		stats_.restitution = d["restitution"]
 		stats_.rps = d["rps"]
-		# 旧いJSONにはspin_decay/wall_keep/hit_guard/edgeが無いので、既定で読む（往復の後方互換）。
+		# 旧いJSONにはspin_decay/wall_keep/hit_guard/edge/drillが無いので、既定で読む（往復の後方互換）。
 		stats_.spin_decay = d.get("spin_decay", 1.0)
 		stats_.wall_keep = d.get("wall_keep", 0.0)
 		stats_.hit_guard = d.get("hit_guard", 0.0)
 		stats_.edge = d.get("edge", 0.0)
+		stats_.drill = d.get("drill", 0.0)
 		return Launch.new(
 			stats_,
 			Vector2(d["pos"][0], d["pos"][1]),

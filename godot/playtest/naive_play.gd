@@ -78,7 +78,7 @@ static func stats_dict(s: SpinnerStats) -> Dictionary:
 	return {"mass": s.mass, "radius": s.radius, "friction": s.friction,
 		"restitution": s.restitution, "rps": s.rps,
 		"spin_decay": s.spin_decay, "wall_keep": s.wall_keep, "hit_guard": s.hit_guard,
-		"edge": s.edge}
+		"edge": s.edge, "drill": s.drill}
 
 static func stats_from(d: Dictionary) -> SpinnerStats:
 	var s := SpinnerStats.new()
@@ -87,6 +87,7 @@ static func stats_from(d: Dictionary) -> SpinnerStats:
 	s.wall_keep = d.get("wall_keep", 0.0)
 	s.hit_guard = d.get("hit_guard", 0.0)
 	s.edge = d.get("edge", 0.0)
+	s.drill = d.get("drill", 0.0)
 	return s
 
 func _load(path: String) -> Dictionary:
@@ -165,11 +166,12 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 	var field: FieldData = node.field
 	print("=== BATTLE 段%d %s ===" % [tree.current_step(), field.title_key])
 	print(field_text(field))
-	print("自分: mass=%.2f radius=%.2f rps=%.1f friction=%.3f rest=%.2f spin_decay=%.2f wall_keep=%.2f hit_guard=%.2f edge=%.2f  発射リング半径=%.2f" % [
+	print("自分: mass=%.2f radius=%.2f rps=%.1f friction=%.3f rest=%.2f spin_decay=%.2f wall_keep=%.2f hit_guard=%.2f edge=%.2f drill=%.2f  発射リング半径=%.2f" % [
 		state["stats"]["mass"], state["stats"]["radius"], state["stats"]["rps"],
 		state["stats"]["friction"], state["stats"]["restitution"],
 		float(state["stats"].get("spin_decay", 1.0)), float(state["stats"].get("wall_keep", 0.0)),
 		float(state["stats"].get("hit_guard", 0.0)), float(state["stats"].get("edge", 0.0)),
+		float(state["stats"].get("drill", 0.0)),
 		field.inradius() - float(state["stats"]["radius"]) - 0.5])
 	print("ゴースト(初衝突後すり抜け): %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
 	var plans := _enemy_plans(node.enemies, field, bseed)
@@ -431,10 +433,11 @@ func _print_stats(state: Dictionary) -> void:
 	var keep := float(s.get("wall_keep", 0.0))
 	var guard := float(s.get("hit_guard", 0.0))
 	var edge := float(s.get("edge", 0.0))
+	var drill := float(s.get("drill", 0.0))
 	# 自然減衰は radius×spin_decay に比例する(BattleResolverのnatural_spin_decay)ので、
 	# 寿命目安もspin_decayを織り込む。MOMENTUM札の効果がここに見える。
-	print("ステータス: mass=%.2f radius=%.2f friction=%.3f rest=%.2f rps=%.1f spin_decay=%.2f wall_keep=%.2f hit_guard=%.2f edge=%.2f  (寿命目安rps/(radius*spin_decay)=%.1f 硬さmass*r^2=%.2f)" % [
-		s["mass"], s["radius"], s["friction"], s["restitution"], s["rps"], decay, keep, guard, edge,
+	print("ステータス: mass=%.2f radius=%.2f friction=%.3f rest=%.2f rps=%.1f spin_decay=%.2f wall_keep=%.2f hit_guard=%.2f edge=%.2f drill=%.2f  (寿命目安rps/(radius*spin_decay)=%.1f 硬さmass*r^2=%.2f)" % [
+		s["mass"], s["radius"], s["friction"], s["restitution"], s["rps"], decay, keep, guard, edge, drill,
 		float(s["rps"]) / (float(s["radius"]) * decay), float(s["mass"]) * float(s["radius"]) * float(s["radius"])])
 
 func _print_parts(state: Dictionary) -> void:
@@ -487,6 +490,10 @@ static func card_text(c: CustomPart) -> String:
 		CustomPart.Effect.EDGE:
 			return "衝突で相手から削る回転を増強+%.2f(上限%.2f)・弾き飛ばしも強まる [EDGE]" % [
 				c.edge_step, c.edge_max]
+		CustomPart.Effect.DRILL:
+			# 実UI(describe)の注記と同じ核心(相手の硬さで減らない=巨体に食い込む)を出す。
+			return "衝突での貫通削り+%.2f(上限%.2f)・自分基準で決まり相手の硬さで減らない、巨体にも食い込む [DRILL]" % [
+				c.drill_step, c.drill_max]
 		CustomPart.Effect.SPIN_UP:
 			# 実UI(describe)と同じく挙動注記(開始回転が増え寿命が延びる)まで出す。
 			return "回転 +%.1f(上限%.0f)・開始回転が増え寿命が延びる [SPIN_UP]" % [

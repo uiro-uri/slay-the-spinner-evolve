@@ -188,9 +188,11 @@ static func play_one(
 ## edge(Sharp Edge札)は自分の耐久ではなく相手を早く倒す攻めの値なので厳密には
 ## 「硬さ」ではないが、GUARDと同じ理由(織り込まないと絶対選ばれない札になり
 ## 統計に現れない)で、同じ控えめな線形(1+edge)で織り込む。
+## drill(Drill Bit札)も同じ攻めの値。価値は相手が硬いほど相対的に大きいが、
+## toughnessは1戦の文脈を持たないので、edgeと同じ控えめな線形で織り込む。
 static func toughness(stats: SpinnerStats) -> float:
 	return stats.rps * stats.mass * stats.radius * stats.radius \
-		* (1.0 + stats.hit_guard) * (1.0 + stats.edge)
+		* (1.0 + stats.hit_guard) * (1.0 + stats.edge) * (1.0 + stats.drill)
 
 
 static func _choose_part(

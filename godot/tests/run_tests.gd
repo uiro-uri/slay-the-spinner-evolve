@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "sparkscale", "battledefaults"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "sparkscale", "battledefaults"
 ]
 
 
@@ -133,6 +133,9 @@ func _init() -> void:
 
 	print("== sharpedge ==")
 	_test_sharp_edge()
+
+	print("== drill ==")
+	_test_drill()
 
 	print("== deathcause ==")
 	_test_death_cause()
@@ -448,6 +451,12 @@ func _test_sharp_edge() -> void:
 	var suite = load("res://tests/test_sharp_edge.gd").new()
 	suite.run(_check)
 	_done("sharpedge")
+
+
+func _test_drill() -> void:
+	var suite = load("res://tests/test_drill.gd").new()
+	suite.run(_check)
+	_done("drill")
 
 
 func _test_death_cause() -> void:
