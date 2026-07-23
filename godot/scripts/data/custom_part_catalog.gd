@@ -92,6 +92,18 @@ const GUARD_HIT_MAX := 0.5
 const EDGE_STEP := 0.2
 const EDGE_MAX := 0.6
 
+## Drill Bit(ドリルビット)が1枚あたり上げる貫通削り量(drill)と、その上限。
+## drillは衝突ごとに pierce(自分と同じ硬さの相手への素の削り)×drill を、相手の
+## 硬さ(質量×半径²)に関係なく上乗せする。EDGE(乗算強化)は素の削りごと硬さ反比例で
+## 痩せるため、edge上限0.60を積んでも巨体への合計削りは細いままで、攻め特化ビルドが
+## Lv4〜ボス帯で構造的に詰んでいた(コールドプレイでedge0.60がボスに与0.6/hit vs
+## 被1.5/hitで6連敗・戦法4種が同じ内訳に収束、が一次証拠)。柔らかい相手には素の
+## 削りが支配的で相対的にほぼ効かないので、序盤の一撃キル速度は歪めない。
+## 数値は単独計測(measure_parts)で決めた: 0.5/枚はLv3 +20.5pt/枚・3枚+68.8ptと
+## COMMONの枠を大きく超えた(勝ち確定級)ため半分の0.25/枚に下げた。
+const DRILL_STEP := 0.25
+const DRILL_MAX := 0.75
+
 ## Extra Winding(追い巻き)が1枚あたり加算する回転数。上限はRPS_CAP。
 ## 敵rpsはLv1→5で15→33まで伸びるのに、プレイヤーの回転成長は勝利成長
 ## (+0.5/+1.0)とRARE札(SPIN_ENGINE ×1.25)の引き運だけで、引けないランは
@@ -172,6 +184,12 @@ static func all() -> Array[CustomPart]:
 		# COMMONの確実な積み上げで下支えする。
 		CustomPart.make_spin_up(12, "PART_EXTRA_WINDING", CustomPart.Rarity.COMMON,
 			SPIN_UP_STEP, RPS_CAP),
+		# Drill Bit: 相手の硬さに依存しない貫通削りの攻めCOMMON札(経緯はDRILL_STEPの
+		# コメント参照)。EDGE(乗算)が巨体で細るのに対し、加算の貫通で対巨体の攻め軸を
+		# 埋める。撃破ボーナス・SHARP_EDGE・GHOSTヒット&ランと同じ
+		# 「当てにいくプレイを報いる」向き。
+		CustomPart.make_drill(13, "PART_DRILL_BIT", CustomPart.Rarity.COMMON,
+			DRILL_STEP, DRILL_MAX),
 	]
 
 

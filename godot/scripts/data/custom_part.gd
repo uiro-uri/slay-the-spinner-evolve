@@ -53,7 +53,13 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ## プレイヤーの回転成長は勝利成長(+0.5/+1.0)とRARE札だけで、SPIN_ENGINEを引けない
 ## ランはLv4帯(rps26)とのプール差が構造的に埋まらなかった(コールドプレイで報酬8画面
 ## 中rps札の提示0回・rps21vs26で全滅、が一次証拠)。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH, EDGE, SPIN_UP }
+## DRILL: 衝突ごとに相手の硬さ(質量×半径²)に依存しない追加削りを与える(drillを
+## drill_step ぶん加算、上限drill_max)。EDGE(素の削りの乗算強化)は素の削り自体が
+## 硬さ反比例で痩せるため巨体への合計が細いままで、攻め特化ビルドがLv4〜ボス帯で
+## 構造的に詰んでいた(edge0.60でボスに与0.6/hit vs 被1.5/hitで6連敗、が一次証拠)。
+## 追加量は自分基準(pierce)×drillなので相手がどれだけ硬くても減らない=対巨体の攻め軸。
+## 柔らかい相手には素の削りが支配的で相対的にほぼ効かない(序盤を歪めない)。
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH, EDGE, SPIN_UP, DRILL }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -123,6 +129,13 @@ const _STAT_NAMES := {
 
 ## EDGE札のedge上限。重ねがけの複利で削りが青天井にならないよう頭打ちにする。
 @export var edge_max: float = 1.0
+
+## DRILL札が1枚あたり加算する貫通削り量(drillへ加算)。0.5で自分基準の削りの50%を
+## 相手の硬さに関係なく上乗せする。
+@export var drill_step: float = 0.0
+
+## DRILL札のdrill上限。重ねがけで貫通削りが青天井にならないよう頭打ちにする。
+@export var drill_max: float = 1.0
 
 ## GROWTH札が質量に掛ける倍率。直径側の倍率は multiplier / 上限は cap を使う。
 @export var mass_multiplier: float = 1.0
@@ -245,6 +258,22 @@ static func make_edge(
 	return part
 
 
+## ドリルビット札を作る。相手の硬さに依存しない貫通削り(drill)を step_ ぶん上げる。
+## max_ は重ねがけの上限(貫通の複利が青天井にならないよう頭打ちにする)。
+static func make_drill(
+	id_: int, title_key_: String, rarity_: Rarity,
+	step_: float, max_: float
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.DRILL
+	part.drill_step = step_
+	part.drill_max = max_
+	return part
+
+
 ## 衝撃吸収札を作る。衝突で受けるrps削りの軽減(hit_guard)を step_ ぶん上げる。
 ## max_ は重ねがけの上限(1.0=削り無効の無敵化を防ぐためRAGEと同様1未満)。
 static func make_guard(
@@ -295,6 +324,11 @@ func apply_to(stats: SpinnerStats) -> void:
 	# 頭打ちにして、重ねがけの複利で削りが青天井にならないようにする。
 	if effect == Effect.EDGE:
 		stats.edge = minf(stats.edge + edge_step, edge_max)
+		return
+	# ドリルビット(DRILL): 相手の硬さに依存しない貫通削りを増やす(drill加算)。
+	# EDGEと同じく上限で頭打ちにする。
+	if effect == Effect.DRILL:
+		stats.drill = minf(stats.drill + drill_step, drill_max)
 		return
 	# 巨大化(GROWTH): 直径と質量の両方を倍にする。それぞれ上限でクランプ
 	# (直径はアリーナを埋め尽くさないよう、質量は青天井の複利を防ぐよう)。
@@ -380,6 +414,7 @@ static func _stats_equal(a: SpinnerStats, b: SpinnerStats) -> bool:
 		and _nearly_same(a.wall_keep, b.wall_keep)
 		and _nearly_same(a.hit_guard, b.hit_guard)
 		and _nearly_same(a.edge, b.edge)
+		and _nearly_same(a.drill, b.drill)
 	)
 
 
@@ -432,6 +467,15 @@ func describe() -> String:
 	if effect == Effect.EDGE:
 		return tr("PART_EFFECT_EDGE").format(
 			[_trim(edge_step * 100.0), _trim(edge_max * 100.0)]
+		)
+	# ドリルビットも%表記。挙動注記(相手の硬さで減らない=巨体に食い込む)を必ず添える。
+	# %の基準(自分基準の削り)は効果文だけでは読み切れないので、注記が実質の効果説明になる。
+	if effect == Effect.DRILL:
+		return (
+			tr("PART_EFFECT_DRILL").format(
+				[_trim(drill_step * 100.0), _trim(drill_max * 100.0)]
+			)
+			+ "\n" + tr("PART_NOTE_DRILL")
 		)
 	# 回転加算は「+2（上限 40）」の加算表記。挙動注記はRPS上昇の既存文を使い回す
 	# (倍率でも加算でも起きることは同じ: 開始回転が増え寿命が延びる)。

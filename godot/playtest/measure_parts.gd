@@ -18,7 +18,7 @@ extends SceneTree
 const LEVELS := [1, 3, 5]
 const COPIES := [0, 1, 2, 3]
 # 測る札。SET_LIVES(id8)は1戦では無意味なので外す。
-const PART_IDS := [2, 3, 5, 6, 7, 9, 10, 11, 12]
+const PART_IDS := [2, 3, 5, 6, 7, 9, 10, 11, 12, 13]
 const PART_LABEL := {
 	2: "GIANT_GROWTH  半径+質量複合",
 	3: "OVERENCUMBERED 質量×1.3 ",
@@ -29,6 +29,7 @@ const PART_LABEL := {
 	10: "SHOCK_ABSORB   衝突削り-17%/枚",
 	11: "SHARP_EDGE     与ダメ+20%/枚",
 	12: "EXTRA_WINDING  回転+3.0/枚",
+	13: "DRILL_BIT      貫通削り+25%/枚",
 }
 
 

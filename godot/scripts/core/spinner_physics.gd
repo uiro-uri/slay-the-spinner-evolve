@@ -170,6 +170,20 @@ static func sharpened_spin_drain(drain: float, edge: float, pierce_drain: float 
 	return drain + maxf(edge, 0.0) * maxf(drain, pierce_drain)
 
 
+## 攻め手のdrill(0..)のぶんだけ、相手の硬さに依存しない追加削りを上乗せする。
+## 追加量は drill × pierce_drain(相手が攻め手自身と同じ硬さだったときの素の削り)。
+##
+## edgeのpierce下限は「edgeボーナスが巨体で消えない」ための床だが、素の削り自体が
+## 硬さに反比例して痩せるため、edge上限0.60を積んでも巨体への合計削りは細いままで、
+## 攻め特化ビルドがLv4〜ボス帯で構造的に詰む(コールドプレイでedge0.60がボスに
+## 与0.6/hit vs 被1.5/hitで6連敗、が一次証拠)。drillは乗算でなく加算なので、
+## 相手がどれだけ硬くても同じ量が食い込む=対巨体専用の攻め軸になる。
+## 柔らかい相手には素の削りの方がはるかに大きく、相対的にほぼ効かない。
+## drill=0(既定)で従来と厳密一致。負のdrillは0でクランプ(デバフ札を置かない原則)。
+static func drilled_spin_drain(drain: float, drill: float, pierce_drain: float) -> float:
+	return drain + maxf(drill, 0.0) * maxf(pierce_drain, 0.0)
+
+
 ## 衝突削りの計算に使う速さの床。相手の速さがfloor_speed未満でも、floor_speed
 ## ぶんの削りが出る=遅い接触でも最低限「噛み合う」。
 ##

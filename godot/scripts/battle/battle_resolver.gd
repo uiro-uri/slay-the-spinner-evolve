@@ -250,22 +250,34 @@ static func _resolve_disc_collision(
 	var b_pierce := SpinnerPhysics.spin_drain(
 		a.stats.mass, a_speed, a.stats.mass, a.stats.radius, req.violence
 	)
+	# drill(Drill Bit)は相手の硬さに依存しない追加削り(drill×pierce)をさらに上乗せする。
+	# edgeのpierce下限があっても素の削りは硬さ反比例で痩せるため、対巨体の攻め軸として
+	# 加算で確実に食い込む(詳細はdrilled_spin_drainのコメント)。guardの内側なので
+	# 受け手のhit_guardは追加分にも効く(防御札が貫通で無意味にならない)。
 	var a_drain := SpinnerPhysics.guarded_spin_drain(
-		SpinnerPhysics.sharpened_spin_drain(
-			SpinnerPhysics.spin_drain(
-				b.stats.mass, b_speed, a.stats.mass, a.stats.radius, req.violence
+		SpinnerPhysics.drilled_spin_drain(
+			SpinnerPhysics.sharpened_spin_drain(
+				SpinnerPhysics.spin_drain(
+					b.stats.mass, b_speed, a.stats.mass, a.stats.radius, req.violence
+				),
+				b.stats.edge,
+				a_pierce
 			),
-			b.stats.edge,
+			b.stats.drill,
 			a_pierce
 		),
 		a.stats.hit_guard
 	)
 	var b_drain := SpinnerPhysics.guarded_spin_drain(
-		SpinnerPhysics.sharpened_spin_drain(
-			SpinnerPhysics.spin_drain(
-				a.stats.mass, a_speed, b.stats.mass, b.stats.radius, req.violence
+		SpinnerPhysics.drilled_spin_drain(
+			SpinnerPhysics.sharpened_spin_drain(
+				SpinnerPhysics.spin_drain(
+					a.stats.mass, a_speed, b.stats.mass, b.stats.radius, req.violence
+				),
+				a.stats.edge,
+				b_pierce
 			),
-			a.stats.edge,
+			a.stats.drill,
 			b_pierce
 		),
 		b.stats.hit_guard

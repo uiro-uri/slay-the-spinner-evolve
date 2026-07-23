@@ -198,6 +198,25 @@ func _test_description_matches_effect(check: Callable) -> void:
 			)
 			continue
 
+		# ドリルビットはEDGEと同型の%表記に、挙動注記(相手の硬さで減らない)が付く。
+		# %の基準(自分基準の削り)は効果文だけでは読めないので、注記が実質の効果説明。
+		if part.effect == CustomPart.Effect.DRILL:
+			check.call(
+				text.contains(CustomPart._trim(part.drill_step * 100.0))
+					and text.contains(CustomPart._trim(part.drill_max * 100.0)),
+				"パーツ%d(%s): ドリルの説明に貫通率と上限が出ている (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			check.call(
+				not text.contains("PART_NOTE") and text.contains("\n")
+					and text.to_lower().contains("giant"),
+				"パーツ%d(%s): ドリルの注記が巨体(giants)に触れる (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			continue
+
 		# 巨大化は直径と質量の複合。両方の倍率と、代償(自然減衰の悪化)の注記が
 		# 出ていることを確かめる。旧版(直径のみ)は代償が読めない罠札だった。
 		if part.effect == CustomPart.Effect.GROWTH:
@@ -723,6 +742,7 @@ func _test_dead_card_filter(check: Callable) -> void:
 	maxed.wall_keep = CustomPartCatalog.RAGE_WALL_KEEP_MAX
 	maxed.hit_guard = CustomPartCatalog.GUARD_HIT_MAX
 	maxed.edge = CustomPartCatalog.EDGE_MAX
+	maxed.drill = CustomPartCatalog.DRILL_MAX
 	maxed.spin_decay = CustomPartCatalog.FULL_STEAM_FLOOR
 	var only_alive_ids := true
 	var sizes_ok := true
