@@ -96,6 +96,12 @@ var wall_damping: float = 0.75
 ## 0以下でスケール無効=常にwall_damping(旧挙動)。詳細はSpinnerPhysics.
 ## impact_scaled_wall_damping。
 var wall_impact_ref_speed: float = 8.0
+
+## 衝突削りの計算に使う速さの床。相手の速さがこれ未満でも、この速さぶんの削りが
+## 出る=遅い接触でも最低限噛み合う。壁のwall_impact_ref_speed(速い激突ほど痛い)と
+## 対の泥仕合対策で、低速の微衝突の応酬が何も生まず決着が壁・減衰任せになるのを
+## 防ぐ。0以下で床なし(旧挙動)。詳細はSpinnerPhysics.bitten_speed。
+var bite_floor_speed: float = 4.0
 var lose_threshold: float = 0.03
 
 ## ゴーストの無敵時間(秒)。開始からこの時刻までプレイヤーと敵の衝突判定を切る。
@@ -127,6 +133,7 @@ func to_dict() -> Dictionary:
 		"natural_damping": natural_damping,
 		"wall_damping": wall_damping,
 		"wall_impact_ref_speed": wall_impact_ref_speed,
+		"bite_floor_speed": bite_floor_speed,
 		"lose_threshold": lose_threshold,
 		"ghost_duration": ghost_duration,
 		"time_step": time_step,
@@ -156,6 +163,8 @@ static func from_dict(d: Dictionary) -> BattleRequest:
 	# 旧い保存データにキーが無いときは0(スケール無効=旧挙動)で補い、当時の
 	# 結果をそのまま再現できるようにする(ghost_durationの既定0と同じ向き)。
 	r.wall_impact_ref_speed = d.get("wall_impact_ref_speed", 0.0)
+	# 同上: 旧い保存データは床なし(0)で補い、当時の結果をそのまま再現する。
+	r.bite_floor_speed = d.get("bite_floor_speed", 0.0)
 	r.lose_threshold = d["lose_threshold"]
 	# 旧い保存データにキーが無くても壊れないよう既定0で補う。
 	r.ghost_duration = d.get("ghost_duration", 0.0)

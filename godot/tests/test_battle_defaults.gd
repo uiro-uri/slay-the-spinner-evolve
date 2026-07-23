@@ -27,6 +27,7 @@ const KNOBS: Array[String] = [
 	"natural_damping",
 	"wall_damping",
 	"wall_impact_ref_speed",
+	"bite_floor_speed",
 	"lose_threshold",
 ]
 

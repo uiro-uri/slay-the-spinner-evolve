@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "battledefaults"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "battledefaults"
 ]
 
 
@@ -139,6 +139,9 @@ func _init() -> void:
 
 	print("== wallimpact ==")
 	_test_wall_impact_damping()
+
+	print("== bitefloor ==")
+	_test_bite_floor()
 
 	print("== rpsloss ==")
 	_test_rps_loss()
@@ -451,6 +454,12 @@ func _test_wall_impact_damping() -> void:
 	var suite = load("res://tests/test_wall_impact_damping.gd").new()
 	suite.run(_check)
 	_done("wallimpact")
+
+
+func _test_bite_floor() -> void:
+	var suite = load("res://tests/test_bite_floor.gd").new()
+	suite.run(_check)
+	_done("bitefloor")
 
 
 func _test_rps_loss() -> void:
