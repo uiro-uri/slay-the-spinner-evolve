@@ -48,7 +48,12 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ## 実測で反していた。大きくなるなら重くもなる方が直感にも合い、質量が衝突耐性
 ## (削りは1/(質量×半径²))と弾き飛ばしを補って、寿命悪化と引き換えの本物の
 ## トレードオフになる。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH, EDGE }
+## SPIN_UP: 回転数(rps)を定数だけ加算する(上限cap)。倍率のSPIN_ENGINE(RARE)と違い
+## 引き運に依存しにくいCOMMONの確実な回転成長。敵のrpsはLv1→5で15→33まで伸びるのに、
+## プレイヤーの回転成長は勝利成長(+0.5/+1.0)とRARE札だけで、SPIN_ENGINEを引けない
+## ランはLv4帯(rps26)とのプール差が構造的に埋まらなかった(コールドプレイで報酬8画面
+## 中rps札の提示0回・rps21vs26で全滅、が一次証拠)。
+enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH, EDGE, SPIN_UP }
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -124,6 +129,9 @@ const _STAT_NAMES := {
 
 ## GROWTH札の質量上限。0以下なら上限なし。
 @export var mass_cap: float = 0.0
+
+## SPIN_UP札が1枚あたり加算する回転数。上限は cap(SpinnerStats.RPS_CAPを渡す)。
+@export var rps_step: float = 0.0
 
 
 static func make(
@@ -253,6 +261,21 @@ static func make_guard(
 	return part
 
 
+## 回転加算札を作る。rpsを step_ だけ加算する(cap_上限)。
+static func make_spin_up(
+	id_: int, title_key_: String, rarity_: Rarity,
+	step_: float, cap_: float
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.SPIN_UP
+	part.rps_step = step_
+	part.cap = cap_
+	return part
+
+
 func apply_to(stats: SpinnerStats) -> void:
 	# 勢い維持(MOMENTUM): 摩擦と回転減衰の両方を下げる。spin_decayはcapを下限に
 	# クランプして、重ねても回転減衰がゼロ(=無限に回る)にならないようにする。
@@ -284,6 +307,14 @@ func apply_to(stats: SpinnerStats) -> void:
 		if mass_cap > 0.0:
 			grown_mass = minf(grown_mass, mass_cap)
 		stats.mass = grown_mass
+		return
+	# 回転加算(SPIN_UP): rpsを定数だけ足す(上限cap)。勝利成長と同じ加算で、
+	# 倍率札(SPIN_ENGINE)と違い現在値に依存しない確実な底上げ。
+	if effect == Effect.SPIN_UP:
+		var boosted := stats.rps + rps_step
+		if cap > 0.0:
+			boosted = minf(boosted, cap)
+		stats.rps = boosted
 		return
 	# 怒りの反射(RAGE): 反発を上げつつ(cap上限)、壁rps喪失を減らす(wall_keep加算)。
 	if effect == Effect.RAGE:
@@ -401,6 +432,13 @@ func describe() -> String:
 	if effect == Effect.EDGE:
 		return tr("PART_EFFECT_EDGE").format(
 			[_trim(edge_step * 100.0), _trim(edge_max * 100.0)]
+		)
+	# 回転加算は「+2（上限 40）」の加算表記。挙動注記はRPS上昇の既存文を使い回す
+	# (倍率でも加算でも起きることは同じ: 開始回転が増え寿命が延びる)。
+	if effect == Effect.SPIN_UP:
+		return (
+			tr("PART_EFFECT_SPIN_UP").format([_trim(rps_step), _trim(cap)])
+			+ "\n" + tr("PART_NOTE_RPS_UP")
 		)
 	# 巨大化は直径と質量の複合。代償(自然減衰の悪化)を効果注記で必ず謳う——
 	# 直径だけの旧版は代償が読めない罠札で、効果文だけで選ぶと損をする札だった。
