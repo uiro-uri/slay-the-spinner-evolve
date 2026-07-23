@@ -934,7 +934,7 @@ func _test_spin_up(check: Callable) -> void:
 	TranslationServer.set_locale("ja")
 	var text := part.describe()
 	check.call(
-		text.contains("回転 +2") and text.contains("40") and text.contains("寿命"),
+		text.contains("回転 +3") and text.contains("40") and text.contains("寿命"),
 		"回転加算: ja効果文に加算量・上限・寿命の注記が出る (%s)" % text
 	)
 

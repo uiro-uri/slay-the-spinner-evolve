@@ -28,7 +28,7 @@ const PART_LABEL := {
 	9: "GHOST          初衝突後すり抜け2s/枚",
 	10: "SHOCK_ABSORB   衝突削り-17%/枚",
 	11: "SHARP_EDGE     与ダメ+20%/枚",
-	12: "EXTRA_WINDING  回転+2.0/枚",
+	12: "EXTRA_WINDING  回転+3.0/枚",
 }
 
 

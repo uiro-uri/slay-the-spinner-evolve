@@ -387,7 +387,7 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	var winding := CustomPartCatalog.by_id(12)
 	var winding_text: String = NaivePlay.card_text(winding)
 	check.call(
-		"回転 +2" in winding_text and "40" in winding_text,
+		"回転 +3" in winding_text and "40" in winding_text,
 		"naive_play: 回転加算札は加算量と上限を謳う (%s)" % winding_text
 	)
 	check.call("寿命" in winding_text, "naive_play: 回転加算札は挙動(寿命)も謳う (%s)" % winding_text)
