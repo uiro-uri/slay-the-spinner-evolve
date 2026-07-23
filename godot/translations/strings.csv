@@ -88,6 +88,7 @@ PART_NOTE_RESTITUTION_UP,Bounces off walls and foes harder,壁や衝突での跳
 PART_NOTE_RESTITUTION_DOWN,Bounces off walls and foes weaker,壁や衝突での跳ね返りが弱くなる
 PART_NOTE_RPS_UP,Starts with more spin and lasts longer,開始回転が増え、寿命が延びる
 PART_NOTE_RPS_DOWN,Starts with less spin and runs out sooner,開始回転が減り、寿命が縮む
+PART_NOTE_MOMENTUM,"Slows down less, and its spin lasts longer",減速しにくく走り続け、回転も長持ちする
 STAT_MASS,Weight,重さ
 STAT_RADIUS,Size,大きさ
 STAT_RESTITUTION,Bounce,反発

@@ -483,7 +483,10 @@ static func card_text(c: CustomPart) -> String:
 		CustomPart.Effect.GHOST:
 			return "最初の衝突後%.0f秒間 敵をすり抜ける" % c.ghost_seconds
 		CustomPart.Effect.MOMENTUM:
-			return "摩擦と回転減衰 ×%.2f(回転減衰の下限%.2f) [MOMENTUM]" % [c.multiplier, c.cap]
+			# 実UI(describe)の挙動注記と同じ一言を出す。「摩擦×0.8」だけでは
+			# 下がる=良いことが初見に読めない。
+			return "摩擦と回転減衰 ×%.2f(回転減衰の下限%.2f)・減速しにくく回転も長持ちする [MOMENTUM]" % [
+				c.multiplier, c.cap]
 		CustomPart.Effect.RAGE:
 			return "反発 ×%.2f(上限%.2f)・壁でのrps喪失を軽減+%.2f(上限%.2f) [RAGE]" % [
 				c.multiplier, c.cap, c.wall_keep_step, c.wall_keep_max]
@@ -504,7 +507,27 @@ static func card_text(c: CustomPart) -> String:
 			var cap_txt := "" if c.cap <= 0.0 else "(上限%.2f)" % c.cap
 			var dir := "UP" if c.multiplier > 1.0 else "DOWN"
 			var key: String = ["MASS","RADIUS","FRICTION","RESTITUTION","RPS"][c.stat]
-			return "%s ×%.2f%s [%s_%s]" % [stat_name, c.multiplier, cap_txt, key, dir]
+			var note := "" if is_equal_approx(c.multiplier, 1.0) else "・" + _stat_note(c.stat, c.multiplier > 1.0)
+			return "%s ×%.2f%s%s [%s_%s]" % [stat_name, c.multiplier, cap_txt, note, key, dir]
+
+
+## 実UI(describe)がSTAT_MULTIPLY札に付ける挙動注記(PART_NOTE_*)のCLI版。
+## 倍率だけでは何が起きるか読めない(「質量×1.30」が対巨体の削り耐性だとは
+## 読めない)のに、実ゲームの報酬画面には見えている注記がCLIにだけ出ておらず、
+## 効果テキストだけで選ぶコールドプレイの選択が実UIより情報の少ない盲目に
+## なっていた(柱表示・GROWTHの代償表記と同じ「実UIで見える情報は全部出す」)。
+static func _stat_note(stat: int, up: bool) -> String:
+	match stat:
+		CustomPart.Stat.MASS:
+			return "衝突で削られにくく相手をより弾く" if up else "衝突で削られやすく相手を弾きにくい"
+		CustomPart.Stat.RADIUS:
+			return "衝突で削られにくいが自然減衰が上がり被弾しやすい" if up else "自然減衰が下がり被弾しにくいが衝突で削られやすい"
+		CustomPart.Stat.FRICTION:
+			return "移動の減速が上がり止まりやすい" if up else "移動の減速が下がり走り続ける"
+		CustomPart.Stat.RESTITUTION:
+			return "壁や衝突での跳ね返りが強まる" if up else "壁や衝突での跳ね返りが弱まる"
+		_:
+			return "開始回転が増え寿命が延びる" if up else "開始回転が減り寿命が縮む"
 
 
 ## 勝利1回で選べる報酬回数。乱戦は倒した頭数ぶん

@@ -156,12 +156,21 @@ func _test_description_matches_effect(check: Callable) -> void:
 			)
 			continue
 
-		# 勢い維持は摩擦と回転減衰の両方に効く単行の説明。倍率が出ていること
-		# だけ確かめる(capはspin_decayの下限であって表示する上限ではない)。
+		# 勢い維持は摩擦と回転減衰の両方に効く。倍率と、挙動注記(回転が長持ち=
+		# 寿命が延びる)が出ていることを確かめる(capはspin_decayの下限であって
+		# 表示する上限ではない)。「摩擦×0.8」だけでは下がる=良いことが初見に
+		# 読めない札だった。
 		if part.effect == CustomPart.Effect.MOMENTUM:
 			check.call(
 				text.contains(CustomPart._trim(part.multiplier)),
 				"パーツ%d(%s): 勢い維持の説明に倍率が出ている (%s)" % [part.id, part.title_key, text]
+			)
+			check.call(
+				not text.contains("PART_NOTE") and text.contains("\n")
+					and text.to_lower().contains("longer"),
+				"パーツ%d(%s): 勢い維持の注記が長持ち(lasts longer)に触れる (%s)" % [
+					part.id, part.title_key, text
+				]
 			)
 			continue
 
@@ -255,6 +264,15 @@ func _test_description_matches_effect(check: Callable) -> void:
 	check.call(
 		radius_part.describe().contains("減衰"),
 		"パーツ: 半径UPの注記(ja)が減衰に触れる (%s)" % radius_part.describe()
+	)
+
+	# 勢い維持(MOMENTUM)の注記もja側をピンする。enは上のカタログ一巡で確認済み。
+	var momentum_part := CustomPart.make_momentum(
+		0, "T", CustomPart.Rarity.COMMON, 0.8, 0.4
+	)
+	check.call(
+		momentum_part.describe().contains("長持ち"),
+		"パーツ: 勢い維持の注記(ja)が長持ちに触れる (%s)" % momentum_part.describe()
 	)
 
 
