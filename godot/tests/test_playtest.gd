@@ -382,6 +382,16 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	check.call("減衰" in growth_text, "naive_play: 巨大化札は代償(自然減衰)も謳う (%s)" % growth_text)
 	var lives := CustomPartCatalog.by_id(8)
 	check.call("残機" in NaivePlay.card_text(lives), "naive_play: 残機札は残機を謳う")
+	# SPIN_UP(回転加算)は加算量と上限、挙動(寿命)まで謳うこと。STAT_MULTIPLYの
+	# 汎用分岐に落ちると既定のstat=MASSを読んで「質量 ×1.00」と嘘の表示になる。
+	var winding := CustomPartCatalog.by_id(12)
+	var winding_text: String = NaivePlay.card_text(winding)
+	check.call(
+		"回転 +2" in winding_text and "40" in winding_text,
+		"naive_play: 回転加算札は加算量と上限を謳う (%s)" % winding_text
+	)
+	check.call("寿命" in winding_text, "naive_play: 回転加算札は挙動(寿命)も謳う (%s)" % winding_text)
+	check.call(not ("質量" in winding_text), "naive_play: 回転加算札の表記に質量が混ざらない")
 
 
 ## naive_play(コールドプレイCLI)の発射速度が実ゲームと同じレンジであることを固定する。

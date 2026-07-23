@@ -487,6 +487,10 @@ static func card_text(c: CustomPart) -> String:
 		CustomPart.Effect.EDGE:
 			return "衝突で相手から削る回転を増強+%.2f(上限%.2f)・弾き飛ばしも強まる [EDGE]" % [
 				c.edge_step, c.edge_max]
+		CustomPart.Effect.SPIN_UP:
+			# 実UI(describe)と同じく挙動注記(開始回転が増え寿命が延びる)まで出す。
+			return "回転 +%.1f(上限%.0f)・開始回転が増え寿命が延びる [SPIN_UP]" % [
+				c.rps_step, c.cap]
 		CustomPart.Effect.GROWTH:
 			# 代償(自然減衰の悪化)も必ず書く。直径だけの旧版はCLIに代償が出ず、
 			# 効果文だけで選ぶコールドプレイの罠になっていた(実UIの注記はCLIに

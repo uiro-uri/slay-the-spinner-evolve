@@ -23,6 +23,7 @@ func run(check: Callable) -> void:
 	_test_dead_card_filter(check)
 	_test_rejected_cooldown(check)
 	_test_contact_trade_ceiling(check)
+	_test_spin_up(check)
 
 
 func _stats() -> SpinnerStats:
@@ -211,6 +212,25 @@ func _test_description_matches_effect(check: Callable) -> void:
 				not text.contains("PART_NOTE") and text.contains("\n")
 					and text.to_lower().contains("decay"),
 				"パーツ%d(%s): 巨大化の注記が自然減衰の代償に触れる (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			continue
+
+		# 回転加算は倍率でなく加算量と上限の説明。両方の数字と、挙動注記
+		# (寿命が延びる=lasts longer)が出ていることを確かめる。
+		if part.effect == CustomPart.Effect.SPIN_UP:
+			check.call(
+				text.contains(CustomPart._trim(part.rps_step))
+					and text.contains(CustomPart._trim(part.cap)),
+				"パーツ%d(%s): 回転加算の説明に加算量と上限が出ている (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			check.call(
+				not text.contains("PART_NOTE") and text.contains("\n")
+					and text.to_lower().contains("longer"),
+				"パーツ%d(%s): 回転加算の注記が寿命(lasts longer)に触れる (%s)" % [
 					part.id, part.title_key, text
 				]
 			)
@@ -842,6 +862,83 @@ func _test_rejected_cooldown(check: Callable) -> void:
 ## 実質勝ち確定札だった。ここが割れると「引けたら勝ち確」の運ゲー札が生まれる。
 ## 寿命(rps÷(半径×spin_decay))に代償を払う札(GIANT_GROWTHの半径経由の減衰悪化など)は
 ## トレードと寿命の交換なので対象外。
+## 回転加算札(Extra Winding)。rpsを定数だけ足し、上限RPS_CAPで止まる。
+## 回転成長の軸がRARE(SPIN_ENGINE)の引き運に全依存だったのを、COMMONの
+## 確実な積み上げで下支えする札(経緯はCustomPartCatalog.SPIN_UP_STEP参照)。
+func _test_spin_up(check: Callable) -> void:
+	var part := CustomPartCatalog.by_id(12)
+	check.call(part != null, "回転加算: カタログにID12がある")
+	if part == null:
+		return
+	check.call(
+		part.effect == CustomPart.Effect.SPIN_UP and part.rarity == CustomPart.Rarity.COMMON,
+		"回転加算: SPIN_UP効果のCOMMON札(引き運に依存しない下支えなのでRAREにしない)"
+	)
+
+	# 適用でrpsだけが加算され、他のステータスは触らない。
+	var s := _stats()
+	var before_rps := s.rps
+	part.apply_to(s)
+	check.call(
+		is_equal_approx(s.rps, before_rps + CustomPartCatalog.SPIN_UP_STEP),
+		"回転加算: rpsが+%.1fされる (%.1f -> %.1f)" % [
+			CustomPartCatalog.SPIN_UP_STEP, before_rps, s.rps
+		]
+	)
+	var fresh := _stats()
+	check.call(
+		is_equal_approx(s.mass, fresh.mass) and is_equal_approx(s.radius, fresh.radius)
+			and is_equal_approx(s.friction, fresh.friction)
+			and is_equal_approx(s.restitution, fresh.restitution)
+			and is_equal_approx(s.spin_decay, fresh.spin_decay),
+		"回転加算: rps以外のステータスは変えない"
+	)
+
+	# 重ねがけは線形に積み上がる(倍率札と違い現在値に依存しない)。
+	s = _stats()
+	for i in 3:
+		part.apply_to(s)
+	check.call(
+		is_equal_approx(s.rps, before_rps + 3.0 * CustomPartCatalog.SPIN_UP_STEP),
+		"回転加算: 3枚で+%.1f (%.1f)" % [3.0 * CustomPartCatalog.SPIN_UP_STEP, s.rps]
+	)
+
+	# 上限RPS_CAPで止まる(勝利成長と同じ天井)。
+	s = _stats()
+	s.rps = CustomPartCatalog.RPS_CAP - 0.5
+	part.apply_to(s)
+	check.call(
+		is_equal_approx(s.rps, CustomPartCatalog.RPS_CAP),
+		"回転加算: 上限%.0fで止まる (%.2f)" % [CustomPartCatalog.RPS_CAP, s.rps]
+	)
+
+	# 上限到達・上限間際は死にカード判定に落ち、抽選から外れる。
+	s = _stats()
+	s.rps = CustomPartCatalog.RPS_CAP
+	check.call(
+		not part.would_change_anything(s),
+		"回転加算: rps上限では死にカード"
+	)
+	s.rps = CustomPartCatalog.RPS_CAP - 0.1
+	check.call(
+		not part.would_change_anything(s),
+		"回転加算: 上限間際(+0.1しか動かない)もほぼ死にカードとして弾く"
+	)
+	s.rps = 30.0
+	check.call(
+		part.would_change_anything(s),
+		"回転加算: 上限まで余裕があれば有効"
+	)
+
+	# ja側の効果文ピン(en側はカタログ一巡の説明文テストで確認済み)。
+	TranslationServer.set_locale("ja")
+	var text := part.describe()
+	check.call(
+		text.contains("回転 +2") and text.contains("40") and text.contains("寿命"),
+		"回転加算: ja効果文に加算量・上限・寿命の注記が出る (%s)" % text
+	)
+
+
 func _test_contact_trade_ceiling(check: Callable) -> void:
 	const SWING_CAP := 2.0
 	const ENEMY_MASS := 2.0

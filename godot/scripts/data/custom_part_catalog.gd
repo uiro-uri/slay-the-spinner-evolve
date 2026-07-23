@@ -92,6 +92,15 @@ const GUARD_HIT_MAX := 0.5
 const EDGE_STEP := 0.2
 const EDGE_MAX := 0.6
 
+## Extra Winding(追い巻き)が1枚あたり加算する回転数。上限はRPS_CAP。
+## 敵rpsはLv1→5で15→33まで伸びるのに、プレイヤーの回転成長は勝利成長
+## (+0.5/+1.0)とRARE札(SPIN_ENGINE ×1.25)の引き運だけで、引けないランは
+## Lv4帯(rps26前後)とのプール差が構造的に埋まらない(コールドプレイ2回連続で
+## ENEMY_4_3に全戦法敗北・報酬にrps札の提示0回が一次証拠)。COMMONの加算札で
+## 確実な底上げの道を作る。+2.0は勝利成長2〜4勝ぶん=SPIN_ENGINE(rps20で+5)の
+## 半分弱で、RAREの上位互換にはしない。
+const SPIN_UP_STEP := 2.0
+
 ## ゴースト1枚あたりの無敵秒数。基準は開始後2秒間で、複数取得で線形に延長する
 ## (2枚=4秒、3枚=6秒…)。無敵時間の知識をここに閉じ込め、画面(Battle)も
 ## シミュ(RunSim)も同じ値を参照する。
@@ -155,6 +164,11 @@ static func all() -> Array[CustomPart]:
 		# 比例するので、壁への弾き飛ばしも強くなる。
 		CustomPart.make_edge(11, "PART_SHARP_EDGE", CustomPart.Rarity.COMMON,
 			EDGE_STEP, EDGE_MAX),
+		# Extra Winding: 回転を+2.0する加算のCOMMON札(経緯はSPIN_UP_STEPのコメント
+		# 参照)。回転成長の軸がRARE(SPIN_ENGINE)の引き運に全依存だったのを、
+		# COMMONの確実な積み上げで下支えする。
+		CustomPart.make_spin_up(12, "PART_EXTRA_WINDING", CustomPart.Rarity.COMMON,
+			SPIN_UP_STEP, RPS_CAP),
 	]
 
 
