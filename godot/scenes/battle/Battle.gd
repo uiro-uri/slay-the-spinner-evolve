@@ -162,6 +162,19 @@ const BAR_ROW_H := 60.0
 ## 出た瞬間の色。壁色を薄くしたもの。消える時は同色のままalpha 0へ抜ける。
 @export var wall_spark_color: Color = Color(Palette.NEON_MAGENTA, 0.5)
 
+## スパークの強弱表現: 失われたrpsがこの値のとき基準サイズ(倍率1.0)。
+## 0でスケール無効=全スパークが従来の固定サイズ。倍率は√(喪失/基準)を
+## 下記の範囲へクランプ(SparkScale.scale_for)。コマ同士・壁とも同じ基準を
+## 使う——「痛さ→大きさ」の対応をチャンネルで変えると読みが壊れるため。
+@export_range(0.0, 20.0, 0.1) var spark_ref_loss: float = 3.0
+
+## スパーク倍率の下限。微衝突・擦り接触もこの大きさでは出す(消すと衝突自体が
+## 見えなくなり、泥仕合で何が起きているか余計に読めなくなる)。
+@export_range(0.1, 1.0, 0.05) var spark_scale_min: float = 0.4
+
+## スパーク倍率の上限。激突をこれ以上大きくしない(画面を覆わない)。
+@export_range(1.0, 4.0, 0.1) var spark_scale_max: float = 2.0
+
 @export_group("調整用")
 
 ## ドラッグを待たずに即開始する。このシーンだけをF5で走らせて挙動を見る用。
@@ -678,7 +691,8 @@ func _apply_fadeout(i: int, t: float) -> void:
 ## 衝突は計算中に起きているので、再生時刻が追いついたところで衝撃波を出す。
 func _emit_due_impacts(t: float) -> void:
 	while _next_impact < _result.impacts.size() and _result.impacts[_next_impact].time <= t:
-		_spawn_spark(_result.impacts[_next_impact].point)
+		var imp := _result.impacts[_next_impact]
+		_spawn_spark(imp.point, imp.strength)
 		AudioManager.play("impact")
 		_next_impact += 1
 
@@ -690,7 +704,8 @@ func _emit_due_wall_impacts(t: float) -> void:
 		_next_wall_impact < _result.wall_impacts.size()
 		and _result.wall_impacts[_next_wall_impact].time <= t
 	):
-		_spawn_wall_spark(_result.wall_impacts[_next_wall_impact].point)
+		var imp := _result.wall_impacts[_next_wall_impact]
+		_spawn_wall_spark(imp.point, imp.strength)
 		AudioManager.play("wall")
 		_next_wall_impact += 1
 
@@ -704,19 +719,27 @@ func _update_bars() -> void:
 
 
 ## 衝撃波をアリーナのユニット系に生やす。自分で消えるので後始末は要らない。
-func _spawn_spark(at: Vector2) -> void:
+## 大きさは失われたrps(strength)でスケール: 激突は大きく、微衝突は小さく。
+func _spawn_spark(at: Vector2, strength: float) -> void:
 	var spark := COLLISION_SPARK.instantiate()
 	spark.position = at
 	spark.z_index = OVERLAY_Z
+	spark.max_radius *= SparkScale.scale_for(
+		strength, spark_ref_loss, spark_scale_min, spark_scale_max
+	)
 	$ArenaRoot.add_child(spark)
 
 
 ## 壁用の控えめな衝撃波。同じCollisionSparkを、小さく・短く・壁色に寄せた値で使い回す。
-func _spawn_wall_spark(at: Vector2) -> void:
+## スケール基準はコマ同士と共通(痛さ→大きさの対応を揃える)。壁の喪失は進入速度
+## 比例なので、擦り接触はほぼ見えないほど小さく・激突は自傷の重さがその場で見える。
+func _spawn_wall_spark(at: Vector2, strength: float) -> void:
 	var spark := COLLISION_SPARK.instantiate()
 	spark.position = at
 	spark.z_index = OVERLAY_Z
-	spark.max_radius = wall_spark_radius
+	spark.max_radius = wall_spark_radius * SparkScale.scale_for(
+		strength, spark_ref_loss, spark_scale_min, spark_scale_max
+	)
 	spark.duration = wall_spark_duration
 	spark.start_color = wall_spark_color
 	# 終わりは同じ色のまま透明へ抜ける。コマ同士のような色相の変化はさせない。

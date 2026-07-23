@@ -213,10 +213,10 @@ static func _resolve_disc_collision(
 		return false
 
 	# 接触点。半径で重み付けした中点＝実際に触れている場所。
+	# (Impactの追記は削りが確定した後。強度=実際に失われたrpsを一緒に載せるため)
 	var contact := (
 		a.position * b.stats.radius + b.position * a.stats.radius
 	) / (a.stats.radius + b.stats.radius)
-	result.impacts.append(BattleResult.Impact.new(t, contact))
 
 	# 削り量は衝突前の速さで決める。弾性衝突で速度が変わる前に取っておく。
 	# 速さにはbite_floor_speedの床を敷く: 長引いた戦いの微衝突は削りがゼロへ
@@ -285,6 +285,11 @@ static func _resolve_disc_collision(
 	b.rps = maxf(b.rps - b_drain, 0.0)
 	a.lost_drain += a_before - a.rps
 	b.lost_drain += b_before - b.rps
+	# 衝撃波の強度=この衝突で両者が実際に失ったrpsの合計。再生側はこれで
+	# スパークの大きさを変え、噛み合った激突と微衝突を見分けられるようにする。
+	result.impacts.append(
+		BattleResult.Impact.new(t, contact, (a_before - a.rps) + (b_before - b.rps))
+	)
 	_mark_if_dead(a, "drain", req, t)
 	_mark_if_dead(b, "drain", req, t)
 	return true
@@ -312,11 +317,6 @@ static func _resolve_walls(
 			wall.point, wall.normal, s.position, s.velocity, s.stats.radius
 		):
 			continue
-		# 接触点。法線は内向きなので、中心から壁側へ半径分ずらすとコマの縁＝
-		# 壁面上の当たった点になる。位置は反射で変わらない(変わるのは速度だけ)。
-		result.wall_impacts.append(
-			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius)
-		)
 		# 進入速度(法線方向)は反射前に測る。wall_hitが通った時点で必ず正。
 		var normal_speed := -wall.normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
@@ -329,6 +329,13 @@ static func _resolve_walls(
 		)
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
+		# 接触点。法線は内向きなので、中心から壁側へ半径分ずらすとコマの縁＝
+		# 壁面上の当たった点になる。位置は反射で変わらない(変わるのは速度だけ)。
+		# 強度=この1回で実際に失ったrps。壁の喪失は進入速度比例なので、擦り接触の
+		# 波は小さく・激突の波は大きく再生される。
+		result.wall_impacts.append(
+			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius, before - s.rps)
+		)
 		_mark_if_dead(s, "wall", req, t)
 
 
@@ -345,9 +352,6 @@ static func _resolve_obstacles(
 		):
 			continue
 		var normal := (s.position - obstacle_center).normalized()
-		result.wall_impacts.append(
-			BattleResult.Impact.new(t, s.position - normal * s.stats.radius)
-		)
 		# 壁と同じく、反射前の法線方向進入速度で損失をスケールする。
 		var normal_speed := -normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
@@ -360,6 +364,10 @@ static func _resolve_obstacles(
 		)
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
+		# 強度=この1回で実際に失ったrps(壁と同じ扱いで衝撃波をスケールする)。
+		result.wall_impacts.append(
+			BattleResult.Impact.new(t, s.position - normal * s.stats.radius, before - s.rps)
+		)
 		_mark_if_dead(s, "wall", req, t)
 
 

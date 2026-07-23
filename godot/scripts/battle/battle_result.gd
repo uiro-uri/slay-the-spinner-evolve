@@ -27,15 +27,21 @@ class Snapshot:
 
 
 ## 衝突が起きた瞬間。再生時にここで衝撃波を出す。
+## strength はその瞬間に実際に失われたrps(コマ同士は両者の合計、壁・障害物は
+## その1体の喪失)。壁の喪失は進入速度比例・削りは噛み合い床持ちなので、
+## 「どれだけ痛かったか」は事実として記録しないと再生側から読めない。
+## 衝撃波の大きさをこれでスケールし、擦り接触は小さく・激突は大きく見せる。
 class Impact:
 	extends RefCounted
 
 	var time: float
 	var point: Vector2
+	var strength: float
 
-	func _init(time_: float, point_: Vector2) -> void:
+	func _init(time_: float, point_: Vector2, strength_: float = 1.0) -> void:
 		time = time_
 		point = point_
+		strength = strength_
 
 
 ## 何もなければ引き分け。
@@ -138,9 +144,9 @@ func to_dict() -> Dictionary:
 		"player": _frames_to_array(player_frames),
 		"enemies": enemies_out,
 		"impacts": impacts.map(func(x: Impact) -> Array:
-			return [x.time, x.point.x, x.point.y]),
+			return [x.time, x.point.x, x.point.y, x.strength]),
 		"wall_impacts": wall_impacts.map(func(x: Impact) -> Array:
-			return [x.time, x.point.x, x.point.y]),
+			return [x.time, x.point.x, x.point.y, x.strength]),
 		"outcome": int(outcome),
 		"finish_time": finish_time,
 		"time_step": time_step,
@@ -160,13 +166,15 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	for raw_track in d["enemies"]:
 		tracks.append(_frames_from_array(raw_track))
 	r.enemy_tracks = tracks
+	# 旧dictの要素は[time, x, y]の3要素。強度は1.0(=既定サイズ)で読み、
+	# 当時の結果を当時の見た目のまま再生できるようにする。
 	var impacts_: Array[Impact] = []
 	for x in d["impacts"]:
-		impacts_.append(Impact.new(x[0], Vector2(x[1], x[2])))
+		impacts_.append(Impact.new(x[0], Vector2(x[1], x[2]), x[3] if x.size() > 3 else 1.0))
 	r.impacts = impacts_
 	var wall_impacts_: Array[Impact] = []
 	for x in d["wall_impacts"]:
-		wall_impacts_.append(Impact.new(x[0], Vector2(x[1], x[2])))
+		wall_impacts_.append(Impact.new(x[0], Vector2(x[1], x[2]), x[3] if x.size() > 3 else 1.0))
 	r.wall_impacts = wall_impacts_
 	r.outcome = d["outcome"]
 	r.finish_time = d["finish_time"]
