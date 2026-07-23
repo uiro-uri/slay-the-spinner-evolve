@@ -384,9 +384,11 @@ func describe() -> String:
 	# ゴーストは倍率を持たないので、無敵秒数を埋めた専用の説明を返す。
 	if effect == Effect.GHOST:
 		return tr("PART_EFFECT_GHOST").format([_trim(ghost_seconds)])
-	# 勢い維持は摩擦と回転減衰の両方に効く。倍率を埋めた専用の説明を返す。
+	# 勢い維持は摩擦と回転減衰の両方に効く。倍率を埋めた専用の説明に、挙動の
+	# 注記を添える——「摩擦×0.8」だけでは下がる=良いことが初見に伝わらない
+	# (コールドプレイでは寿命目安の併記に救われて選べた、が実UIにその救いはない)。
 	if effect == Effect.MOMENTUM:
-		return tr("PART_EFFECT_MOMENTUM").format([_trim(multiplier)])
+		return tr("PART_EFFECT_MOMENTUM").format([_trim(multiplier)]) + "\n" + tr("PART_NOTE_MOMENTUM")
 	# 怒りの反射は反発倍率と壁rps保持の複合。両方を埋めた専用の説明を返す。
 	if effect == Effect.RAGE:
 		return tr("PART_EFFECT_RAGE").format([_trim(multiplier), _trim(cap)])

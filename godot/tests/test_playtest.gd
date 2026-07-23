@@ -354,6 +354,24 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	var momentum_text: String = NaivePlay.card_text(momentum)
 	check.call("回転減衰" in momentum_text, "naive_play: MOMENTUM札は回転減衰を謳う (%s)" % momentum_text)
 	check.call(not ("質量" in momentum_text), "naive_play: MOMENTUM札の表記に質量が混ざらない")
+	check.call("長持ち" in momentum_text, "naive_play: MOMENTUM札は挙動(回転が長持ち)も謳う (%s)" % momentum_text)
+	# STAT_MULTIPLY札も実UI(describe)と同じ挙動注記をCLIに出すこと。
+	# 発見の経緯: 「質量 ×1.30」だけでは対巨体の削り耐性だと読めず、実UIの
+	# 報酬画面には見えている注記がCLIにだけ出ないまま質量札を見送って、
+	# 段7のLv4(自分の2倍の質量)に削り交換で詰んだ。
+	var mass := CustomPartCatalog.by_id(3)    # OVERENCUMBERED(質量UP)
+	var mass_text: String = NaivePlay.card_text(mass)
+	check.call(
+		"削られにくく" in mass_text and "弾く" in mass_text,
+		"naive_play: 質量UP札は挙動(削り耐性と弾き)を謳う (%s)" % mass_text
+	)
+	var spin := CustomPartCatalog.by_id(7)    # SPIN_ENGINE(回転UP)
+	var spin_text: String = NaivePlay.card_text(spin)
+	check.call("寿命" in spin_text, "naive_play: 回転UP札は挙動(寿命)を謳う (%s)" % spin_text)
+	# 注記は倍率の向きに追従すること(デバフ方向の札を仮に作って逆向きを確認)。
+	var shrink := CustomPart.make(0, "T", CustomPart.Rarity.COMMON, CustomPart.Stat.MASS, 0.5)
+	var shrink_text: String = NaivePlay.card_text(shrink)
+	check.call("弾きにくい" in shrink_text, "naive_play: 質量DOWNは逆向きの注記になる (%s)" % shrink_text)
 	# GROWTH(直径+質量の複合)は両方の効果と、代償(自然減衰の悪化)まで謳うこと。
 	# 旧版(直径のみ)はCLIに代償が出ず、効果文だけで選ぶコールドプレイの罠だった。
 	var growth := CustomPartCatalog.by_id(2)
