@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "battledefaults"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "battledefaults"
 ]
 
 
@@ -73,6 +73,9 @@ func _init() -> void:
 
 	print("== disc ==")
 	_test_disc()
+
+	print("== discweight ==")
+	_test_disc_weight()
 
 	print("== discgradient ==")
 	_test_disc_gradient()
@@ -340,6 +343,12 @@ func _test_disc() -> void:
 	var suite = load("res://tests/test_disc_visual.gd").new()
 	suite.run(_check)
 	_done("disc")
+
+
+func _test_disc_weight() -> void:
+	var suite = load("res://tests/test_disc_weight.gd").new()
+	suite.run(_check)
+	_done("discweight")
 
 
 func _test_disc_gradient() -> void:

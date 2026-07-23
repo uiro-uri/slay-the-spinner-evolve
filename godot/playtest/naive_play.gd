@@ -175,18 +175,9 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 	var plans := _enemy_plans(node.enemies, field, bseed)
 	print("敵 %d体 (bseed=%d):" % [node.enemies.size(), bseed])
 	for i in node.enemies.size():
-		var e: EnemyData = node.enemies[i]
-		var pl: EnemySpawn.Plan = plans[i]
-		var dir := pl.velocity.normalized()
-		# 寿命目安は自分のステータス行と同じ式(rps/(radius*spin_decay))。実UIでは
-		# 敵の減衰の速さはゲージの減りとして見えるので、CLIにも数字で出す。
-		# 間合いは発射位置がこの敵に近づける限界の中心距離(実UIでは予告の円)。
-		print("  enemy%d Lv%d '%s': 出現=%s 速度=%.1f 向き=%.0f° radius=%.2f rps=%.1f 寿命目安=%.1f 間合い=%.1f" % [
-			i + 1, e.level, e.display_name, str(pl.position), pl.velocity.length(),
-			rad_to_deg(dir.angle()), e.stats.radius, e.stats.rps,
-			e.stats.rps / maxf(e.stats.radius * e.stats.spin_decay, 0.001),
-			LaunchStandoff.required_distance(
-				float(state["stats"]["radius"]), e.stats.radius, field.inradius())])
+		print(enemy_line(
+			i, node.enemies[i], plans[i],
+			float(state["stats"]["radius"]), field.inradius()))
 	print("→ launch --bseed=%d --from-deg=<0-360> --target=center|enemy1..|x,y --force=<0-1>" % bseed)
 
 func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float) -> void:
@@ -557,6 +548,26 @@ static func field_text(field: FieldData) -> String:
 			pillars.append("(%.1f,%.1f)r%.1f" % [o.x, o.y, o.z])
 		line += "  柱=%s" % " ".join(pillars)
 	return line
+
+
+## 敵1体ぶんの予告行。実ゲームで画面に見えている情報をCLIにも全部出す。
+## 寿命目安は自分のステータス行と同じ式(rps/(radius*spin_decay))。実UIでは敵の
+## 減衰の速さはゲージの減りとして見える。質量は実UIではコマの縁のリムの太さ
+## (Disc/DiscWeightVisual)として見える。硬さ(質量×半径²)は1衝突で削られるrpsが
+## これに反比例する値で、弾き飛ばして壁で仕留められる相手かどうかの読み合い材料
+## (以前はどこにも出ておらず、巨体への壁弾きが撃つまで分からない賭けだった)。
+## 間合いは発射位置がこの敵に近づける限界の中心距離(実UIでは予告の円)。
+static func enemy_line(
+	index: int, e: EnemyData, pl: EnemySpawn.Plan,
+	player_radius: float, inradius: float
+) -> String:
+	var dir := pl.velocity.normalized()
+	return "  enemy%d Lv%d '%s': 出現=%s 速度=%.1f 向き=%.0f° radius=%.2f rps=%.1f 質量=%.1f 硬さ=%.2f 寿命目安=%.1f 間合い=%.1f" % [
+		index + 1, e.level, e.display_name, str(pl.position), pl.velocity.length(),
+		rad_to_deg(dir.angle()), e.stats.radius, e.stats.rps,
+		e.stats.mass, e.stats.mass * e.stats.radius * e.stats.radius,
+		e.stats.rps / maxf(e.stats.radius * e.stats.spin_decay, 0.001),
+		LaunchStandoff.required_distance(player_radius, e.stats.radius, inradius)]
 
 
 ## 敗北を状態に記録する。retry(残機消費)かgiveupを選ぶまでlaunchを受け付けない。

@@ -27,6 +27,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
+	_test_naive_play_enemy_line(check)
 	_test_naive_play_launch_lock(check)
 	_test_naive_play_reward_guard(check)
 	_test_naive_play_defeat_prompt(check)
@@ -488,6 +489,26 @@ func _test_naive_play_field_text(check: Callable) -> void:
 	var plain: String = NaivePlay.field_text(classic)
 	check.call(not ("柱" in plain), "naive_play: 柱の無い土俵に柱表記は出ない (%s)" % plain)
 	check.call("形状=RECT" in plain, "naive_play: 従来の土俵情報(壁形状)も出る")
+
+
+## 敵の予告行に質量と硬さ(質量×半径²)が出ること。壁へ弾き飛ばせる相手か
+## どうかの読み合い材料で、実UIのリム表示(DiscWeightVisual)と対になる。
+## 発見の経緯: 質量がCLI・実UIのどこにも出ておらず、Lv4/ボスの巨体への
+## 壁弾きが撃つまで分からない賭けになっていた(コールドプレイの一次証拠)。
+func _test_naive_play_enemy_line(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var e := EnemyRoster.of_level(4)[2]  # ENEMY_4_3: Lv4最重量級
+	var pl := EnemySpawn.Plan.new(Vector2(8, 2), Vector2(-3, 4))
+	var line: String = NaivePlay.enemy_line(0, e, pl, 0.7, 5.0)
+	check.call(
+		("質量=%.1f" % e.stats.mass) in line,
+		"naive_play: 敵行に質量が出る (%s)" % line)
+	check.call(
+		("硬さ=%.2f" % (e.stats.mass * e.stats.radius * e.stats.radius)) in line,
+		"naive_play: 敵行に硬さ(質量×半径²)が出る")
+	check.call(
+		"enemy1" in line and "寿命目安=" in line and "間合い=" in line and "rps=" in line,
+		"naive_play: 従来の敵情報(寿命目安・間合い・rps)も残る")
 
 
 ## launchの結果(勝敗)が状態に保存され、確定後の撃ち直しを受け付けないこと。

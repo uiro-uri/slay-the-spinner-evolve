@@ -167,6 +167,7 @@ func _draw() -> void:
 		_draw_particles(radius, ar)
 
 	_draw_body_gradient(radius)
+	_draw_weight_rim(radius)
 
 	if defeated:
 		# 力尽きたコマは回っていない。マークだけ残して尾は出さない。
@@ -193,6 +194,19 @@ func _draw_body_gradient(radius: float) -> void:
 		points.push_back(p)
 		colors.push_back(DiscGradient.sample(base, gradient_toward_light, t))
 	draw_polygon(points, colors)
+
+
+## 縁のリム。重いコマほど太い(質量の可視化。数式はDiscWeightVisualが持つ)。
+## 半径・rps・速度は見た目に出るのに質量だけ画面に出ておらず、弾き合いで
+## 勝てる相手かどうかが賭けだった。基準色は本体と同じ規則で暗転させるので、
+## 敗北表示にもそのまま追従する。回転不変なので回転座標系のままでよい。
+func _draw_weight_rim(radius: float) -> void:
+	var base := body_color.darkened(0.7) if defeated else body_color
+	var width := DiscWeightVisual.rim_width(stats.mass, radius)
+	draw_arc(
+		Vector2.ZERO, radius - width * 0.5, 0.0, TAU, GRADIENT_SEGMENTS,
+		DiscWeightVisual.rim_color(base), width
+	)
 
 
 ## 本体色の薄い同心円を重ねて、勢いのオーラにする。回転不変なので回転座標系の
