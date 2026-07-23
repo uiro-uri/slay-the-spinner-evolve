@@ -579,6 +579,19 @@ func _test_growth(check: Callable) -> void:
 		text.contains("減衰"),
 		"巨大化: 注記(ja)が自然減衰の代償に触れる (%s)" % text
 	)
+	# 注記は利点(衝突耐性と弾き)も必ず謳うこと。代償だけの文は、タンク型の敵への
+	# 唯一の対抗札を「デメリット札」と読ませる罠になる(コールドプレイの一次証拠)。
+	check.call(
+		text.contains("衝突に強く") and text.contains("弾く"),
+		"巨大化: 注記(ja)が利点(衝突耐性と弾き)にも触れる (%s)" % text
+	)
+	# 代償の由来(大きくなるぶん)を明示すること。自然減衰の悪化は半径経由なので、
+	# ステータスのspin_decay表示は1.00のまま変わらず、無条件の「自然減衰が上がる」
+	# 表記は表示と食い違って見えていた。
+	check.call(
+		text.contains("大きくなる"),
+		"巨大化: 注記(ja)が代償の由来(大きさ)を明示する (%s)" % text
+	)
 
 
 func _test_set_lives(check: Callable) -> void:
