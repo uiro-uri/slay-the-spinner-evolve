@@ -230,3 +230,7 @@ func _test_catalog_and_describe(check: Callable) -> void:
 	check.call("貫通" in text and "硬さ" in text,
 		"naive_play: DRILL札は貫通と硬さ無視を謳う (%s)" % text)
 	check.call(not ("質量" in text), "naive_play: DRILL札の表記に質量が混ざらない")
+	# 実UI(describe)と同じ%表記であること(GUARDと同じ判断。生小数は読めない)。
+	check.call("25%" in text and "75%" in text,
+		"naive_play: DRILL札は実UIと同じ%%表記 (%s)" % text)
+	check.call(not ("0.25" in text), "naive_play: DRILL札に生の小数を出さない (%s)" % text)

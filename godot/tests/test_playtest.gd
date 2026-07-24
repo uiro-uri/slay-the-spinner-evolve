@@ -352,6 +352,11 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	var rage_text: String = NaivePlay.card_text(rage)
 	check.call("反発" in rage_text, "naive_play: RAGE札は反発を謳う (%s)" % rage_text)
 	check.call(not ("質量" in rage_text), "naive_play: RAGE札の表記に質量が混ざらない")
+	# 壁rps保持(割合)はGUARD/EDGE/DRILLと同じ%表記で出すこと。生の「+0.17」は
+	# 加算札の「回転+3.0」と並ぶと誤差にしか見えず読み違える(GUARDの一次証拠と同型)。
+	check.call("17%" in rage_text and "50%" in rage_text,
+		"naive_play: RAGE札の壁軽減は%%表記 (%s)" % rage_text)
+	check.call(not ("0.17" in rage_text), "naive_play: RAGE札に生の小数を出さない (%s)" % rage_text)
 	var momentum := CustomPartCatalog.by_id(5)    # MOMENTUM(摩擦+回転減衰)
 	var momentum_text: String = NaivePlay.card_text(momentum)
 	check.call("回転減衰" in momentum_text, "naive_play: MOMENTUM札は回転減衰を謳う (%s)" % momentum_text)

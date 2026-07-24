@@ -176,3 +176,9 @@ func _test_catalog_and_describe(check: Callable) -> void:
 	var text: String = NaivePlay.card_text(part)
 	check.call("衝突" in text and "軽減" in text, "naive_play: GUARD札は衝突削り軽減を謳う (%s)" % text)
 	check.call(not ("質量" in text), "naive_play: GUARD札の表記に質量が混ざらない")
+	# 実UI(describe)と同じ%表記であること。生の「+0.17」は加算札の「回転+3.0」と
+	# 並ぶと誤差にしか見えず、割合(17%軽減)だと読めないまま2回見送って、段5の
+	# 僅差負け(敵残り4〜7%)3連発を落とした——が一次証拠。
+	check.call("17%" in text and "50%" in text,
+		"naive_play: GUARD札は実UIと同じ%%表記 (%s)" % text)
+	check.call(not ("0.17" in text), "naive_play: GUARD札に生の小数を出さない (%s)" % text)

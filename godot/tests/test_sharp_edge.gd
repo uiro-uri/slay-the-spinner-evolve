@@ -280,3 +280,7 @@ func _test_catalog_and_describe(check: Callable) -> void:
 	var text: String = NaivePlay.card_text(part)
 	check.call("相手" in text and "増強" in text, "naive_play: EDGE札は与ダメ増強を謳う (%s)" % text)
 	check.call(not ("質量" in text), "naive_play: EDGE札の表記に質量が混ざらない")
+	# 実UI(describe)と同じ%表記であること(GUARDと同じ判断。生小数は読めない)。
+	check.call("20%" in text and "60%" in text,
+		"naive_play: EDGE札は実UIと同じ%%表記 (%s)" % text)
+	check.call(not ("0.2" in text), "naive_play: EDGE札に生の小数を出さない (%s)" % text)
