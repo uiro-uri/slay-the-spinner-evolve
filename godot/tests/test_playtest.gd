@@ -30,6 +30,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_field_text(check)
 	_test_naive_play_enemy_line(check)
 	_test_naive_play_launch_lock(check)
+	_test_naive_play_enter_guard(check)
 	_test_naive_play_reward_guard(check)
 	_test_naive_play_defeat_prompt(check)
 	_test_naive_play_bseed_pin(check)
@@ -560,6 +561,42 @@ func _test_naive_play_launch_lock(check: Callable) -> void:
 	check.call(
 		NaivePlay.launch_block_reason({"pending": 1}) == "",
 		"naive_play: 旧state(キー欠落)は従来どおり撃てる(後方互換)")
+
+
+## enterは交戦が解決するまで受け付けないこと。発見の経緯: enterだけがノーガードで、
+## (1)乱戦の報酬が残ったままenterすると黙って放棄になり(案内1行の見落としで実害)、
+## (2)敗北後にenterで別ノードへ移ると残機を消費せず負けを消せ、(3)発射前でもbseedを
+## 変えてenterし直すと敵の出現を無料で再抽選できた。実ゲームはノード選択→戦闘が
+## 一方通行で、どの経路も存在しない。
+func _test_naive_play_enter_guard(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	check.call(
+		NaivePlay.enter_block_reason({"pending": null}) == "",
+		"naive_play: 交戦外はenterできる")
+	var won_rewards := {"pending": 2, "must_retry": false, "won": true, "rewards_left": 2}
+	var r1: String = NaivePlay.enter_block_reason(won_rewards)
+	check.call(r1 != "", "naive_play: 乱戦報酬が残ったままのenterは拒否(黙った放棄の防止)")
+	check.call("2" in r1 and "reward" in r1, "naive_play: 拒否理由に残り回数と受け取り方を出す")
+	var won_state := {"pending": 2, "must_retry": false, "won": true, "rewards_left": null}
+	check.call(
+		NaivePlay.enter_block_reason(won_state) != "",
+		"naive_play: 勝利未確定(reward前)のenterは拒否")
+	var defeated := {"pending": 2, "must_retry": true, "won": false}
+	var r2: String = NaivePlay.enter_block_reason(defeated)
+	check.call(r2 != "", "naive_play: 敗北後のenterは拒否(残機を消費しない逃亡の防止)")
+	check.call("retry" in r2 and "giveup" in r2, "naive_play: 敗北後の拒否理由は出口(retry/giveup)を案内する")
+	check.call(
+		NaivePlay.enter_block_reason({"pending": 2, "must_retry": false, "won": false}) != "",
+		"naive_play: 発射前のenterし直しは拒否(予告の無料再抽選の防止)")
+	check.call(
+		NaivePlay.enter_block_reason({"pending": 1}) != "",
+		"naive_play: 旧state(キー欠落)もpendingが残っていれば拒否")
+	check.call(
+		NaivePlay.enter_block_reason({"pending": null, "dead": true}) != "",
+		"naive_play: giveup済みのランではenterできない(死んだランの蘇生防止)")
+	check.call(
+		NaivePlay.enter_block_reason({"pending": null, "cleared": true}) != "",
+		"naive_play: クリア済みのランではenterできない")
 
 
 ## rewardとpickは勝利済みの戦闘でしか受け付けないこと。発見の経緯: launch側の
