@@ -6,6 +6,8 @@ extends SceneTree
 ##   new    --seed=N --state=path            ラン開始。マップと開始位置を出す
 ##   status --state=path                      現在のステータス/所持パーツ/残機/進める先
 ##   enter  --state=path --col=C --bseed=B    次ノードへ入り、敵の予告(テレグラフ)を出す
+##                                            (入ったら一方通行。決着かretry/giveupまで
+##                                             enterし直せない=実ゲームのマップと同じ)
 ##   launch --state=path --bseed=B --from-deg=D --target=center|enemyK|x,y --force=F
 ##                                            自分の発射を決めて1戦解決。勝敗を出す
 ##                                            (解決は enter/retry で予告した bseed で行う。
@@ -130,6 +132,9 @@ func _status(state: Dictionary, path: String) -> void:
 	_print_reachable(tree)
 
 func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
+	var block := enter_block_reason(state)
+	if block != "":
+		printerr(block); return
 	var tree := _tree_at(state)
 	var target := Vector2i(tree.current_step() + 1, col)
 	if not target in tree.next_coords():
@@ -602,6 +607,33 @@ static func enemy_line(
 ## 敗北を状態に記録する。retry(残機消費)かgiveupを選ぶまでlaunchを受け付けない。
 static func mark_defeat(state: Dictionary) -> void:
 	state["must_retry"] = true
+
+
+## enterを受け付けられない理由。空文字なら進める。
+## 発見の経緯: enterだけがノーガードで、交戦中の状態を黙って捨てられた。
+## (1)乱戦の報酬が残ったままenterすると案内1行の見落としだけで残りの報酬が放棄になり、
+## しかもノード突破が未確定のまま消えて同じ段を戦い直しになる。(2)敗北後にenterで
+## 別ノードへ移ると、残機を消費せずに負けを「なかったこと」にできる。(3)発射前でも
+## bseedを変えてenterし直すと敵の出現を無料で再抽選できる(retryは残機1を払う)。
+## 実ゲームはノードを選んだら戦闘へ一方通行で、報酬は全部選ぶまでマップへ戻れず、
+## 敗北はコンティニュー(残機消費)かgiveupのみ。交戦の出口は launch の決着・retry・
+## giveup だけに揃える。旧state(キー欠落)も pending が残っていれば同様に塞ぐ
+## (launch/retry/giveupはどれも通るので詰みはしない)。
+static func enter_block_reason(state: Dictionary) -> String:
+	if state.get("dead", false):
+		return "ラン終了済み(giveup)。new で新しいラン"
+	if state.get("cleared", false):
+		return "クリア済み。new で新しいラン"
+	if state.get("pending") == null:
+		return ""
+	if state.get("won", false):
+		var left = state.get("rewards_left")
+		if left != null and int(left) > 0:
+			return "乱戦の報酬があと%d回残っている。reward → pick で受け取ってから" % int(left)
+		return "勝利済み。reward → pick でノードを確定してから"
+	if state.get("must_retry", false):
+		return "敗北済み。retry --bseed=<新B> で残機を消費するか giveup"
+	return "交戦中。launch で戦う(予告の再抽選はできない)か giveup"
 
 
 ## launchを受け付けられない理由。空文字なら撃てる。
