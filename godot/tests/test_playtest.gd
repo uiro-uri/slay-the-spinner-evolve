@@ -24,6 +24,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_launch_speed(check)
 	_test_naive_play_pick_guard(check)
 	_test_naive_play_result_label(check)
+	_test_naive_play_remaining_text(check)
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
@@ -628,3 +629,38 @@ func _test_naive_play_result_label(check: Callable) -> void:
 	check.call(
 		NaivePlay.result_label(BattleResult.Outcome.ENEMY_WIN) == "敗北",
 		"naive_play: ENEMY_WINは敗北表示")
+
+
+## 終了時の残りrps表示。発見の経緯: 喪失内訳(削り14.6 壁11.6 減衰1.5)を手で
+## 合算しないと「28.0中27.7を失う残り0.3の辛勝」が読めず、コールドプレイが
+## ボス戦を楽勝と誤読していた(実UIなら再生中のrpsバーで見えている情報)。
+func _test_naive_play_remaining_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var frames: Array[BattleResult.Snapshot] = [
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 28.0),
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 14.0),
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 0.3),
+	]
+	check.call(
+		NaivePlay.remaining_text("自分", frames) == "自分 0.3/28.0(1%)",
+		"naive_play: 残りrpsは最終値/開始値と残存率で出す")
+	var alive: Array[BattleResult.Snapshot] = [
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 20.0),
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 15.0),
+	]
+	check.call(
+		NaivePlay.remaining_text("enemy1", alive) == "enemy1 15.0/20.0(75%)",
+		"naive_play: 生き残り側の残量も同じ形式で読める")
+	check.call(
+		NaivePlay.remaining_text("自分", []) == "",
+		"naive_play: フレーム欠落(旧結果)は空文字で行ごと省く")
+	# 実リゾルバの結果とも整合すること(開始値=発射時rps、最終値=最終フレーム)。
+	var request := _request()
+	var result := _healthy_result(request)
+	var text: String = NaivePlay.remaining_text("自分", result.player_frames)
+	check.call(
+		"/%.1f" % request.player.stats.rps in text,
+		"naive_play: 開始値は発射時のrpsと一致する")
+	check.call(
+		text.begins_with("自分 %.1f/" % result.player_frames[result.player_frames.size() - 1].rps),
+		"naive_play: 最終値は最終フレームのrpsと一致する")
