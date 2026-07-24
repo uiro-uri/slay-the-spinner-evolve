@@ -494,18 +494,22 @@ static func card_text(c: CustomPart) -> String:
 			return "摩擦と回転減衰 ×%.2f(回転減衰の下限%.2f)・減速しにくく回転も長持ちする [MOMENTUM]" % [
 				c.multiplier, c.cap]
 		CustomPart.Effect.RAGE:
-			return "反発 ×%.2f(上限%.2f)・壁でのrps喪失を軽減+%.2f(上限%.2f) [RAGE]" % [
-				c.multiplier, c.cap, c.wall_keep_step, c.wall_keep_max]
+			# wall_keepは割合なので%で出す(下の%表記の判断と同じ。実UIは数値なしの
+			# 「壁でrpsを失いにくい」だけで、CLIの方が情報は多い)。
+			return "反発 ×%.2f(上限%.2f)・壁でのrps喪失を%.0f%%軽減(重ねて最大%.0f%%) [RAGE]" % [
+				c.multiplier, c.cap, c.wall_keep_step * 100.0, c.wall_keep_max * 100.0]
 		CustomPart.Effect.GUARD:
-			return "衝突で削られる回転を軽減+%.2f(上限%.2f) [GUARD]" % [
-				c.hit_guard_step, c.hit_guard_max]
+			# 実UI(describe)と同じ%表記。生の「+0.17」は加算札の「回転+3.0」と並ぶと
+			# 誤差にしか見えず、割合(17%軽減)だと読めないまま見送る罠だった。
+			return "衝突で削られる回転を%.0f%%軽減(重ねて最大%.0f%%) [GUARD]" % [
+				c.hit_guard_step * 100.0, c.hit_guard_max * 100.0]
 		CustomPart.Effect.EDGE:
-			return "衝突で相手から削る回転を増強+%.2f(上限%.2f)・弾き飛ばしも強まる [EDGE]" % [
-				c.edge_step, c.edge_max]
+			return "衝突で相手から削る回転を%.0f%%増強(重ねて最大%.0f%%)・弾き飛ばしも強まる [EDGE]" % [
+				c.edge_step * 100.0, c.edge_max * 100.0]
 		CustomPart.Effect.DRILL:
 			# 実UI(describe)の注記と同じ核心(相手の硬さで減らない=巨体に食い込む)を出す。
-			return "衝突での貫通削り+%.2f(上限%.2f)・自分基準で決まり相手の硬さで減らない、巨体にも食い込む [DRILL]" % [
-				c.drill_step, c.drill_max]
+			return "衝突での貫通削り+%.0f%%(重ねて最大%.0f%%)・自分基準で決まり相手の硬さで減らない、巨体にも食い込む [DRILL]" % [
+				c.drill_step * 100.0, c.drill_max * 100.0]
 		CustomPart.Effect.SPIN_UP:
 			# 実UI(describe)と同じく挙動注記(開始回転が増え寿命が延びる)まで出す。
 			return "回転 +%.1f(上限%.0f)・開始回転が増え寿命が延びる [SPIN_UP]" % [
