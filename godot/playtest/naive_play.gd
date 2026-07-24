@@ -240,6 +240,18 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	for i in result.enemy_rps_loss.size():
 		loss_parts.append(loss_text("enemy%d" % (i + 1), result.enemy_rps_loss[i]))
 	print("  rps喪失内訳: %s" % " / ".join(loss_parts))
+	# 終了時の残りrps。勝敗の際どさ(残り1%の辛勝か余裕勝ちか)は喪失内訳の
+	# 合算でしか読めなかった。remaining_textのコメント参照。
+	var rem_parts: Array[String] = []
+	var self_rem := remaining_text("自分", result.player_frames)
+	if self_rem != "":
+		rem_parts.append(self_rem)
+	for i in result.enemy_tracks.size():
+		var rem := remaining_text("enemy%d" % (i + 1), result.enemy_tracks[i])
+		if rem != "":
+			rem_parts.append(rem)
+	if not rem_parts.is_empty():
+		print("  残りrps: %s" % " / ".join(rem_parts))
 	if won:
 		if tree.is_goal():
 			# 実ゲーム(Main._on_battle_finished)はボス撃破で即クリアし報酬はない。
@@ -637,6 +649,20 @@ static func loss_text(label: String, loss: Dictionary) -> String:
 	return "%s 削り%.1f 壁%.1f(%d回) 減衰%.1f" % [label,
 		float(loss.get("drain", 0.0)), float(loss.get("wall", 0.0)),
 		int(loss.get("wall_hits", 0)), float(loss.get("decay", 0.0))]
+
+
+## 終了時の残りrpsの1体ぶんの表示。喪失内訳は「何で失ったか」を語るが、
+## 「どれだけ残して決着したか」は3項を手で合算しないと出ず、残り1%の辛勝が
+## 楽勝と同じ顔で流れていた(実UIなら再生中のrpsバーで見えている情報)。
+## 「実UIで見える情報はCLIにも全部出す」の一環。フレーム欠落(旧結果)は空文字で、
+## 呼び出し側が行ごと出さない。
+static func remaining_text(label: String, frames: Array) -> String:
+	if frames.is_empty():
+		return ""
+	var start: float = frames[0].rps
+	var final: float = frames[frames.size() - 1].rps
+	var pct := int(round(final / start * 100.0)) if start > 0.0 else 0
+	return "%s %.1f/%.1f(%d%%)" % [label, final, start, pct]
 
 
 ## 勝敗表示。引き分け(相打ち・時間切れ)は進行上は敗北扱いだが、
