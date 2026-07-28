@@ -25,6 +25,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_pick_guard(check)
 	_test_naive_play_result_label(check)
 	_test_naive_play_remaining_text(check)
+	_test_naive_play_death_cause_text(check)
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
@@ -706,3 +707,28 @@ func _test_naive_play_remaining_text(check: Callable) -> void:
 	check.call(
 		text.begins_with("自分 %.1f/" % result.player_frames[result.player_frames.size() - 1].rps),
 		"naive_play: 最終値は最終フレームのrpsと一致する")
+
+
+## 死因トークンの表示。発見の経緯: 「死因=drain ... 決着死因=drain」の生トークンが
+## 初見で読めず、喪失内訳行の「削り/壁/減衰」と同じ現象なのに語彙が繋がらなかった
+## (2026-07-28のコールドプレイ)。内訳と同じ日本語を主にしてトークンを併記する。
+func _test_naive_play_death_cause_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	check.call(
+		"削り" in NaivePlay.death_cause_text("drain"),
+		"naive_play: 死因drainは内訳と同じ「削り」で読める")
+	check.call(
+		"drain" in NaivePlay.death_cause_text("drain"),
+		"naive_play: 死因drainは元トークンも併記する")
+	check.call(
+		"減衰" in NaivePlay.death_cause_text("decay"),
+		"naive_play: 死因decayは内訳と同じ「減衰」で読める")
+	check.call(
+		"壁" in NaivePlay.death_cause_text("wall"),
+		"naive_play: 死因wallは内訳と同じ「壁」で読める")
+	check.call(
+		"分類不能" in NaivePlay.death_cause_text("unknown"),
+		"naive_play: unknownは分類不能と読める")
+	check.call(
+		NaivePlay.death_cause_text("?") == "?",
+		"naive_play: 未知トークンはそのまま通す(引き分けの死因=?を壊さない)")
