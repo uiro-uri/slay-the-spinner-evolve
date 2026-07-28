@@ -26,6 +26,7 @@ func run(check: Callable) -> void:
 	_test_lifetime_floor(check)
 	_test_lifetime_ladder(check)
 	_test_contact_trade_floor(check)
+	_test_intra_level_trade_evenness(check)
 
 
 ## 乱戦メンバーはどれも頭数で弱められていないこと。各体の耐久(=rps×質量×半径²)が、
@@ -130,22 +131,53 @@ const TRADE_RATIO_CAP := 2.7
 const BOSS_TRADE_RATIO_CAP := 4.5
 
 
-func _test_contact_trade_floor(check: Callable) -> void:
+## 等速衝突1回の「受ける削り ÷ 与える削り(edge上限込み)」。床テストと格差テストで共用。
+static func trade_ratio(e: EnemyData) -> float:
 	var player := SpinnerStats.default_player()
 	var pierce := SpinnerPhysics.spin_drain(player.mass, 1.0, player.mass, player.radius, 1.0)
+	var received := SpinnerPhysics.spin_drain(
+		e.stats.mass, 1.0, player.mass, player.radius, 1.0)
+	var dealt := SpinnerPhysics.sharpened_spin_drain(
+		SpinnerPhysics.spin_drain(player.mass, 1.0, e.stats.mass, e.stats.radius, 1.0),
+		CustomPartCatalog.EDGE_MAX, pierce)
+	return received / maxf(dealt, EPS)
+
+
+func _test_contact_trade_floor(check: Callable) -> void:
 	for level in range(1, 6):
 		var cap := TRADE_RATIO_CAP if level < 5 else BOSS_TRADE_RATIO_CAP
 		for e in EnemyRoster.of_level(level):
-			var received := SpinnerPhysics.spin_drain(
-				e.stats.mass, 1.0, player.mass, player.radius, 1.0)
-			var dealt := SpinnerPhysics.sharpened_spin_drain(
-				SpinnerPhysics.spin_drain(player.mass, 1.0, e.stats.mass, e.stats.radius, 1.0),
-				CustomPartCatalog.EDGE_MAX, pierce)
 			check.call(
-				dealt > 0.0 and received / dealt <= cap,
+				trade_ratio(e) <= cap,
 				"接触トレードの床: %s の被/与比(%.2f) ≦ %.1f" % [
-					e.display_name, received / maxf(dealt, EPS), cap]
+					e.display_name, trade_ratio(e), cap]
 			)
+
+
+## 接触トレードの同レベル内格差: 同レベルの敵どうしで被/与比が開きすぎないこと。
+## 硬さ・耐久・寿命は同レベルで揃えてあるのに、被削りは相手の質量だけで決まる
+## ため、質量の突出した個体だけ「同レベルなのに別格に強い」が起きる。回避は
+## すり鉢が許さないので、その個体を引いたランだけ全戦法が同じ削り負けに収束し、
+## リトライが出現ガチャになる(コールドプレイでENEMY_3_3に5連敗・ENEMY_4_3に
+## 4連敗、素プレイヤーの戦闘勝率が同Lv内で6倍差、が一次証拠)。
+## 接触が勝敗を決めるLv3以上が対象(Lv1〜2は一撃で終わる導入なので、質量の個性を
+## 広く残してよい)。
+const TRADE_SPREAD_CAP := 1.4
+
+
+func _test_intra_level_trade_evenness(check: Callable) -> void:
+	for level in range(3, 6):
+		var worst := -INF
+		var best := INF
+		for e in EnemyRoster.of_level(level):
+			var ratio := trade_ratio(e)
+			worst = maxf(worst, ratio)
+			best = minf(best, ratio)
+		check.call(
+			best > 0.0 and worst / best <= TRADE_SPREAD_CAP,
+			"トレード格差: Lv%d の被/与比の開き(%.2f = %.2f/%.2f) ≦ %.1f" % [
+				level, worst / maxf(best, EPS), worst, best, TRADE_SPREAD_CAP]
+		)
 
 
 ## レベル平均の寿命目安がLv3→4→5で下がらないこと(高レベルほど短命の逆転を防ぐ)。
