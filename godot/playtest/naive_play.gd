@@ -236,8 +236,8 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	# 死因(BattleMetrics)は最終rpsが最小の敗者の推定。決着死因はリゾルバが記録した
 	# 「最後に力尽きた体」の事実で、乱戦では別の敵になりうる(撃破ボーナスは後者で決まる)。
 	print("  死因=%s loser=%s hits_taken=%s 決着死因=%s" % [
-		metrics.get("death_cause","?"), metrics.get("loser","?"), str(metrics.get("hits_taken","?")),
-		result.loser_death_cause])
+		death_cause_text(metrics.get("death_cause","?")), metrics.get("loser","?"),
+		str(metrics.get("hits_taken","?")), death_cause_text(result.loser_death_cause)])
 	# rps喪失の内訳(リゾルバが数えた事実)。死因ラベルは「閾値を割った最後の一撃」
 	# しか語らないので、壁で大半を削られた負けが「衝突0・死因decay」とだけ出て
 	# 敗因が読めないことがあった。機構別の内訳を必ず出す。
@@ -685,6 +685,24 @@ static func loss_text(label: String, loss: Dictionary) -> String:
 	return "%s 削り%.1f 壁%.1f(%d回) 減衰%.1f" % [label,
 		float(loss.get("drain", 0.0)), float(loss.get("wall", 0.0)),
 		int(loss.get("wall_hits", 0)), float(loss.get("decay", 0.0))]
+
+
+## 死因トークンの表示。リゾルバ/BattleMetricsは "drain"/"wall"/"decay" の生トークンで
+## 記録するが、初見では読めない(2026-07-28のコールドプレイでdrainとdecayの違いを
+## 推測するしかなかった)。喪失内訳行の「削り/壁/減衰」と同じ現象なのに語彙が
+## 繋がっていないのが根なので、内訳と同じ日本語を主にしトークンを併記する
+## (実UIは死因自体を出さず内訳の語彙だけで語る)。未知トークンはそのまま返す。
+static func death_cause_text(cause: String) -> String:
+	match cause:
+		"drain":
+			return "削り(drain)"
+		"wall":
+			return "壁(wall)"
+		"decay":
+			return "減衰(decay)"
+		"unknown":
+			return "分類不能(unknown)"
+	return cause
 
 
 ## 終了時の残りrpsの1体ぶんの表示。喪失内訳は「何で失ったか」を語るが、
