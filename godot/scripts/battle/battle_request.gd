@@ -104,6 +104,20 @@ var wall_impact_ref_speed: float = 8.0
 ## 対の泥仕合対策で、低速の微衝突の応酬が何も生まず決着が壁・減衰任せになるのを
 ## 防ぐ。0以下で床なし(旧挙動)。詳細はSpinnerPhysics.bitten_speed。
 var bite_floor_speed: float = 4.0
+
+## 敵同士の衝突で互いに与える削り(と削り比例のspin_kick)の倍率。1.0で対等
+## (プレイヤーと同じ扱い)。「乱戦一択」の検証(2026-07-29)で、Lv1-2の乱戦は
+## 勝率が単体と同等(98〜100%)のまま報酬だけ頭数倍のジャックポットだと判明した。
+## 正体は同士討ち: 柔らかい序盤の敵ほど衝突のたび互いを大きく削り、頭数が
+## 増えるほど勝手に潰し合って脅威が頭数ぶん増えない。この係数で同士討ちを
+## 弱めると、柔らかい敵の乱戦ほど選択的に手強くなる(硬い後半の敵は元々
+## ほぼ削り合えないので影響が小さい)。プレイヤーが与える・受ける削りには
+## 一切効かない。1.0でスケール無効=旧挙動。
+## 0.5の採用(2026-07-29): ランボット統計(300ラン×4方針)で単体戦は全Lvノイズ範囲の
+## まま、乱戦だけ勝率が下がり(Lv2 3体 86.8→73.7% / Lv3 3体 44.0→29.9%)、Lv1乱戦は
+## 98%残で導入の優しさを保った。0.25も測ったがLv3 3体が16.4%まで落ちて
+## 「選べる賭け」でなく死の部屋になるため見送り。
+var enemy_mutual_drain_scale: float = 0.5
 var lose_threshold: float = 0.03
 
 ## ゴーストの無敵時間(秒)。開始からこの時刻までプレイヤーと敵の衝突判定を切る。
@@ -136,6 +150,7 @@ func to_dict() -> Dictionary:
 		"wall_damping": wall_damping,
 		"wall_impact_ref_speed": wall_impact_ref_speed,
 		"bite_floor_speed": bite_floor_speed,
+		"enemy_mutual_drain_scale": enemy_mutual_drain_scale,
 		"lose_threshold": lose_threshold,
 		"ghost_duration": ghost_duration,
 		"time_step": time_step,
@@ -167,6 +182,8 @@ static func from_dict(d: Dictionary) -> BattleRequest:
 	r.wall_impact_ref_speed = d.get("wall_impact_ref_speed", 0.0)
 	# 同上: 旧い保存データは床なし(0)で補い、当時の結果をそのまま再現する。
 	r.bite_floor_speed = d.get("bite_floor_speed", 0.0)
+	# 同上: 旧い保存データはスケール無効(1.0=対等)で補い、当時の結果を再現する。
+	r.enemy_mutual_drain_scale = d.get("enemy_mutual_drain_scale", 1.0)
 	r.lose_threshold = d["lose_threshold"]
 	# 旧い保存データにキーが無くても壊れないよう既定0で補う。
 	r.ghost_duration = d.get("ghost_duration", 0.0)
