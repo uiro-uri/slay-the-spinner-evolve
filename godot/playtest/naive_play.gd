@@ -507,7 +507,11 @@ static func card_text(c: CustomPart) -> String:
 		CustomPart.Effect.SET_LIVES:
 			return "残機を%dにする" % c.lives
 		CustomPart.Effect.GHOST:
-			return "最初の衝突後%.0f秒間 敵をすり抜ける" % c.ghost_seconds
+			# 実UI(describe)の挙動注記と同じ核心を出す。「敵をすり抜ける」だけでは
+			# 「その間ダメージを与えられない」デメリットに読める(コールドプレイで
+			# 5提示5見送りの一次証拠。初撃が当たってから発動する=攻めが無駄に
+			# ならないことが効果文から読めなかった)。
+			return "最初の衝突後%.0f秒間 敵をすり抜ける・初撃は当たってから発動、直後の反撃や乱戦のもみくちゃを無傷でやり過ごすヒット&ラン [GHOST]" % c.ghost_seconds
 		CustomPart.Effect.MOMENTUM:
 			# 実UI(describe)の挙動注記と同じ一言を出す。「摩擦×0.8」だけでは
 			# 下がる=良いことが初見に読めない。
