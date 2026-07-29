@@ -63,21 +63,34 @@ const RPS_CAP := 40.0
 ## random+random botのクリア率が56%へ跳ねて過剰。+0.5で谷25.2%・全体の締まりを両立。
 const VICTORY_RPS_GROWTH := 0.5
 
-## 敵を接触(衝突削り/壁への弾き飛ばし)で仕留めた勝利の成長量。撃破ボーナス。
+## 敵を接触(衝突削り/壁への弾き飛ばし)で仕留めた勝利の成長量の下限。撃破ボーナス。
 ## 「弱発射で敵から離れて自然減衰を待つ」受け身戦法が支配的(Lv3+の敵死因の8割が
 ## 自然減衰)で、当てにいく楽しい方の遊びが報われない。そこで決着のつき方で成長に
 ## 差を付け、狙って当てた勝ちがラン単位で複利になるようにする。受け身の勝ちは
 ## 従来のVICTORY_RPS_GROWTHのまま(弱体化はしない)。
 const KNOCKOUT_RPS_GROWTH := 1.0
 
+## 撃破ボーナスの比例成長率。+1.0固定はrpsが育つほど相対的に空気になり
+## (rps15では+6.7%、rps29では+3.4%)、後半ほど当てにいく理由が薄れていた。
+## 現在rpsに比例させて「狙って当てた勝ちはラン後半でも複利で効く」を保つ。
+## rps20以下ではKNOCKOUT_RPS_GROWTHの下限が働き、序盤の手触りは従来と同一。
+## 受け身の勝ち(VICTORY_RPS_GROWTH)は比例させない: 逃げ切りが複利になると
+## 撃破ボーナスの存在意義(当てにいく方が報われる)が崩れるため。
+const KNOCKOUT_RPS_GROWTH_RATE := 0.05
+
 
 ## 戦闘に勝ったときに呼ぶ。回転を少しだけ成長させる(上限RPS_CAP)。
 ## knockout=真(接触で決着。BattleResult.finished_by_knockout)なら撃破ボーナスで
-## 大きく育つ。実プレイ(Main経由のGameState)とシミュレーション(RunSim)の両方が
-## ここを使う。
-func grow_rps_by_victory(knockout: bool = false) -> void:
-	var growth := KNOCKOUT_RPS_GROWTH if knockout else VICTORY_RPS_GROWTH
+## 大きく育つ(現在rpsに比例、下限KNOCKOUT_RPS_GROWTH)。実プレイ(Main経由の
+## GameState)とシミュレーション(RunSim)の両方がここを使う。
+## 戻り値は実際に増えた量(上限で頭打ちした場合は要求より小さい)。表示用。
+func grow_rps_by_victory(knockout: bool = false) -> float:
+	var growth := VICTORY_RPS_GROWTH
+	if knockout:
+		growth = maxf(KNOCKOUT_RPS_GROWTH, rps * KNOCKOUT_RPS_GROWTH_RATE)
+	var before := rps
 	rps = minf(rps + growth, RPS_CAP)
+	return rps - before
 
 
 func duplicate_stats() -> SpinnerStats:
