@@ -23,6 +23,7 @@ func run(check: Callable) -> void:
 	_test_dead_card_filter(check)
 	_test_rejected_cooldown(check)
 	_test_contact_trade_ceiling(check)
+	_test_overencumbered_stack_cap(check)
 	_test_spin_up(check)
 
 
@@ -895,6 +896,53 @@ func _test_rejected_cooldown(check: Callable) -> void:
 ## 実質勝ち確定札だった。ここが割れると「引けたら勝ち確」の運ゲー札が生まれる。
 ## 寿命(rps÷(半径×spin_decay))に代償を払う札(GIANT_GROWTHの半径経由の減衰悪化など)は
 ## トレードと寿命の交換なので対象外。
+## OVERENCUMBERED(質量×1.3)のスタック上限。全体上限MASS_CAP(8.0)を共有していた頃は
+## 6枚まで意味を持ち、質量スタックが支配戦略になっていた(ラン相関+38ptで次点の
+## 2倍近く。経緯はCustomPartCatalog.OVERENCUMBERED_MASS_CAPのコメント参照)。
+## 基礎ビルドから2枚で頭打ちになり3枚目は死にカードとして提示から消えること、
+## 上限越えビルドへの引き下げの罠を作らないことを固定する。
+func _test_overencumbered_stack_cap(check: Callable) -> void:
+	var part := CustomPartCatalog.by_id(3)
+	check.call(
+		is_equal_approx(part.cap, CustomPartCatalog.OVERENCUMBERED_MASS_CAP)
+			and part.cap < CustomPartCatalog.MASS_CAP,
+		"質量スタック: OVERENCUMBERED専用上限がMASS_CAPより低い (%.2f)" % part.cap
+	)
+
+	# 基礎ビルドから: 1枚目・2枚目は効く。
+	var s := SpinnerStats.default_player()
+	check.call(part.would_change_anything(s), "質量スタック: 1枚目は有効")
+	part.apply_to(s)
+	var after_first := s.mass
+	check.call(part.would_change_anything(s), "質量スタック: 2枚目も有効")
+	part.apply_to(s)
+	check.call(
+		s.mass > after_first + EPS
+			and s.mass <= CustomPartCatalog.OVERENCUMBERED_MASS_CAP + EPS,
+		"質量スタック: 2枚で上限%.1fに達する (%.3f)" % [
+			CustomPartCatalog.OVERENCUMBERED_MASS_CAP, s.mass
+		]
+	)
+	# 3枚目は何も変えない=死にカード判定が提示から外す。
+	check.call(
+		not part.would_change_anything(s),
+		"質量スタック: 3枚目は死にカード (%.3f)" % s.mass
+	)
+
+	# 上限越えビルド(GROWTH連打で質量2.5超)への罠がない: クランプは引き下げない。
+	var grown := SpinnerStats.default_player()
+	grown.mass = 3.0
+	part.apply_to(grown)
+	check.call(
+		is_equal_approx(grown.mass, 3.0),
+		"質量スタック: 上限越えの質量を引き下げない (%.3f)" % grown.mass
+	)
+	check.call(
+		not part.would_change_anything(grown),
+		"質量スタック: 上限越えビルドには死にカードとして提示されない"
+	)
+
+
 ## 回転加算札(Extra Winding)。rpsを定数だけ足し、上限RPS_CAPで止まる。
 ## 回転成長の軸がRARE(SPIN_ENGINE)の引き運に全依存だったのを、COMMONの
 ## 確実な積み上げで下支えする札(経緯はCustomPartCatalog.SPIN_UP_STEP参照)。

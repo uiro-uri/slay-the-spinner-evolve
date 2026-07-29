@@ -53,6 +53,16 @@ const MASS_CAP := 8.0
 ## (Lv5 3枚 +7.6pt)も消えた。1枚のスイング天井(²≦2.0)はテストが照合する。
 const OVERENCUMBERED_MASS_MULT := 1.3
 
+## Overencumbered固有の質量上限。全体上限MASS_CAP(8.0)を共有していた頃は6枚まで
+## 意味を持ち、質量スタックが支配戦略になっていた: ラン相関で+38ptと次点RARE
+## (SPARE_CORE +20pt)の2倍近く、単独計測でも3枚+86pt(journal 2026-07-29)。
+## 単発〜2枚の「最強RAREだが地続き」(上の×1.3の経緯)は維持し、基礎質量1.5から
+## 2枚分(1.5×1.3²=2.535)でほぼ頭打ちになる2.5で止める。3枚目からは死にカード判定
+## (CustomPart.would_change_anything)が自動で提示から外す。GROWTHの質量上限は
+## MASS_CAPのまま(あちらは半径経由で寿命に代償を払う複合札で、スタックの主犯では
+## ない。ラン相関+0pt)。
+const OVERENCUMBERED_MASS_CAP := 2.5
+
 ## Giant Growthの倍率。直径だけ(×1.25)だった頃は自然減衰(radius×spin_decay比例)の
 ## 悪化が上回り、単独計測でLv3 -6.4pt/枚・3枚で-26.9ptと唯一の純マイナス札=罠だった。
 ## 「大きくなるなら重くもなる」の複合にして、質量の衝突耐性(削りは1/(質量×半径²))で
@@ -143,7 +153,7 @@ static func all() -> Array[CustomPart]:
 		# 主火力である質量を削るとボスは硬くなる。uiroの判断でボス難化を許容(残機で
 		# 緩和)し、札の突出を抑える方を採った(×1.6→×1.5→×1.3)。
 		CustomPart.make(3, "PART_OVERENCUMBERED", CustomPart.Rarity.RARE,
-			CustomPart.Stat.MASS, OVERENCUMBERED_MASS_MULT, MASS_CAP),
+			CustomPart.Stat.MASS, OVERENCUMBERED_MASS_MULT, OVERENCUMBERED_MASS_CAP),
 		# Full Steam Ahead: 勢いを保つ札。摩擦(速度減衰)だけを下げていた頃は
 		# 戦績がほぼ0の死に札だった(摩擦は勝敗にほとんど効かない)。名前どおり
 		# 「勢いを保つ」よう、摩擦と回転減衰率(自然にRPSが落ちる速さ)の両方を
