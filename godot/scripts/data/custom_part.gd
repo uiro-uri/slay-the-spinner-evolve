@@ -364,9 +364,15 @@ func apply_to(stats: SpinnerStats) -> void:
 	# apply_partが、ゴーストの無敵時間はBattleが処理する。
 	if effect != Effect.STAT_MULTIPLY:
 		return
-	var value := _read(stats) * multiplier
+	var current := _read(stats)
+	var value := current * multiplier
 	if cap > 0.0:
-		value = minf(value, cap)
+		# 上限は「これ以上は伸ばさない」であって「ここまで引き下げる」ではない。
+		# 別の札で既に上限を超えている値(GROWTHで質量2.5超→OVERENCUMBERED等)を
+		# 現在値より下へ引き戻すと、強化札が実質デバフの罠になる(「報酬は全部
+		# プラス」の原則に反する)。現在値を下回る方向にはクランプを働かせない。
+		# 変化しなくなった札はwould_change_anythingが死にカードとして提示から外す。
+		value = minf(value, maxf(cap, current))
 	_write(stats, value)
 
 
