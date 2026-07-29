@@ -138,10 +138,13 @@ func _on_give_up_requested() -> void:
 func goto_reward() -> void:
 	var reward := _swap_screen(REWARD_SCENE)
 	reward.part_chosen.connect(_on_part_chosen)
-	# 今倒した段のレベルほどレアが出やすい。current_step()は段選択時と同じ値。
+	# 今倒した敵のレベルほどレアが出やすい。段の名目レベルでなくノードの実レベル
+	# (MapNode.level)を使う: 斥候(次レベルの単体エリート)を倒したときの見返りを
+	# 実レベル準拠にするため。RunSimも同じく実レベルで抽選している(record["level"])。
 	# 現在のステータスと残機を渡し、上限到達で効果ゼロの死にカードは提示しない。
 	# 直前の画面で見送った札も除外し、同じ顔ぶれの連続を防ぐ。
-	var level := EnemyRoster.level_for_step(GameState.map_tree.current_step())
+	var node: MapTree.MapNode = GameState.map_tree.nodes[GameState.map_tree.current_coord]
+	var level := node.level()
 	_reward_offer = CustomPartCatalog.pick_choices(
 		CustomPartCatalog.REWARD_CHOICES, null, level,
 		GameState.player_stats, GameState.continues_left,

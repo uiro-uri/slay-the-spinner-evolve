@@ -50,12 +50,19 @@ class MapNode:
 	func enemy_count() -> int:
 		return enemies.size()
 
-	## 実際に戦う敵のレベル。乱戦は1段下のメンバーレベルになるので、
-	## 名目段レベルではなく実レベルを返して表示を嘘にしない。
+	## 実際に戦う敵のレベル。斥候(次レベルの単体エリート)が混ざるので、
+	## 名目段レベルではなく実レベル(最大値)を返して表示を嘘にしない。
+	## 報酬のレア重み(Main.goto_reward)もこの実レベルを使う。
 	func level() -> int:
-		if enemies.is_empty():
-			return 0
-		return enemies[0].level
+		var highest := 0
+		for enemy in enemies:
+			highest = maxi(highest, enemy.level)
+		return highest
+
+	## 斥候(その段の基準レベルより強い敵)のノードか。マップの進路保証
+	## (_ensure_vanguard_choice)と乱戦昇格の除外(_promote_compensation)が使う。
+	func is_vanguard() -> bool:
+		return level() > EnemyRoster.level_for_step(coord.x)
 
 	## 土俵の外周形状。描画でノードの輪郭に使う。土俵未設定なら矩形扱い。
 	func wall_shape() -> ArenaWall.WallShape:
@@ -227,6 +234,7 @@ func _assign_encounters(rng: RandomNumberGenerator) -> void:
 		node.enemies = EnemyRoster.pick_group_for_step(coord.x, rng)
 		node.field = FieldRoster.pick_for_step(coord.x, rng)
 	_ensure_single_escape(rng)
+	_ensure_vanguard_choice(rng)
 
 
 ## 段SINGLE_ESCAPE_FROM_STEP以降のノードの進める先に「1体部屋」を最低1つ保証する。
@@ -291,6 +299,9 @@ func _promote_compensation(
 		var node: MapNode = nodes[coord]
 		if node.enemy_count() != 1 or coord == GOAL_COORD:
 			continue
+		# 斥候は昇格させない(次レベル敵の乱戦は脅威が読めない上、斥候が黙って消える)。
+		if node.is_vanguard():
+			continue
 		if _parents_keep_escape_without(coord):
 			candidates.append(coord)
 	if candidates.is_empty():
@@ -302,6 +313,40 @@ func _promote_compensation(
 	for _i in count:
 		group.append(members[rng.randi_range(0, members.size() - 1)])
 	nodes[chosen].enemies = group
+
+
+## 全ノードの進める先に「斥候でないノード」を最低1つ保証する。
+##
+## 斥候(次レベルの単体エリート)は見て避けられる「選べるリスク」の設計なので、
+## 進める先が全部斥候だと強制になってしまう(乱戦の_ensure_single_escapeと同じ理屈)。
+## 強制になっているノードの進める先から1つを、同段の通常単体へ引き直す。
+## 単体へ引き直すのは_ensure_single_escapeの保証(1体部屋)を後から壊さないため
+## (斥候はもともと単体なので、頭数の総量も変わらない)。
+## 段の昇順・列の昇順で舐めるのは決定性のため(Dictionaryの挿入順に依存させない)。
+func _ensure_vanguard_choice(rng: RandomNumberGenerator) -> void:
+	for step in range(1, STEP_GOAL):
+		var columns: Array[int] = []
+		for coord in nodes:
+			if coord.x == step:
+				columns.append(coord.y)
+		columns.sort()
+
+		for column in columns:
+			var node: MapNode = nodes[Vector2i(step, column)]
+			var targets := node.targets()
+			if targets.is_empty():
+				continue
+			var all_vanguard := true
+			for t in targets:
+				var tn: MapNode = nodes.get(t)
+				if tn == null or not tn.is_vanguard():
+					all_vanguard = false
+					break
+			if not all_vanguard:
+				continue
+			var chosen: Vector2i = targets[rng.randi_range(0, targets.size() - 1)]
+			var chosen_node: MapNode = nodes[chosen]
+			chosen_node.enemies = [EnemyRoster.pick_for_step(chosen.x, rng)]
 
 
 ## coord が複数体になっても、coord を進める先に持つ全ノードに

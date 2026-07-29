@@ -144,11 +144,39 @@ static func pick_for_step(step: int, rng: RandomNumberGenerator = null) -> Enemy
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
 
 
+## 斥候(次レベルの単体エリート)が混ざりうる段か。
+##
+## 各レベル帯の2段目(段2・4・6)だけ。帯の1段目(段3・5・7)は次レベルとの初対面が
+## 既に崖(ラン中勝率 段5=70%/段7=54%)なので重ねない。帯の2段目はビルドが帯内で
+## 最強になる消化試合(段2=100%/段4=97%)で、ここにだけ「次レベルを先取りする
+## 選べるリスク」を置く。段8はLv5=ボスの先取りになり単独ボスの演出が薄れるので
+## 対象外(vanguard_levelの上限4)。
+static func is_vanguard_step(step: int) -> bool:
+	return step % 2 == 0 and level_for_step(step) < 4
+
+
+## 斥候のレベル(その段の基準レベル+1)。斥候が出ない段は0。
+static func vanguard_level_for_step(step: int) -> int:
+	return level_for_step(step) + 1 if is_vanguard_step(step) else 0
+
+
+## 斥候が出る確率。マップ生成のノード単位で振られる。0.2は「多くのマップで
+## どこかの段に1〜2ノード現れるが、進路の大半は通常のまま」の狙い
+## (1段5ノード前後 × 段2/4/6)。
+const VANGUARD_CHANCE := 0.2
+
+
 ## その段の出現グループ(1〜3体)を選ぶ。乱戦パターンの入り口。
 ##
 ## ほとんどは1体。たまに2〜3体の乱戦になる。複数体でも**単体と同じ、その段の
 ## レベル**から選ぶ(各体は据え置きで、頭数でrpsを弱めない)。
 ## ボス(レベル5)は演出上つねに単体。
+##
+## 斥候段(is_vanguard_step)では、まれに(VANGUARD_CHANCE)次レベルの敵が**単体で**
+## 現れる。マップ生成時に確定するのでノードのLv表示に出る=見て避けられる
+## 「選べるリスク」で、倒せば実レベル準拠の報酬(rare_weight_for_level)が返る。
+## 単体限定なのは、乱戦×レベル先取りの複合は脅威が読めなくなるため。
+## allow_vanguard=false で斥候を封じる(マップ側の「全進路が斥候」の救済用)。
 ##
 ## かつては複数体を1段下のレベルから選び、さらに総回転量を一定に保つため各体の
 ## rpsを頭数で割っていた。だが割ると「衝突1回で終わる」コマになり一撃死が多発
@@ -157,7 +185,9 @@ static func pick_for_step(step: int, rng: RandomNumberGenerator = null) -> Enemy
 ## (Main.gdが pending_enemies.size()回だけ報酬画面を回す)。rpsを触らないので
 ## 抽選した敵をそのまま返す(pick_for_stepと同じく all()が毎回新しい実体を作るので
 ## 共有Resourceを壊す心配もない)。
-static func pick_group_for_step(step: int, rng: RandomNumberGenerator = null) -> Array[EnemyData]:
+static func pick_group_for_step(
+	step: int, rng: RandomNumberGenerator = null, allow_vanguard: bool = true
+) -> Array[EnemyData]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
@@ -165,6 +195,12 @@ static func pick_group_for_step(step: int, rng: RandomNumberGenerator = null) ->
 	# ボスは単体固定。
 	if level_for_step(step) >= 5:
 		return [pick_for_step(step, rng)]
+
+	# 斥候: 次レベルの単体。頭数ロールより先に振る(斥候は乱戦にならない)。
+	if allow_vanguard and is_vanguard_step(step) and rng.randf() < VANGUARD_CHANCE:
+		var scouts := of_level(vanguard_level_for_step(step))
+		if not scouts.is_empty():
+			return [scouts[rng.randi_range(0, scouts.size() - 1)]]
 
 	# 頭数を重み付きで決める。大半は1体、たまに2〜3体。
 	var roll := rng.randf()

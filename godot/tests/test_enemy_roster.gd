@@ -27,6 +27,8 @@ func run(check: Callable) -> void:
 	_test_lifetime_ladder(check)
 	_test_contact_trade_floor(check)
 	_test_intra_level_trade_evenness(check)
+	_test_vanguard_steps(check)
+	_test_vanguard_group_rules(check)
 
 
 ## 乱戦メンバーはどれも頭数で弱められていないこと。各体の耐久(=rps×質量×半径²)が、
@@ -196,3 +198,66 @@ func _test_lifetime_ladder(check: Callable) -> void:
 			"寿命の梯子: Lv%d平均(%.1f) ≧ Lv%d平均(%.1f)" % [level, avg, level - 1, prev_avg]
 		)
 		prev_avg = avg
+
+
+## 斥候段の割当: 各レベル帯の2段目(段2・4・6)だけが斥候段で、斥候レベルは
+## その段の基準+1。段8(Lv5=ボスの先取り)と帯の1段目(崖)は対象外。
+## is_vanguard_stepの条件(偶数段・レベル上限)を弄るとここが落ちる。
+func _test_vanguard_steps(check: Callable) -> void:
+	var expected := {1: 0, 2: 2, 3: 0, 4: 3, 5: 0, 6: 4, 7: 0, 8: 0, 9: 0}
+	var ok := true
+	var detail := ""
+	for step in expected:
+		var got := EnemyRoster.vanguard_level_for_step(step)
+		if got != expected[step]:
+			ok = false
+			detail = " / 段%d: 期待Lv%d 実際Lv%d" % [step, expected[step], got]
+			break
+	check.call(ok, "斥候段: 段2→Lv2・段4→Lv3・段6→Lv4、他は無し%s" % detail)
+
+
+## 斥候の出現規則: (1)斥候は必ず単体(乱戦にならない)、(2)レベルは基準+1ちょうど、
+## (3)出現率がVANGUARD_CHANCEの近傍、(4)allow_vanguard=falseと非斥候段では
+## 基準レベル以外が絶対に出ない。斥候ロールを頭数ロールの後に移す・単体限定を
+## 外す・封印引数を無視する、のどれを壊してもここが落ちる。
+func _test_vanguard_group_rules(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260729
+	const DRAWS := 3000
+	var violations: Array[String] = []
+	for step in [2, 4, 6]:
+		var base := EnemyRoster.level_for_step(step)
+		var vanguards := 0
+		for _i in DRAWS:
+			var group := EnemyRoster.pick_group_for_step(step, rng)
+			var top := 0
+			for e in group:
+				top = maxi(top, e.level)
+			if top > base:
+				vanguards += 1
+				if group.size() != 1:
+					violations.append("段%d: 斥候が%d体の乱戦になった" % [step, group.size()])
+				if top != base + 1:
+					violations.append("段%d: 斥候Lv%d(基準+1でない)" % [step, top])
+		var rate := float(vanguards) / DRAWS
+		if absf(rate - EnemyRoster.VANGUARD_CHANCE) > 0.05:
+			violations.append("段%d: 斥候率%.3f が VANGUARD_CHANCE(%.2f)から外れた" % [
+				step, rate, EnemyRoster.VANGUARD_CHANCE])
+		# 封印(allow_vanguard=false)では基準レベルしか出ない。
+		for _i in 1000:
+			var group := EnemyRoster.pick_group_for_step(step, rng, false)
+			for e in group:
+				if e.level != base:
+					violations.append("段%d: 封印中にLv%dが出た" % [step, e.level])
+	# 非斥候段(帯の1段目と段7・8)は常に基準レベルのみ。
+	for step in [1, 3, 5, 7, 8]:
+		var base := EnemyRoster.level_for_step(step)
+		for _i in 1000:
+			for e in EnemyRoster.pick_group_for_step(step, rng):
+				if e.level != base:
+					violations.append("段%d(非斥候段): Lv%dが出た" % [step, e.level])
+	check.call(
+		violations.is_empty(),
+		"斥候の出現規則(単体・+1レベル・率・封印)%s" % (
+			"" if violations.is_empty() else " / 例: " + violations[0])
+	)
