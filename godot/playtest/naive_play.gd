@@ -481,7 +481,7 @@ func _print_parts(state: Dictionary) -> void:
 	print("所持パーツ: ", ", ".join(names))
 
 func _print_tree(tree: MapTree) -> void:
-	print("--- MAP (段:col=Lv[体数,土俵])  ゴールは段9のボス ---")
+	print("--- MAP (段:col=Lv[体数,土俵])  勝てば倒した体数ぶん報酬  ゴールは段9のボス ---")
 	for step in range(1, 10):
 		var row := []
 		for col in range(-4, 6):
@@ -496,7 +496,7 @@ func _print_reachable(tree: MapTree) -> void:
 	print("進める先(段%d→):" % (tree.current_step() + 1))
 	for c in tree.next_coords():
 		var n: MapTree.MapNode = tree.nodes[c]
-		print("  col%+d : Lv%d %d体 %s" % [c.y, n.level(), n.enemy_count(), n.field.title_key])
+		print("  ", route_text(c.y, n))
 
 ## カードの効果を実効果と一致する日本語で出す(CustomPart.describe()のCLI版)。
 ## 以前はRAGE/MOMENTUMもSTAT_MULTIPLY用の分岐に落ち、statの既定値MASSを読んで
@@ -574,6 +574,20 @@ static func _stat_note(stat: int, up: bool) -> String:
 ## (Main._on_battle_finishedの `maxi(pending_enemies.size(), 1)` と同じ式)。
 static func rewards_for_group(group_size: int) -> int:
 	return maxi(group_size, 1)
+
+
+## 進める先の1行。敵数(リスク)の隣に報酬枚数(リターン=倒した頭数ぶん)を必ず並べる。
+## 実UIのマップも敵数ピップ(赤・下辺)と報酬ピップ(金・上辺)を対で見せており、その
+## 情報同等のCLI版。以前は敵数しか出ておらず、報酬が頭数ぶん貰えるルールを知らない
+## 初見プレイヤーには乱戦が「リスクだけの部屋」に読めて、全戦で最少体数ノードを
+## 選んでいた(コールドプレイの一次証拠)。ゴール(ボス)は報酬選択が無い(勝てば即クリア)
+## ので報酬枚数の代わりにそれを明示する。
+static func route_text(col: int, n: MapTree.MapNode) -> String:
+	if n.reward_count() <= 0:
+		return "col%+d : Lv%d %d体 %s 撃破でクリア(報酬なし)" % [
+			col, n.level(), n.enemy_count(), n.field.title_key]
+	return "col%+d : Lv%d %d体→報酬%d枚 %s" % [
+		col, n.level(), n.enemy_count(), n.reward_count(), n.field.title_key]
 
 
 ## pickが取れるのは直前のrewardで提示された札だけ。JSON経由でidがfloatに
