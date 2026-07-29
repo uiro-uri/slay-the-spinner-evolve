@@ -209,7 +209,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	var pos := field.clamp_launch(
 		want, spawn_points_of(plans), enemy_radii_of(node.enemies), pstats.radius)
 	if pos.distance_to(want) > 0.05:
-		print("(間合い: 敵の予告の至近には置けない。%s → %s へ退避)" % [str(want), str(pos)])
+		print("(発射位置の制約: 敵予告の間合いの内側・柱の上には置けない。%s → %s へ退避)" % [str(want), str(pos)])
 	var tgt := _target_point(field, plans, target)
 	var vel := launch_velocity(pos, tgt, force)
 
@@ -403,7 +403,8 @@ func _enemy_plans(enemies: Array, field: FieldData, bseed: int) -> Array:
 	var rng := RandomNumberGenerator.new(); rng.seed = bseed
 	var plans := []
 	for e in enemies:
-		plans.append(EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius()))
+		# 実ゲーム(Battle._spawn_enemy)と同じく柱(障害物)を除けて出現させる。
+		plans.append(EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius(), [], 0.0, field.obstacles))
 	return plans
 
 func _ring_pos(field: FieldData, prad: float, from_deg: float) -> Vector2:

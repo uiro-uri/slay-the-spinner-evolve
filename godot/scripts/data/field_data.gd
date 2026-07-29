@@ -60,8 +60,30 @@ func clamp_inside(pos: Vector2, radius: float) -> Vector2:
 	return ArenaWall.clamp_inside_circle(center(), inradius(), pos, radius)
 
 
-## 発射位置のクランプ: 壁の内側 かつ 全ての敵予告から間合い(LaunchStandoff)以上。
-## spawn_points/spawn_radii は予告済みの敵の出現中心と半径(同indexで対応)。
+## コマ全体が「壁の内側 かつ 障害物(柱)の外」に収まる位置へ寄せる。
+## 柱に重なった位置から始まると毎ステップ柱に弾かれ続ける見えない拘束になるため、
+## 初期配置(発射・狙い中の表示)はこちらを通す。柱が壁際にあって両立できない
+## 詰み配置では壁を優先する(土俵の外にはみ出す方が重い嘘なので)。
+func clamp_placement(pos: Vector2, radius: float) -> Vector2:
+	var p := clamp_inside(pos, radius)
+	for i in 4:
+		# 柱の真上で向きが決められないときは中心へ逃がす(柱は中心を外して置かれる)。
+		var pushed := ArenaWall.push_out_of_obstacles(
+			p, obstacles, radius, _inward_or_right(p))
+		if pushed.is_equal_approx(p):
+			return p
+		p = clamp_inside(pushed, radius)
+	return p
+
+
+func _inward_or_right(pos: Vector2) -> Vector2:
+	var d := center() - pos
+	return d.normalized() if d.length() > 0.001 else Vector2.RIGHT
+
+
+## 発射位置のクランプ: 壁の内側 かつ 障害物の外 かつ 全ての敵予告から
+## 間合い(LaunchStandoff)以上。spawn_points/spawn_radii は予告済みの敵の
+## 出現中心と半径(同indexで対応)。
 func clamp_launch(
 	pos: Vector2,
 	spawn_points: PackedVector2Array,
@@ -70,5 +92,5 @@ func clamp_launch(
 ) -> Vector2:
 	return LaunchStandoff.clamp_away(
 		pos, spawn_points, spawn_radii, player_radius, inradius(), center(),
-		func(p: Vector2) -> Vector2: return clamp_inside(p, player_radius)
+		func(p: Vector2) -> Vector2: return clamp_placement(p, player_radius)
 	)
