@@ -103,7 +103,10 @@ static func resolve(request: BattleRequest) -> BattleResult:
 		for i in enemies.size():
 			for j in range(i + 1, enemies.size()):
 				if enemies[i].alive and enemies[j].alive:
-					_resolve_disc_collision(enemies[i], enemies[j], request, t, result)
+					_resolve_disc_collision(
+						enemies[i], enemies[j], request, t, result,
+						request.enemy_mutual_drain_scale
+					)
 
 		# 壁・障害物・自然減衰を体ごとに。いずれも体単位で独立なので並び順は
 		# 結果に影響しない。
@@ -203,8 +206,12 @@ static func ghost_blocks(t: float, ghost_start: float, duration: float) -> bool:
 ## 2体の衝突を解く。プレイヤー対敵にも敵同士にも使う汎用の対処理。
 ## 接触点は共有の result.impacts に追記する(再生側は誰同士かを区別しない)。
 ## 実際に衝突を解いたら真を返す(ゴースト窓の開始検出に使う。敵同士は無視してよい)。
+## drain_scale は両者が与え合う削りの倍率。敵同士の衝突だけ
+## req.enemy_mutual_drain_scale が渡り(同士討ちの抑制)、プレイヤーが絡む
+## 衝突は常に1.0=従来どおり。spin_kickは削り比例なので弾き合いも一緒に弱まる。
 static func _resolve_disc_collision(
-	a: State, b: State, req: BattleRequest, t: float, result: BattleResult
+	a: State, b: State, req: BattleRequest, t: float, result: BattleResult,
+	drain_scale: float = 1.0
 ) -> bool:
 	if not SpinnerPhysics.is_colliding(
 		a.position, a.stats.radius, a.velocity,
@@ -282,6 +289,8 @@ static func _resolve_disc_collision(
 		),
 		b.stats.hit_guard
 	)
+	a_drain *= drain_scale
+	b_drain *= drain_scale
 
 	a.velocity += SpinnerPhysics.spin_kick(
 		a.position, b.position, a.stats.radius, a_drain, req.spin_kick_scale

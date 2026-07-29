@@ -82,6 +82,12 @@ const BAR_ROW_H := 60.0
 ## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
 @export_range(0.0, 12.0, 0.5) var bite_floor_speed: float = 4.0
 
+## 敵同士の衝突で互いに与える削り(と削り比例の弾き)の倍率。1.0で対等(旧挙動)。
+## 下げると同士討ちの自滅が減り、乱戦が頭数どおり手強くなる(柔らかい序盤の
+## 敵ほど効く。経緯はbattle_request.gdの同名フィールドのコメント)。
+## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
+@export_range(0.0, 1.0, 0.05) var enemy_mutual_drain_scale: float = 0.5
+
 ## これを下回ったら負け。
 @export_range(0.0, 1.0, 0.01) var lose_threshold: float = 0.03
 
@@ -570,6 +576,7 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 	request.wall_damping = wall_damping
 	request.wall_impact_ref_speed = wall_impact_ref_speed
 	request.bite_floor_speed = bite_floor_speed
+	request.enemy_mutual_drain_scale = enemy_mutual_drain_scale
 	request.lose_threshold = lose_threshold
 	# 取得済みのゴースト札から無敵時間を決める。単体調整時は取得0で0秒になり従来どおり。
 	request.ghost_duration = CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)
