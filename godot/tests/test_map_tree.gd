@@ -18,6 +18,8 @@ func run(check: Callable) -> void:
 	_test_encounters_deterministic(check)
 	_test_no_needless_single_choice(check)
 	_test_single_escape_guarantee(check)
+	_test_vanguard_choice_guarantee(check)
+	_test_node_level_is_max(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -300,9 +302,10 @@ func _test_single_escape_guarantee(check: Callable) -> void:
 			if coord.x >= 1:
 				if node.enemy_count() < 1 or node.enemy_count() > 3:
 					failures.append("seed=%d: %s の体数が%d" % [trial, coord, node.enemy_count()])
-				elif node.level() != EnemyRoster.level_for_step(coord.x):
+				elif not _level_is_legal(node, coord.x):
 					failures.append(
-						"seed=%d: %s のレベルが段相応でない(Lv%d)" % [trial, coord, node.level()]
+						"seed=%d: %s のレベルが段相応でも斥候でもない(Lv%d/%d体)" % [
+							trial, coord, node.level(), node.enemy_count()]
 					)
 				if node.enemy_count() >= 2:
 					multi_total += 1
@@ -331,11 +334,81 @@ func _test_single_escape_guarantee(check: Callable) -> void:
 	# 見張る。引き直し(demote)だけの実装だと約4割減って頭数ぶん報酬のパーツ経済が
 	# 痩せる(bot計測でクリア率58%→46%)。交換(demote+同段のpromote)なら保たれる。
 	# シード固定(0..TRIALS-1)なので決定的: 保証なしの素の生成は2710個、
-	# 段5以降のdemoteだけは2045個、段5以降の交換は2414個。2200はその分水嶺。
+	# 段5以降のdemoteだけは2045個、段5以降の交換は2414個。斥候(段2・4・6の
+	# 単体エリート)導入後は、乱戦ロール自体が斥候に置き換わるぶんが減って2201個
+	# (斥候率0.2×乱戦率0.4×約13ノード×200生成 ≈ 200個減の理論値どおり)。
+	# 2100は交換実装(2201)とdemoteだけ(2045以下)の分水嶺。
 	check.call(
-		multi_total >= 2200,
-		"マップ1体部屋保証: 複数体の総量が保存されている(%d個, 2200以上)" % multi_total
+		multi_total >= 2100,
+		"マップ1体部屋保証: 複数体の総量が保存されている(%d個, 2100以上)" % multi_total
 	)
+
+
+## 戦闘ノードのレベルとして合法か: 段相応(level_for_step)そのもの、または
+## 斥候(その段の斥候レベルの単体)。それ以外(斥候の乱戦・レベル+2以上など)は違法。
+func _level_is_legal(node: MapTree.MapNode, step: int) -> bool:
+	if node.level() == EnemyRoster.level_for_step(step):
+		return true
+	var vanguard := EnemyRoster.vanguard_level_for_step(step)
+	return vanguard > 0 and node.level() == vanguard and node.enemy_count() == 1
+
+
+## 斥候の進路保証: 全ノードの進める先に、斥候でないノードが最低1つあること
+## (斥候は「選べるリスク」なので強制になってはいけない)。あわせて斥候が
+## 実際に生成されることも見張る(保証パスが斥候を全滅させたら本末転倒)。
+## _ensure_vanguard_choiceを素通しにするか、斥候率を極端に上げるとここが落ちる。
+func _test_vanguard_choice_guarantee(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var failures: Array[String] = []
+	var vanguard_total := 0
+
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			failures.append("seed=%d: 生成に失敗" % trial)
+			continue
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if node.is_vanguard():
+				vanguard_total += 1
+			var targets := node.targets()
+			if targets.is_empty():
+				continue
+			var has_normal := false
+			for t in targets:
+				var tn: MapTree.MapNode = tree.nodes.get(t)
+				if tn != null and not tn.is_vanguard():
+					has_normal = true
+					break
+			if not has_normal:
+				failures.append("seed=%d: %s の進める先が全部斥候" % [trial, coord])
+
+	check.call(
+		failures.is_empty(),
+		"斥候の進路保証: %d回の生成で進める先に必ず非斥候がある%s" % [
+			TRIALS, "" if failures.is_empty() else " / 例: " + failures[0]
+		]
+	)
+	# 斥候率0.2 × 斥候段(2・4・6)の約13ノード × 200生成 ≈ 500前後。100を割って
+	# いたら、保証パスか抽選がほぼ全ての斥候を消している。
+	check.call(
+		vanguard_total >= 100,
+		"斥候が実際に生成される(%d個, 100以上)" % vanguard_total
+	)
+
+
+## MapNode.level()は混成グループでも最大レベルを返すこと(表示と報酬の実レベル)。
+## enemies[0].levelに戻すと、斥候が2番目以降に並んだとき表示が嘘になり、ここが落ちる。
+func _test_node_level_is_max(check: Callable) -> void:
+	var node := MapTree.MapNode.new(Vector2i(2, 1))
+	var low := EnemyRoster.of_level(1)
+	var high := EnemyRoster.of_level(2)
+	node.enemies = [low[0], high[0], low[1]]
+	check.call(node.level() == 2, "MapNode.level()が混成グループの最大レベルを返す")
+	check.call(node.is_vanguard(), "基準レベル超えのグループはis_vanguard()が真")
+	node.enemies = [low[0]]
+	check.call(not node.is_vanguard(), "基準レベルどおりの単体はis_vanguard()が偽")
 
 
 ## そのノードにまだ合法に足せる矢印があれば名前を返す。なければ空文字。

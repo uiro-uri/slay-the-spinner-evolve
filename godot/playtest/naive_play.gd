@@ -299,7 +299,9 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
 	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
-	var level := EnemyRoster.level_for_step(tree.current_step())
+	# Main.goto_rewardと同じく、段の名目レベルでなく倒したノードの実レベルで抽選する
+	# (斥候=次レベル単体を倒したときの見返り)。表示のLvも実レベル。
+	var level := node.level()
 	# 乱戦は倒した頭数ぶん報酬を選べる(Main._on_battle_finishedの_rewards_remainingと同じ)。
 	# 以前は頭数によらず1枚で、実ゲームよりビルドが痩せていた。
 	if state.get("rewards_left") == null:
