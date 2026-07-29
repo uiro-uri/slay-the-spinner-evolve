@@ -30,6 +30,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
+	_test_naive_play_route_text(check)
 	_test_naive_play_enemy_line(check)
 	_test_naive_play_launch_lock(check)
 	_test_naive_play_enter_guard(check)
@@ -520,6 +521,52 @@ func _test_naive_play_field_text(check: Callable) -> void:
 	var plain: String = NaivePlay.field_text(classic)
 	check.call(not ("柱" in plain), "naive_play: 柱の無い土俵に柱表記は出ない (%s)" % plain)
 	check.call("形状=RECT" in plain, "naive_play: 従来の土俵情報(壁形状)も出る")
+
+
+## 進める先の行に、敵数(リスク)と対で報酬枚数(リターン=倒した頭数ぶん)が出ること。
+## 以前は敵数しか出ておらず、頭数ぶん報酬のルールを知らない初見プレイヤーには乱戦が
+## 「リスクだけの部屋」に読めて全戦で最少体数ノードを選んでいた(コールドプレイの
+## 一次証拠)。実UIのマップも同じ情報を金ピップで見せる(reward_count()が共通の出所)。
+## ゴール(ボス)は報酬選択が無いので報酬枚数の代わりに「撃破でクリア」を出す。
+func _test_naive_play_route_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var rng := RandomNumberGenerator.new()
+	var single: MapTree.MapNode = null
+	var group: MapTree.MapNode = null
+	var goal: MapTree.MapNode = null
+	for trial in 30:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		goal = tree.nodes[MapTree.GOAL_COORD]
+		for coord in tree.nodes:
+			var n: MapTree.MapNode = tree.nodes[coord]
+			if not n.has_encounter() or coord == MapTree.GOAL_COORD:
+				continue
+			if n.enemy_count() >= 2 and group == null:
+				group = n
+			elif n.enemy_count() == 1 and single == null:
+				single = n
+		if single != null and group != null:
+			break
+	check.call(single != null and group != null, "前提: 単体ノードと乱戦ノードが見つかる")
+
+	var single_text: String = NaivePlay.route_text(1, single)
+	check.call(
+		"1体→報酬1枚" in single_text,
+		"naive_play: 単体ノードは報酬1枚が読める (%s)" % single_text)
+	var group_text: String = NaivePlay.route_text(-2, group)
+	check.call(
+		("%d体→報酬%d枚" % [group.enemy_count(), group.enemy_count()]) in group_text,
+		"naive_play: 乱戦ノードは頭数ぶんの報酬枚数が読める (%s)" % group_text)
+	check.call(group_text.begins_with("col-2"), "naive_play: 列表記は従来どおり (%s)" % group_text)
+
+	var goal_text: String = NaivePlay.route_text(2, goal)
+	check.call(
+		"撃破でクリア" in goal_text,
+		"naive_play: ボスは報酬でなくクリアを謳う (%s)" % goal_text)
+	check.call(
+		not ("→報酬" in goal_text),
+		"naive_play: ボスに報酬枚数は出ない(勝てば即クリアで報酬選択が無い) (%s)" % goal_text)
 
 
 ## 敵の予告行に質量と硬さ(質量×半径²)が出ること。壁へ弾き飛ばせる相手か

@@ -64,6 +64,15 @@ class MapNode:
 	func is_vanguard() -> bool:
 		return level() > EnemyRoster.level_for_step(coord.x)
 
+	## 勝てば選べる報酬の枚数(倒した頭数ぶん。Main._on_battle_finishedと同じ規則)。
+	## ゴール(ボス)は撃破で即クリアになり報酬選択が無いので0。
+	## マップ表示が使う: 敵数ピップ(脅威)しか出さないと乱戦が「リスクだけの部屋」に
+	## 見えて選択が歪むため、リターン側もノード選択の時点で見せる。
+	func reward_count() -> int:
+		if not has_encounter() or coord.x == MapTree.STEP_GOAL:
+			return 0
+		return enemy_count()
+
 	## 土俵の外周形状。描画でノードの輪郭に使う。土俵未設定なら矩形扱い。
 	func wall_shape() -> ArenaWall.WallShape:
 		if field == null:

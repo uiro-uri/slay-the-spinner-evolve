@@ -46,15 +46,19 @@ const HOVER_GROW := 3.0
 ## 入場フェードの長さ(秒)。
 const ENTRANCE_DURATION := 0.35
 
-## 遭遇表示。ノード内に実レベルの数字、下辺の外側に敵数ぶんのピップを並べる。
-## 数字はノード塗り（明るい緑/青〜中間の灰）に対して常に読める暗色（大きめ文字なので
-## 最も暗いPLAIN地でも大文字コントラスト基準を満たす）。ピップは脅威色の赤。
+## 遭遇表示。ノード内に実レベルの数字、下辺の外側に敵数ぶんのピップ、上辺の外側に
+## 報酬枚数ぶんのピップを並べる。数字はノード塗り（明るい緑/青〜中間の灰）に対して
+## 常に読める暗色（大きめ文字なので最も暗いPLAIN地でも大文字コントラスト基準を満たす）。
+## ピップは下=脅威色の赤(敵数)・上=報酬カードの金(報酬枚数)。報酬は倒した頭数ぶん
+## なので枚数は敵数と同じだが、それをマップの時点で見せないと乱戦ノードが
+## 「リスクだけの部屋」に読めて選択が歪む(コールドプレイの一次証拠)。
 const LEVEL_FONT := 20.0
 const COLOR_LEVEL_TEXT := Palette.TEXT_OUTLINE
 const PIP_RADIUS := 2.6
 const PIP_GAP := 7.0
 const PIP_OFFSET := 6.0
 const COLOR_PIP := Palette.ENEMY
+const COLOR_REWARD_PIP := Palette.GOLD_CARD
 
 ## 選択不能を表す番兵。どのノード座標(段0〜9)とも一致しない。
 const NO_HOVER := Vector2i(-1, -1)
@@ -290,7 +294,8 @@ func _draw_closed_polyline(pts: PackedVector2Array, color: Color, width: float) 
 	draw_polyline(closed, color, width, true)
 
 
-## 実レベルの数字（中央）と敵数ぶんのピップ（下辺の外側）を描く。
+## 実レベルの数字（中央）・敵数ぶんのピップ（下辺の外側）・報酬枚数ぶんのピップ
+## （上辺の外側）を描く。ボスは報酬なし(reward_count=0)なので上のピップが出ない。
 func _draw_encounter_info(center: Vector2, radius: float, node: MapTree.MapNode, e: float) -> void:
 	var font := ThemeDB.fallback_font
 	var fs := maxi(1, int(round(LEVEL_FONT * _draw_scale)))
@@ -303,15 +308,22 @@ func _draw_encounter_info(center: Vector2, radius: float, node: MapTree.MapNode,
 	)
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _faded(COLOR_LEVEL_TEXT, e))
 
-	var count := node.enemy_count()
-	if count <= 0:
-		return
 	var pip_r := PIP_RADIUS * _draw_scale
 	var gap := PIP_GAP * _draw_scale
-	var y := center.y + radius + PIP_OFFSET * _draw_scale
-	var x0 := center.x - (count - 1) * gap * 0.5
-	for i in count:
-		draw_circle(Vector2(x0 + i * gap, y), pip_r, _faded(COLOR_PIP, e))
+
+	var count := node.enemy_count()
+	if count > 0:
+		var y := center.y + radius + PIP_OFFSET * _draw_scale
+		var x0 := center.x - (count - 1) * gap * 0.5
+		for i in count:
+			draw_circle(Vector2(x0 + i * gap, y), pip_r, _faded(COLOR_PIP, e))
+
+	var rewards := node.reward_count()
+	if rewards > 0:
+		var ry := center.y - radius - PIP_OFFSET * _draw_scale
+		var rx0 := center.x - (rewards - 1) * gap * 0.5
+		for i in rewards:
+			draw_circle(Vector2(rx0 + i * gap, ry), pip_r, _faded(COLOR_REWARD_PIP, e))
 
 
 ## 画面比に応じてノードの大きさ・間隔・位置を決める。横画面(設計比16:9)は設計値のまま。

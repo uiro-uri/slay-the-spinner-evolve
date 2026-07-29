@@ -20,6 +20,7 @@ func run(check: Callable) -> void:
 	_test_single_escape_guarantee(check)
 	_test_vanguard_choice_guarantee(check)
 	_test_node_level_is_max(check)
+	_test_reward_count(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -409,6 +410,44 @@ func _test_node_level_is_max(check: Callable) -> void:
 	check.call(node.is_vanguard(), "基準レベル超えのグループはis_vanguard()が真")
 	node.enemies = [low[0]]
 	check.call(not node.is_vanguard(), "基準レベルどおりの単体はis_vanguard()が偽")
+
+
+## reward_count() = 勝てば選べる報酬の枚数。マップ表示(実UIの金ピップ・CLIの報酬N枚)の
+## 出所。Main._on_battle_finishedの「倒した頭数ぶん」と同じ規則で、ゴール(ボス)だけは
+## 撃破で即クリアになり報酬選択が無いので0。ここが敵数とズレるとマップの表示が嘘になる。
+func _test_reward_count(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var tree := MapTree.generate(rng)
+	check.call(
+		tree.nodes[MapTree.START_COORD].reward_count() == 0,
+		"スタート(遭遇なし)の報酬枚数は0")
+	check.call(
+		tree.nodes[MapTree.GOAL_COORD].has_encounter(),
+		"前提: ゴールは戦闘ノード")
+	check.call(
+		tree.nodes[MapTree.GOAL_COORD].reward_count() == 0,
+		"ゴール(ボス)は勝てば即クリアで報酬選択が無いので0")
+
+	var found_group := false
+	var mismatches: Array[String] = []
+	for trial in 30:
+		rng.seed = trial
+		tree = MapTree.generate(rng)
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if not node.has_encounter() or coord.x == MapTree.STEP_GOAL:
+				continue
+			if node.reward_count() != node.enemy_count():
+				mismatches.append(
+					"seed=%d %s: 報酬%d≠体数%d"
+					% [trial, str(coord), node.reward_count(), node.enemy_count()])
+			if node.enemy_count() >= 2:
+				found_group = true
+	check.call(
+		mismatches.is_empty(),
+		"戦闘ノードの報酬枚数=倒す体数 (%s)" % ", ".join(mismatches))
+	check.call(found_group, "前提: 乱戦(2体以上)ノードが標本に含まれる")
 
 
 ## そのノードにまだ合法に足せる矢印があれば名前を返す。なければ空文字。
