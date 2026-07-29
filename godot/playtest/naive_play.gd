@@ -285,16 +285,17 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			# 報酬(倍率札)より先に適用して保存する。
 			var knockout := result.finished_by_knockout()
 			var grown := stats_from(state["stats"])
-			grown.grow_rps_by_victory(knockout)
+			# 成長量は現在rpsに比例する(下限あり)ので、定数でなく実増加量を表示する。
+			var gained := grown.grow_rps_by_victory(knockout)
 			state["stats"] = stats_dict(grown)
 			state["won"] = true    # 撃ち直しによる勝利成長の二重取りを防ぐ
 			_save(state, path)
 			if knockout:
 				print("★撃破ボーナス★ 接触で仕留めた勝利で回転が大きく成長 rps=%.1f (+%.1f, 上限%.0f)" % [
-					grown.rps, SpinnerStats.KNOCKOUT_RPS_GROWTH, SpinnerStats.RPS_CAP])
+					grown.rps, gained, SpinnerStats.RPS_CAP])
 			else:
 				print("勝利の勢いで回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [
-					grown.rps, SpinnerStats.VICTORY_RPS_GROWTH, SpinnerStats.RPS_CAP])
+					grown.rps, gained, SpinnerStats.RPS_CAP])
 			print("→ reward --bseed=<R> で報酬を見る")
 	else:
 		# 敗北も保存する。以前は敗北が状態に残らず、残機を消費せずに同じノードを
