@@ -44,6 +44,19 @@ func _test_decay_kill(check: Callable) -> void:
 		"死因decay: 敗者の死因がdecayと記録される (%s)" % result.loser_death_cause
 	)
 	check.call(not result.finished_by_knockout(), "死因decay: 減衰待ちの勝ちは撃破扱いにしない")
+	# 体ごとの停止事実。生き残ったプレイヤーは空、尽きた敵は死因と時刻を持つ。
+	check.call(result.player_death.is_empty(), "停止事実: 生存したプレイヤーは空Dictionary")
+	check.call(
+		result.enemy_deaths.size() == 1
+		and result.enemy_deaths[0].get("cause", "") == "decay",
+		"停止事実: 敵の死因decayが体ごとに記録される (%s)" % str(result.enemy_deaths)
+	)
+	check.call(
+		result.enemy_deaths.size() == 1
+		and float(result.enemy_deaths[0].get("time", -1.0)) >= 0.0
+		and float(result.enemy_deaths[0].get("time", -1.0)) <= result.finish_time + EPS,
+		"停止事実: 敵の停止時刻が0以上・決着時刻以下 (%s)" % str(result.enemy_deaths)
+	)
 
 
 ## 正面衝突: 自然減衰・傾斜を切り、敵のrpsを削り1発ぶんより低くする。
@@ -101,6 +114,20 @@ func _test_player_loss(check: Callable) -> void:
 		"死因(敗北): 敗者=プレイヤーの死因が記録される (%s)" % result.loser_death_cause
 	)
 	check.call(not result.finished_by_knockout(), "死因(敗北): 敗北は撃破扱いにしない")
+	# 体ごとの停止事実の敗北側: プレイヤーが死因と時刻を持ち、生存した敵は空。
+	check.call(
+		result.player_death.get("cause", "") == "drain",
+		"停止事実(敗北): プレイヤーの死因drainが記録される (%s)" % str(result.player_death)
+	)
+	check.call(
+		float(result.player_death.get("time", -1.0)) >= 0.0
+		and float(result.player_death.get("time", -1.0)) <= result.finish_time + EPS,
+		"停止事実(敗北): プレイヤーの停止時刻が0以上・決着時刻以下 (%s)" % str(result.player_death)
+	)
+	check.call(
+		result.enemy_deaths.size() == 1 and result.enemy_deaths[0].is_empty(),
+		"停止事実(敗北): 生存した敵は空Dictionary (%s)" % str(result.enemy_deaths)
+	)
 
 
 func _test_serialization(check: Callable) -> void:
@@ -115,12 +142,34 @@ func _test_serialization(check: Callable) -> void:
 	)
 	check.call(revived.finished_by_knockout(), "往復: 復元後も撃破判定が立つ")
 
+	# 体ごとの停止事実もdict往復で保存される。
+	result.player_death = {"cause": "wall", "time": 1.25}
+	result.enemy_deaths = [{"cause": "drain", "time": 2.5}, {}]
+	var revived2 := BattleResult.from_dict(result.to_dict())
+	check.call(
+		revived2.player_death.get("cause", "") == "wall"
+		and is_equal_approx(float(revived2.player_death.get("time", -1.0)), 1.25),
+		"往復: player_deathがdict往復で保存される (%s)" % str(revived2.player_death)
+	)
+	check.call(
+		revived2.enemy_deaths.size() == 2
+		and revived2.enemy_deaths[0].get("cause", "") == "drain"
+		and revived2.enemy_deaths[1].is_empty(),
+		"往復: enemy_deaths(生存の空Dictionary込み)が保存される (%s)" % str(revived2.enemy_deaths)
+	)
+
 	# 旧いdict(キーなし)は空文字で読める(後方互換)。
 	var old_dict := result.to_dict()
 	old_dict.erase("loser_death_cause")
+	old_dict.erase("player_death")
+	old_dict.erase("enemy_deaths")
 	var old := BattleResult.from_dict(old_dict)
 	check.call(
 		old.loser_death_cause == "",
 		"往復: loser_death_causeキーの無い旧dictは空文字で読める"
 	)
 	check.call(not old.finished_by_knockout(), "往復: 旧dictは撃破扱いにしない(安全側)")
+	check.call(
+		old.player_death.is_empty() and old.enemy_deaths.is_empty(),
+		"往復: 停止事実キーの無い旧dictは空(生存扱い)で読める"
+	)

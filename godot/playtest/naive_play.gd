@@ -233,11 +233,22 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 		str(pos), vel.length(), rad_to_deg(vel.angle()), target, force])
 	print("結果: %s  決着=%.2fs 衝突=%d timed_out=%s" % [
 		result_label(result.outcome), result.finish_time, result.impacts.size(), result.timed_out])
-	# 死因(BattleMetrics)は最終rpsが最小の敗者の推定。決着死因はリゾルバが記録した
-	# 「最後に力尽きた体」の事実で、乱戦では別の敵になりうる(撃破ボーナスは後者で決まる)。
-	print("  死因=%s loser=%s hits_taken=%s 決着死因=%s" % [
-		death_cause_text(metrics.get("death_cause","?")), metrics.get("loser","?"),
-		str(metrics.get("hits_taken","?")), death_cause_text(result.loser_death_cause)])
+	# 決着死因はリゾルバが記録した「最後に力尽きた体」の事実(撃破ボーナスはこれで決まる)。
+	# 以前はBattleMetricsの推定死因も並べていたが、乱戦では推定の対象(最終rps最小の体)と
+	# 決着を付けた体が別になり「死因=減衰 決着死因=削り」が同じ行で矛盾して見えた
+	# (2026-07-29のコールドプレイ)。体ごとの事実は下の停止行が語る。
+	print("  決着死因=%s loser=%s hits_taken=%s" % [
+		death_cause_text(result.loser_death_cause), metrics.get("loser","?"),
+		str(metrics.get("hits_taken","?"))])
+	# 各コマがいつ何で力尽きたか(リゾルバの記録した事実)。実UIなら再生でコマが
+	# 止まる順が見えるが、CLIには無く、双方残り0%の勝利(相打ち)が謎に見えた。
+	var stop_parts := [stop_text("自分", result.player_death)]
+	for i in result.enemy_deaths.size():
+		stop_parts.append(stop_text("enemy%d" % (i + 1), result.enemy_deaths[i]))
+	print("  停止: %s" % " / ".join(stop_parts))
+	var mutual := mutual_ko_text(result)
+	if mutual != "":
+		print("  %s" % mutual)
 	# rps喪失の内訳(リゾルバが数えた事実)。死因ラベルは「閾値を割った最後の一撃」
 	# しか語らないので、壁で大半を削られた負けが「衝突0・死因decay」とだけ出て
 	# 敗因が読めないことがあった。機構別の内訳を必ず出す。
@@ -720,6 +731,29 @@ static func remaining_text(label: String, frames: Array) -> String:
 	var final: float = frames[frames.size() - 1].rps
 	var pct := int(round(final / start * 100.0)) if start > 0.0 else 0
 	return "%s %.1f/%.1f(%d%%)" % [label, final, start, pct]
+
+
+## 決着時に1体が「いつ・何で」力尽きたかの表示。力尽きていなければ「生存」。
+## deathはBattleResultのplayer_death/enemy_deaths(リゾルバの記録した事実)。
+## 喪失内訳は「何で失ったか」、残りrpsは「どれだけ残したか」を語るが、
+## 「誰が先に止まったか」だけが欠けていて、乱戦・相打ちの決着が読めなかった。
+static func stop_text(label: String, death: Dictionary) -> String:
+	if death.is_empty():
+		return "%s 生存" % label
+	return "%s %.2fs %s" % [
+		label, float(death.get("time", 0.0)),
+		death_cause_text(String(death.get("cause", "?")))]
+
+
+## 相打ち(敵全滅と同じステップで自分も力尽きた勝ち)の注記。リゾルバは相打ちを
+## プレイヤーの勝ちと定めている(battle_resolver.gdの決着分岐)が、CLIには
+## 「★勝利★なのに自分の残りrps0%」とだけ出て、なぜ勝ったのか読めなかった
+## (2026-07-29のコールドプレイで2回困惑)。勝ちなのに自分の停止が記録されて
+## いる=相打ちなので、その規則をここで明文化して出す。
+static func mutual_ko_text(result: BattleResult) -> String:
+	if result.player_won() and not result.player_death.is_empty():
+		return "(相打ち: 敵全滅と同時に自分も力尽きた。相打ちは自分の勝ち)"
+	return ""
 
 
 ## 勝敗表示。引き分け(相打ち・時間切れ)は進行上は敗北扱いだが、

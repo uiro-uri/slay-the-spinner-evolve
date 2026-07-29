@@ -96,6 +96,16 @@ var player_rps_loss: Dictionary = {}
 ## 敵ごとの同内訳。enemy_rps_loss[i] が i 番目の敵のDictionary。
 var enemy_rps_loss: Array = []
 
+## プレイヤーが力尽きた瞬間の事実: {"cause": "drain"/"wall"/"decay", "time": 秒}。
+## 力尽きていなければ空Dictionary(=生存)。loser_death_causeは敗者1体の最後の一撃
+## しか語らないため、乱戦や相打ち(敵全滅と同じステップで自分も力尽きる=勝ち)では
+## 「誰がいつ何で止まったか」が結果から読めなかった。リゾルバが記録する事実で、
+## 軌跡からの推定ではない。旧dictには無いので空で互換。
+var player_death: Dictionary = {}
+
+## 敵ごとの同事実。enemy_deaths[i] が i 番目の敵のDictionary(生存なら空)。
+var enemy_deaths: Array = []
+
 
 func player_won() -> bool:
 	return outcome == Outcome.PLAYER_WIN
@@ -156,6 +166,8 @@ func to_dict() -> Dictionary:
 		"loser_death_cause": loser_death_cause,
 		"player_rps_loss": player_rps_loss,
 		"enemy_rps_loss": enemy_rps_loss,
+		"player_death": player_death,
+		"enemy_deaths": enemy_deaths,
 	}
 
 
@@ -185,6 +197,8 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.loser_death_cause = d.get("loser_death_cause", "")
 	r.player_rps_loss = d.get("player_rps_loss", {})
 	r.enemy_rps_loss = d.get("enemy_rps_loss", [])
+	r.player_death = d.get("player_death", {})
+	r.enemy_deaths = d.get("enemy_deaths", [])
 	return r
 
 

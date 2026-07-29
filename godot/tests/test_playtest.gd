@@ -26,6 +26,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_result_label(check)
 	_test_naive_play_remaining_text(check)
 	_test_naive_play_death_cause_text(check)
+	_test_naive_play_stop_text(check)
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
@@ -732,3 +733,45 @@ func _test_naive_play_death_cause_text(check: Callable) -> void:
 	check.call(
 		NaivePlay.death_cause_text("?") == "?",
 		"naive_play: 未知トークンはそのまま通す(引き分けの死因=?を壊さない)")
+
+
+## 停止行(誰が・いつ・何で力尽きたか)と相打ち注記。発見の経緯: 双方残り0%なのに
+## ★勝利★と出る相打ちが2回あり、なぜ勝ったのか読めなかった(2026-07-29の
+## コールドプレイ)。リゾルバは相打ちをプレイヤーの勝ちと定めているが、その規則が
+## CLIのどこにも出ていなかった。
+func _test_naive_play_stop_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	# 生存は「生存」、停止は時刻と死因(内訳と同じ語彙)で読める。
+	check.call(
+		NaivePlay.stop_text("自分", {}) == "自分 生存",
+		"naive_play: 力尽きていない体は「生存」と読める")
+	var dead_text: String = NaivePlay.stop_text("enemy1", {"cause": "drain", "time": 5.25})
+	check.call(
+		"5.25s" in dead_text and "削り" in dead_text and dead_text.begins_with("enemy1"),
+		"naive_play: 停止した体は時刻と死因で読める (%s)" % dead_text)
+	# 相打ち注記: 勝ちなのに自分の停止が記録されているときだけ出る。
+	var mutual := BattleResult.new()
+	mutual.outcome = BattleResult.Outcome.PLAYER_WIN
+	mutual.player_death = {"cause": "drain", "time": 6.0}
+	check.call(
+		"相打ち" in NaivePlay.mutual_ko_text(mutual),
+		"naive_play: 相打ち勝利には規則の注記が出る")
+	var clean_win := BattleResult.new()
+	clean_win.outcome = BattleResult.Outcome.PLAYER_WIN
+	check.call(
+		NaivePlay.mutual_ko_text(clean_win) == "",
+		"naive_play: 自分が生き残った勝利に相打ち注記は出ない")
+	var loss := BattleResult.new()
+	loss.outcome = BattleResult.Outcome.ENEMY_WIN
+	loss.player_death = {"cause": "drain", "time": 3.0}
+	check.call(
+		NaivePlay.mutual_ko_text(loss) == "",
+		"naive_play: 敗北に相打ち注記は出ない")
+	# 実リゾルバの結果とも整合: 勝った戦いでは敵の停止行に決着死因と同じ死因が出る。
+	var request := _request()
+	var result := _healthy_result(request)
+	if result.player_won() and result.enemy_deaths.size() == 1:
+		var enemy_text: String = NaivePlay.stop_text("enemy1", result.enemy_deaths[0])
+		check.call(
+			NaivePlay.death_cause_text(result.loser_death_cause) in enemy_text,
+			"naive_play: 実結果の敵停止行が決着死因と整合する (%s)" % enemy_text)
