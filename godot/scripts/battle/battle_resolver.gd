@@ -396,12 +396,15 @@ static func _apply_natural_decay(s: State, req: BattleRequest, dt: float) -> voi
 	s.lost_decay += before - s.rps
 
 
-## 全機構の内訳を結果へ写す。閾値割れ後・打ち切りまで含めた「そのコマが
-## 実際に失ったrps」の合計なので、drain+wall+decay = 初期rps - 最終rps が成り立つ。
+## 全機構の内訳と、力尽きた瞬間の事実(死因・時刻)を結果へ写す。閾値割れ後・
+## 打ち切りまで含めた「そのコマが実際に失ったrps」の合計なので、
+## drain+wall+decay = 初期rps - 最終rps が成り立つ。
 static func _record_losses(player: State, enemies: Array[State], result: BattleResult) -> void:
 	result.player_rps_loss = _loss_dict(player)
+	result.player_death = _death_dict(player)
 	for enemy in enemies:
 		result.enemy_rps_loss.append(_loss_dict(enemy))
+		result.enemy_deaths.append(_death_dict(enemy))
 
 
 static func _loss_dict(s: State) -> Dictionary:
@@ -411,3 +414,10 @@ static func _loss_dict(s: State) -> Dictionary:
 		"decay": s.lost_decay,
 		"wall_hits": s.wall_hits,
 	}
+
+
+## 力尽きた瞬間の事実。生きていれば空Dictionary(=生存の印)。
+static func _death_dict(s: State) -> Dictionary:
+	if s.death_cause == "":
+		return {}
+	return {"cause": s.death_cause, "time": s.death_time}
