@@ -92,6 +92,7 @@ PART_NOTE_RPS_UP,Starts with more spin and lasts longer,開始回転が増え、
 PART_NOTE_RPS_DOWN,Starts with less spin and runs out sooner,開始回転が減り、寿命が縮む
 PART_NOTE_MOMENTUM,"Slows down less, and its spin lasts longer",減速しにくく走り続け、回転も長持ちする
 PART_NOTE_DRILL,"The bonus is based on your own strike, not the foe's armor — bites into giants just as deep",追加の削りは自分基準で決まり相手の硬さで減らない。巨体にもそのまま食い込む
+PART_NOTE_GHOST,"Your opening hit lands first — then slip through counterattacks and pile-ups unharmed, hit-and-run",初撃は当たってから発動。直後の反撃や乱戦のもみくちゃを無傷でやり過ごすヒット＆ラン
 STAT_MASS,Weight,重さ
 STAT_RADIUS,Size,大きさ
 STAT_RESTITUTION,Bounce,反発

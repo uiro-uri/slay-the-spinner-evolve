@@ -150,11 +150,20 @@ func _test_description_matches_effect(check: Callable) -> void:
 			)
 			continue
 
-		# ゴーストは倍率を持たない。説明に無敵秒数が出ていることだけ確かめる。
+		# ゴーストは倍率を持たない。説明に無敵秒数と、挙動注記(初撃は当たってから
+		# 発動=ヒット&ラン)が出ていることを確かめる。「すり抜ける」だけでは
+		# 攻めが止まるデメリットに読める札だった(コールドプレイで5提示5見送り)。
 		if part.effect == CustomPart.Effect.GHOST:
 			check.call(
 				text.contains(CustomPart._trim(part.ghost_seconds)),
 				"パーツ%d(%s): 説明に無敵秒数が出ている (%s)" % [part.id, part.title_key, text]
+			)
+			check.call(
+				not text.contains("PART_NOTE") and text.contains("\n")
+					and text.to_lower().contains("hit-and-run"),
+				"パーツ%d(%s): ゴーストの注記がヒット&ランに触れる (%s)" % [
+					part.id, part.title_key, text
+				]
 			)
 			continue
 
@@ -477,6 +486,12 @@ func _test_ghost(check: Callable) -> void:
 	check.call(
 		ghost.describe() != "PART_EFFECT_GHOST" and not ghost.describe().contains("PART_EFFECT"),
 		"ゴースト: 説明に訳がある (%s)" % ghost.describe()
+	)
+	# ja注記が利点(初撃が当たる・反撃を受けない)を謳うこと。効果文だけでは
+	# 「すり抜け=攻められない」のデメリットに読める(コールドプレイの一次証拠)。
+	check.call(
+		ghost.describe().contains("初撃") and ghost.describe().contains("反撃"),
+		"ゴースト: ja注記が初撃と反撃に触れる (%s)" % ghost.describe()
 	)
 
 	# 合計無敵時間は枚数×1枚あたり秒数。ゴースト以外のIDは無視する。

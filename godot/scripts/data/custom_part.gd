@@ -453,9 +453,15 @@ static func rare_stylebox() -> StyleBoxFlat:
 func describe() -> String:
 	if effect == Effect.SET_LIVES:
 		return tr("PART_EFFECT_SET_LIVES").format([lives])
-	# ゴーストは倍率を持たないので、無敵秒数を埋めた専用の説明を返す。
+	# ゴーストは倍率を持たないので、無敵秒数を埋めた専用の説明を返す。挙動注記
+	# (初撃は当たってから発動＝ヒット&ラン)を必ず添える——「敵をすり抜ける」だけでは
+	# 「その間ダメージを与えられない」というデメリットに読め、性能は上位(ラン相関
+	# +29pt)なのに12サイクル連続でコールドプレイに見送られ続けた札だった。
 	if effect == Effect.GHOST:
-		return tr("PART_EFFECT_GHOST").format([_trim(ghost_seconds)])
+		return (
+			tr("PART_EFFECT_GHOST").format([_trim(ghost_seconds)])
+			+ "\n" + tr("PART_NOTE_GHOST")
+		)
 	# 勢い維持は摩擦と回転減衰の両方に効く。倍率を埋めた専用の説明に、挙動の
 	# 注記を添える——「摩擦×0.8」だけでは下がる=良いことが初見に伝わらない
 	# (コールドプレイでは寿命目安の併記に救われて選べた、が実UIにその救いはない)。

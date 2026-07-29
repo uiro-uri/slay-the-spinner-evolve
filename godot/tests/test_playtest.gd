@@ -379,6 +379,16 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	var spin := CustomPartCatalog.by_id(7)    # SPIN_ENGINE(回転UP)
 	var spin_text: String = NaivePlay.card_text(spin)
 	check.call("寿命" in spin_text, "naive_play: 回転UP札は挙動(寿命)を謳う (%s)" % spin_text)
+	# GHOST(すり抜け)は利点(初撃は当たってから発動・反撃を受けない)まで謳うこと。
+	# 発見の経緯: 「敵をすり抜ける」だけでは攻めが止まるデメリットに読め、性能は
+	# COMMON上位(ラン相関+29pt)なのにコールドプレイで5提示5見送りだった。
+	var ghost := CustomPartCatalog.by_id(9)
+	var ghost_text: String = NaivePlay.card_text(ghost)
+	check.call("すり抜ける" in ghost_text, "naive_play: ゴースト札はすり抜けを謳う (%s)" % ghost_text)
+	check.call(
+		"初撃" in ghost_text and "反撃" in ghost_text,
+		"naive_play: ゴースト札は利点(初撃が当たる・反撃を受けない)も謳う (%s)" % ghost_text
+	)
 	# 注記は倍率の向きに追従すること(デバフ方向の札を仮に作って逆向きを確認)。
 	var shrink := CustomPart.make(0, "T", CustomPart.Rarity.COMMON, CustomPart.Stat.MASS, 0.5)
 	var shrink_text: String = NaivePlay.card_text(shrink)
