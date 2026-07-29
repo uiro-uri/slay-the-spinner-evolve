@@ -41,6 +41,11 @@ class Plan:
 ## 既に決めた敵の位置をavoidに渡すと、そこからmin_gap以上離れたリング上の点を
 ## 選び直す(角度だけを棄却サンプリング、半径は変えない)。空なら初回の角度が
 ## そのまま通るので既存の挙動・決定性は不変。
+##
+## obstaclesは土俵の柱(FieldData.obstacles、xy=中心・z=半径)。コマ全体
+## (radiusぶん)が柱に重ならない角度を選ぶ。大きいコマはリングが内側へ寄って
+## (effective_ring)柱の真上を通ることがあり、めり込んで出現すると毎ステップ
+## 柱に弾かれ続けて接触ゼロのまま自滅する(コールドプレイ2026-07-29で実測)。
 static func plan(
 	center: Vector2,
 	ring_radius: float,
@@ -50,12 +55,13 @@ static func plan(
 	radius: float = 0.0,
 	arena_half_size: float = 5.0,
 	avoid: Array[Vector2] = [],
-	min_gap: float = 0.0
+	min_gap: float = 0.0,
+	obstacles: Array[Vector3] = []
 ) -> Plan:
 	var max_ring := maxf(arena_half_size - radius, 0.0)
 	var effective_ring := minf(ring_radius, max_ring)
 
-	var angle := _pick_angle(rng, center, effective_ring, avoid, min_gap)
+	var angle := _pick_angle(rng, center, effective_ring, avoid, min_gap, radius, obstacles)
 	var position := center + Vector2.RIGHT.rotated(angle) * effective_ring
 
 	var toward_center := (center - position).normalized()
@@ -63,32 +69,40 @@ static func plan(
 	return Plan.new(position, toward_center.rotated(spread) * speed)
 
 
-## リング上の角度を選ぶ。avoidが空なら1回引くだけ(従来どおり)。
-## avoidがあるときは、全avoid点からmin_gap以上離れた角度が出るまで最大K回引き直す。
-## どれも満たせなければ、試した中で「一番近いavoidまでの距離が最大」の角度を返す。
+## リング上の角度を選ぶ。除け所も柱も無ければ1回引くだけ(従来どおり)。
+## あるときは、全avoid点からmin_gap以上・全柱から(柱半径+コマ半径)以上離れた
+## 角度が出るまで最大K回引き直す。どれも満たせなければ、試した中で「一番
+## 食い込みが浅い」角度を返す(余白margin=距離-必要距離の最小値が最大の角度)。
+## avoidだけの場合、marginは従来のclearanceからmin_gapを引いただけなので
+## 採否・優先順位とも従来と厳密に一致する(後方互換)。
 static func _pick_angle(
 	rng: RandomNumberGenerator,
 	center: Vector2,
 	effective_ring: float,
 	avoid: Array[Vector2],
-	min_gap: float
+	min_gap: float,
+	radius: float,
+	obstacles: Array[Vector3]
 ) -> float:
 	var angle := rng.randf_range(0.0, TAU)
-	if avoid.is_empty() or min_gap <= 0.0:
+	if (avoid.is_empty() or min_gap <= 0.0) and obstacles.is_empty():
 		return angle
 
 	const K := 24
 	var best_angle := angle
-	var best_clearance := -INF
+	var best_margin := -INF
 	for i in K:
 		var pos := center + Vector2.RIGHT.rotated(angle) * effective_ring
-		var clearance := INF
-		for p in avoid:
-			clearance = minf(clearance, pos.distance_to(p))
-		if clearance >= min_gap:
+		var margin := INF
+		if min_gap > 0.0:
+			for p in avoid:
+				margin = minf(margin, pos.distance_to(p) - min_gap)
+		for o in obstacles:
+			margin = minf(margin, pos.distance_to(Vector2(o.x, o.y)) - (o.z + radius))
+		if margin >= 0.0:
 			return angle
-		if clearance > best_clearance:
-			best_clearance = clearance
+		if margin > best_margin:
+			best_margin = margin
 			best_angle = angle
 		angle = rng.randf_range(0.0, TAU)
 	return best_angle

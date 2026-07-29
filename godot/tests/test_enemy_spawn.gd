@@ -22,6 +22,7 @@ func run(check: Callable) -> void:
 	_test_telegraph_visible(check)
 	_test_fits_inside_arena(check)
 	_test_avoids_keepout(check)
+	_test_avoids_obstacles(check)
 
 
 ## 発射前の初期表示が重ならないよう、avoidに渡した点からmin_gap以上離れて出ること。
@@ -55,6 +56,80 @@ func _test_avoids_keepout(check: Callable) -> void:
 	check.call(
 		plain.position.is_equal_approx(empty.position),
 		"敵の出現: 除け所が無ければ従来と同じ結果(後方互換)"
+	)
+
+
+## 柱(障害物)に重なった出現をしないこと。大きいコマはリングが内側へ寄って
+## (effective_ring)柱の真上を通ることがあり、めり込んで出現すると毎ステップ
+## 柱に弾かれて接触ゼロのまま自滅する(2026-07-29のコールドプレイで実測:
+## ENEMY_3_3が柱(3,3)に0.32めり込んで出現し、13回弾かれて接触0回で死んだ)。
+func _test_avoids_obstacles(check: Callable) -> void:
+	# PILLARS土俵と同じ柱。半径0.89の敵はリング上の対角付近で柱に重なる。
+	var obstacles: Array[Vector3] = [Vector3(3, 3, 0.6), Vector3(7, 7, 0.6)]
+	var radius := 0.89
+	var rng := RandomNumberGenerator.new()
+	var worst := INF
+	for trial in TRIALS:
+		rng.seed = trial
+		var plan := EnemySpawn.plan(
+			CENTER, RING, SPEED, 30.0, rng, radius, 5.0, [], 0.0, obstacles)
+		for o in obstacles:
+			worst = minf(worst, plan.position.distance_to(Vector2(o.x, o.y)) - (o.z + radius))
+	check.call(
+		worst >= -EPS,
+		"敵の出現: 柱に重ならない (最小余白 %.3f)" % worst
+	)
+
+	# 再現バグの実例: bseed=10103のENEMY_3_3は柱(3,3)にめり込んで出ていた。
+	var rng_bug := RandomNumberGenerator.new()
+	rng_bug.seed = 10103
+	LaunchSpeed.random(rng_bug)  # naive_playと同じ消費順(速度→角度)
+	var fixed := EnemySpawn.plan(
+		CENTER, RING, SPEED, 30.0, rng_bug, radius, 5.0, [], 0.0, obstacles)
+	var bug_clear := true
+	for o in obstacles:
+		if fixed.position.distance_to(Vector2(o.x, o.y)) < o.z + radius - EPS:
+			bug_clear = false
+	check.call(bug_clear, "敵の出現: 2026-07-29の再現ケースが柱を避ける")
+
+	# 柱を渡しても、最初の角度が柱を避けているなら結果は柱なしと同じ
+	# (余計なRNG消費をしない=既存bseedの出現をむやみに変えない)。
+	var seed_clear := -1
+	for trial in TRIALS:
+		var rng_a := RandomNumberGenerator.new()
+		rng_a.seed = trial
+		var plain := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_a, radius, 5.0)
+		var ok := true
+		for o in obstacles:
+			if plain.position.distance_to(Vector2(o.x, o.y)) < o.z + radius:
+				ok = false
+		if ok:
+			seed_clear = trial
+			break
+	if seed_clear >= 0:
+		var rng_b := RandomNumberGenerator.new()
+		rng_b.seed = seed_clear
+		var plain_again := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_b, radius, 5.0)
+		var rng_c := RandomNumberGenerator.new()
+		rng_c.seed = seed_clear
+		var with_obs := EnemySpawn.plan(
+			CENTER, RING, SPEED, 30.0, rng_c, radius, 5.0, [], 0.0, obstacles)
+		check.call(
+			plain_again.position.is_equal_approx(with_obs.position)
+				and plain_again.velocity.is_equal_approx(with_obs.velocity),
+			"敵の出現: 柱を避けた初回角度は柱なしと同じ結果(後方互換)"
+		)
+
+	# 同じシード+同じ柱なら同じ結果(決定性)
+	var rng_d := RandomNumberGenerator.new()
+	rng_d.seed = 42
+	var a := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_d, radius, 5.0, [], 0.0, obstacles)
+	var rng_e := RandomNumberGenerator.new()
+	rng_e.seed = 42
+	var b := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_e, radius, 5.0, [], 0.0, obstacles)
+	check.call(
+		a.position.is_equal_approx(b.position) and a.velocity.is_equal_approx(b.velocity),
+		"敵の出現: 柱つきでも同じシードなら同じ結果"
 	)
 
 

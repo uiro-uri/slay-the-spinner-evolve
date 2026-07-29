@@ -48,6 +48,31 @@ static func clamp_inside(bounds: Rect2, pos: Vector2, radius: float) -> Vector2:
 	return Vector2(clampf(pos.x, lo.x, hi.x), clampf(pos.y, lo.y, hi.y))
 
 
+## コマ全体が円形障害物(柱)の外に出る位置へ押し出す。obstaclesはFieldData.obstaclesと
+## 同じ形式(xy=中心、z=半径)。重なっていなければposのまま返す。
+##
+## 柱に重なった位置から発射・出現すると、リゾルバは毎ステップ柱との衝突を検出し、
+## すり鉢が押し戻すたびに壁ダメージを受ける「見えない拘束」になる(コールドプレイ
+## 2026-07-29: 発射が柱(7,7)に0.33めり込み、3.75秒で壁系22ヒット・接触0回で決着)。
+## 中心が柱の真上(向きが決められない)ときはfallback_dirへ押し出す。
+static func push_out_of_obstacles(
+	pos: Vector2, obstacles: Array[Vector3], radius: float,
+	fallback_dir: Vector2 = Vector2.RIGHT
+) -> Vector2:
+	# 押し出しちょうどの距離に置くと浮動小数の誤差で再判定に引っかかるので微小に余す。
+	const NUDGE := 0.001
+	var p := pos
+	for o in obstacles:
+		var obstacle_center := Vector2(o.x, o.y)
+		var need := o.z + radius
+		var away := p - obstacle_center
+		if away.length() >= need:
+			continue
+		var dir := away.normalized() if away.length() > NUDGE else fallback_dir.normalized()
+		p = obstacle_center + dir * (need + NUDGE)
+	return p
+
+
 ## 矩形アリーナの4辺を内向き法線付きで返す。
 static func from_rect(bounds: Rect2) -> Array[ArenaWall]:
 	var center := bounds.get_center()

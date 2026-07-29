@@ -411,9 +411,11 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 		opponent_radius = maxf(opponent_radius, other.stats.radius)
 	var min_gap := opponent_radius + disc.stats.radius + spawn_clearance
 
+	# 柱(障害物)に重なった出現はめり込み拘束になるので、柱も除けて角度を選ぶ。
+	var obstacles: Array[Vector3] = _field.obstacles if _field != null else []
 	var plan := EnemySpawn.plan(
 		_center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
-		disc.stats.radius, _inradius(), avoid, min_gap
+		disc.stats.radius, _inradius(), avoid, min_gap, obstacles
 	)
 	disc.position = plan.position
 	disc.velocity = Vector2.ZERO
@@ -476,8 +478,12 @@ func _inradius() -> float:
 	return ArenaWall.inradius_for(ArenaWall.WallShape.RECT, Arena.BOUNDS)
 
 
-## 発射地点を土俵の内側へ寄せる。矩形は矩形クランプ、非矩形は内接円クランプ。
+## 発射地点を「土俵の内側 かつ 障害物(柱)の外」へ寄せる。柱に重なったまま
+## 発射すると毎ステップ柱に弾かれる見えない拘束になるため、狙い中の表示ごと
+## 柱を避ける(FieldData.clamp_placementに一本化。CLI・botも同じ関数を通る)。
 func _wall_clamp(pos: Vector2) -> Vector2:
+	if _field != null:
+		return _field.clamp_placement(pos, _player.stats.radius)
 	if _wall_shape() == ArenaWall.WallShape.RECT:
 		return ArenaWall.clamp_inside(_bounds(), pos, _player.stats.radius)
 	return ArenaWall.clamp_inside_circle(_center(), _inradius(), pos, _player.stats.radius)

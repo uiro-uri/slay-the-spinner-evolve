@@ -17,6 +17,8 @@ func run(check: Callable) -> void:
 	_test_from_polygon(check)
 	_test_inradius(check)
 	_test_clamp_inside_circle(check)
+	_test_push_out_of_obstacles(check)
+	_test_clamp_placement(check)
 	_test_roster(check)
 	_test_boss_octagon(check)
 	_test_localization(check)
@@ -122,6 +124,83 @@ func _test_clamp_inside_circle(check: Callable) -> void:
 		absf(outside.distance_to(center) - (inradius - radius)) < EPS,
 		"円クランプ: 外側は内接円-半径へ寄る (%.3f)" % outside.distance_to(center)
 	)
+
+
+## 柱に重なった初期配置の押し出し。柱に重なったまま発射・出現すると、毎ステップ
+## 柱に弾かれ続ける見えない拘束になる(2026-07-29のコールドプレイ: 発射が柱に
+## 0.33めり込み、3.75秒で壁系22ヒット・接触0回で決着した)。
+func _test_push_out_of_obstacles(check: Callable) -> void:
+	var obstacles: Array[Vector3] = [Vector3(3, 3, 0.6), Vector3(7, 7, 0.6)]
+	var radius := 0.7
+
+	# 重なっていなければそのまま
+	var free := Vector2(5, 5)
+	check.call(
+		ArenaWall.push_out_of_obstacles(free, obstacles, radius).is_equal_approx(free),
+		"柱押し出し: 重なっていない位置は動かさない"
+	)
+
+	# 重なっていたら柱の外(柱半径+コマ半径以上)へ出る。押し出しの向きは中心から放射方向。
+	var overlapping := Vector2(7.687, 7.687)
+	var pushed := ArenaWall.push_out_of_obstacles(overlapping, obstacles, radius)
+	check.call(
+		pushed.distance_to(Vector2(7, 7)) >= 0.6 + radius - EPS,
+		"柱押し出し: めり込みは柱の外へ出る (%.3f)" % pushed.distance_to(Vector2(7, 7))
+	)
+	check.call(
+		((pushed - Vector2(7, 7)).normalized()
+			- (overlapping - Vector2(7, 7)).normalized()).length() < EPS,
+		"柱押し出し: 元の位置の方向へ押し出す(反対側へ飛ばない)"
+	)
+
+	# 柱の真上(向きが決められない)でもfallback方向へ決定的に出る
+	var centered := ArenaWall.push_out_of_obstacles(
+		Vector2(3, 3), obstacles, radius, Vector2.UP)
+	check.call(
+		centered.distance_to(Vector2(3, 3)) >= 0.6 + radius - EPS,
+		"柱押し出し: 柱の真上からでも外へ出る"
+	)
+
+
+## FieldData.clamp_placement: 壁の内側かつ柱の外。発射(実UI/CLI/bot)の共通経路。
+func _test_clamp_placement(check: Callable) -> void:
+	var pillars: FieldData = null
+	for field in FieldRoster.all():
+		if not field.obstacles.is_empty():
+			pillars = field
+			break
+	check.call(pillars != null, "柱配置: 障害物つき土俵がロスターにある")
+	if pillars == null:
+		return
+
+	var radius := 0.7
+	# コールドプレイの実例: CLIの発射リング(inradius-半径-0.5)の対角45度は柱に重なる。
+	var ring := pillars.inradius() - radius - 0.5
+	var want := pillars.center() + Vector2.RIGHT.rotated(deg_to_rad(45.0)) * ring
+	var placed := pillars.clamp_placement(want, radius)
+	var clear := true
+	for o in pillars.obstacles:
+		if placed.distance_to(Vector2(o.x, o.y)) < o.z + radius - EPS:
+			clear = false
+	check.call(clear, "柱配置: 発射リング対角の柱めり込みが解消される (%s)" % str(placed))
+	var inside := pillars.clamp_inside(placed, radius)
+	check.call(inside.is_equal_approx(placed), "柱配置: 押し出し後も壁の内側に収まる")
+
+	# 柱から離れた位置は動かさない(過剰な介入をしない)
+	var free := pillars.center()
+	check.call(
+		pillars.clamp_placement(free, radius).is_equal_approx(free),
+		"柱配置: 柱から離れた位置は動かさない"
+	)
+
+	# 発射クランプ(間合い込み)を通しても柱に重ならない
+	var spawn := PackedVector2Array([pillars.center() + Vector2(0, -4)])
+	var launched := pillars.clamp_launch(want, spawn, PackedFloat32Array([0.5]), radius)
+	var launch_clear := true
+	for o in pillars.obstacles:
+		if launched.distance_to(Vector2(o.x, o.y)) < o.z + radius - EPS:
+			launch_clear = false
+	check.call(launch_clear, "柱配置: 間合いクランプを通しても柱に重ならない")
 
 
 func _test_roster(check: Callable) -> void:
