@@ -249,6 +249,9 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	var mutual := mutual_ko_text(result)
 	if mutual != "":
 		print("  %s" % mutual)
+	var ghost := ghost_text(result)
+	if ghost != "":
+		print("  %s" % ghost)
 	# rps喪失の内訳(リゾルバが数えた事実)。死因ラベルは「閾値を割った最後の一撃」
 	# しか語らないので、壁で大半を削られた負けが「衝突0・死因decay」とだけ出て
 	# 敗因が読めないことがあった。機構別の内訳を必ず出す。
@@ -773,6 +776,20 @@ static func mutual_ko_text(result: BattleResult) -> String:
 	if result.player_won() and not result.player_death.is_empty():
 		return "(相打ち: 敵全滅と同時に自分も力尽きた。相打ちは自分の勝ち)"
 	return ""
+
+
+## ゴーストのすり抜けが発動した事実の表示。実UIは再生中にコマが半透明になるので
+## 見えるが、CLIは無言で、注記(売り文句)で取らせたのに働いたかどうかが一度も
+## 読めなかった(2026-07-30のコールドプレイ: 取得後の4戦で効果を実感できず)。
+## ghost_start/ghost_durationはリゾルバが結果に記録した事実をそのまま読む。
+## 札を持っていない戦い(duration=0)は空文字で、呼び出し側が行ごと出さない。
+static func ghost_text(result: BattleResult) -> String:
+	if result.ghost_duration <= 0.0:
+		return ""
+	if result.ghost_start < 0.0:
+		return "ゴースト: 発動せず(衝突が一度も起きなかった)"
+	return "ゴースト発動: %.2fsの初衝突から%.1fs間 敵をすり抜け" % [
+		result.ghost_start, result.ghost_duration]
 
 
 ## 勝敗表示。引き分け(相打ち・時間切れ)は進行上は敗北扱いだが、
