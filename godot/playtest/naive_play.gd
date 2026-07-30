@@ -240,6 +240,9 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	print("  決着死因=%s loser=%s hits_taken=%s" % [
 		death_cause_text(result.loser_death_cause), metrics.get("loser","?"),
 		str(metrics.get("hits_taken","?"))])
+	var no_contact := no_contact_note(result)
+	if no_contact != "":
+		print("  %s" % no_contact)
 	# 各コマがいつ何で力尽きたか(リゾルバの記録した事実)。実UIなら再生でコマが
 	# 止まる順が見えるが、CLIには無く、双方残り0%の勝利(相打ち)が謎に見えた。
 	var stop_parts := [stop_text("自分", result.player_death)]
@@ -795,6 +798,21 @@ static func ghost_text(result: BattleResult) -> String:
 		return "ゴースト: 発動せず(衝突が一度も起きなかった)"
 	return "ゴースト発動: %.2fsの初衝突から%.1fs間 敵をすり抜け" % [
 		result.ghost_start, result.ghost_duration]
+
+
+## 接触ゼロ勝利の注記。死因が接触系(wall/drain)なのに撃破ボーナスが付かない勝ちは
+## 「決着死因=壁なのに成長が受け身の+0.5」と矛盾して見える(撃破の寄与判定は
+## 決着を付けた敵とプレイヤーの接触の有無=BattleResult.loser_hit_by_player)。
+## その敵に一度も触れていない事実をここで明文化する。該当しなければ空文字で、
+## 呼び出し側が行ごと出さない。
+static func no_contact_note(result: BattleResult) -> String:
+	if (
+		result.player_won()
+		and result.loser_death_cause in ["drain", "wall"]
+		and not result.loser_hit_by_player
+	):
+		return "(接触ゼロ: 決着を付けた敵に一度も触れていない。自滅なので撃破ボーナス対象外)"
+	return ""
 
 
 ## 勝利成長の表示。回転が上限(RPS_CAP)に達すると成長量は0なのに、従来は

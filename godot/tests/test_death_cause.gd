@@ -19,6 +19,8 @@ func run(check: Callable) -> void:
 	_test_decay_kill(check)
 	_test_drain_kill(check)
 	_test_wall_kill(check)
+	_test_wall_kill_with_contact(check)
+	_test_mutual_drain_no_contact(check)
 	_test_player_loss(check)
 	_test_dominant_cause_unit(check)
 	_test_dominant_drain_over_final_decay(check)
@@ -82,11 +84,18 @@ func _test_drain_kill(check: Callable) -> void:
 		result.loser_death_cause == "drain",
 		"死因drain: 敗者の死因がdrainと記録される (%s)" % result.loser_death_cause
 	)
+	check.call(
+		result.loser_hit_by_player,
+		"死因drain: プレイヤーとの接触が事実として記録される"
+	)
 	check.call(result.finished_by_knockout(), "死因drain: 接触で仕留めた勝ちは撃破扱い")
 
 
-## 壁死: 自然減衰・傾斜・摩擦を切り、敵を高速で壁へ向かわせる。プレイヤーは
-## 遠くで静止して接触しない。壁の減衰(×wall_damping)だけが敵のrpsを減らす。
+## 壁死(接触ゼロ): 自然減衰・傾斜・摩擦を切り、敵を高速で壁へ向かわせる。
+## プレイヤーは遠くで静止して一度も接触しない。壁の減衰だけが敵のrpsを減らすが、
+## プレイヤーは何もしていないので、この勝ちは撃破(接触で仕留めた)扱いにしない。
+## かつては死因=wallだけで撃破+1.0が付き、「待てば自滅」の受け身まで複利で
+## 報われていた(コールドプレイの一次証拠あり)。
 func _test_wall_kill(check: Callable) -> void:
 	var r := BattleRequest.new()
 	r.natural_damping = 0.0
@@ -97,11 +106,86 @@ func _test_wall_kill(check: Callable) -> void:
 
 	check.call(result.player_won(), "死因wall: 壁の減衰で敵のrpsが尽きれば勝つ")
 	check.call(result.wall_impacts.size() >= 1, "死因wall: 検証環境で壁衝突が起きている")
+	check.call(result.impacts.is_empty(), "死因wall: 検証環境でプレイヤーとの接触がない")
 	check.call(
 		result.loser_death_cause == "wall",
 		"死因wall: 敗者の死因がwallと記録される (%s)" % result.loser_death_cause
 	)
-	check.call(result.finished_by_knockout(), "死因wall: 壁へ弾き飛ばした勝ちは撃破扱い")
+	check.call(
+		not result.loser_hit_by_player,
+		"死因wall: 接触ゼロの事実が記録される"
+	)
+	check.call(
+		not result.finished_by_knockout(),
+		"死因wall: 接触ゼロの壁自滅は撃破扱いにしない"
+	)
+
+
+## 壁死(プレイヤーの弾き飛ばし): プレイヤーが敵に当たり、弾かれた敵が壁で果てる。
+## 削りがほぼ入らないようviolenceを絞り、壁の減衰だけで死ぬ環境を組む。
+## 接触の事実があるので、この壁死は従来どおり撃破扱い。
+func _test_wall_kill_with_contact(check: Callable) -> void:
+	var r := BattleRequest.new()
+	r.natural_damping = 0.0
+	r.stage_strength = 0.0
+	# violenceを絞って削りでは死なず、壁を重くして(速度スケールも切って)最初の
+	# 壁激突で確実に尽きる環境を組む: 弾かれた敵は一直線に右壁で果てる。
+	r.violence = 0.0001
+	r.wall_damping = 0.1
+	r.wall_impact_ref_speed = 0.0
+	r.player = BattleRequest.Launch.new(SpinnerStats.default_player(), Vector2(3, 5), Vector2(8, 0))
+	r.enemies = [BattleRequest.Launch.new(_enemy_stats(0.15), Vector2(6, 5), Vector2.ZERO)]
+	var result := BattleResolver.resolve(r)
+
+	check.call(result.player_won(), "死因wall(接触): 弾き飛ばした敵が壁で尽きれば勝つ")
+	check.call(result.impacts.size() >= 1, "死因wall(接触): プレイヤーが敵に当たっている")
+	var loss: Dictionary = result.enemy_rps_loss[0]
+	check.call(
+		float(loss.get("wall", 0.0)) > float(loss.get("drain", 0.0)),
+		"死因wall(接触): 検証環境で壁の喪失が支配的 (%s)" % str(loss)
+	)
+	check.call(
+		result.loser_death_cause == "wall",
+		"死因wall(接触): 敗者の死因がwallと記録される (%s)" % result.loser_death_cause
+	)
+	check.call(
+		result.loser_hit_by_player,
+		"死因wall(接触): プレイヤーとの接触が事実として記録される"
+	)
+	check.call(
+		result.finished_by_knockout(),
+		"死因wall(接触): 壁へ弾き飛ばした勝ちは撃破扱いのまま"
+	)
+
+
+## 同士討ち(接触ゼロ): 敵2体が正面衝突で削り合って果てる。プレイヤーは遠くで
+## 静止して一切触れない。死因はdrain(接触系)だが、削ったのはプレイヤーではないので
+## 撃破扱いにしない。乱戦の「敵が勝手に潰し合う部屋」で+1.0が付いていた穴を塞ぐ。
+func _test_mutual_drain_no_contact(check: Callable) -> void:
+	var r := BattleRequest.new()
+	r.natural_damping = 0.0
+	r.stage_strength = 0.0
+	r.player = BattleRequest.Launch.new(SpinnerStats.default_player(), Vector2(1, 5), Vector2.ZERO)
+	r.enemies = [
+		BattleRequest.Launch.new(_enemy_stats(0.2), Vector2(6, 5), Vector2(3, 0)),
+		BattleRequest.Launch.new(_enemy_stats(0.2), Vector2(8, 5), Vector2(-3, 0)),
+	]
+	var result := BattleResolver.resolve(r)
+
+	check.call(result.player_won(), "同士討ち: 敵同士が削り合って全滅すれば勝つ")
+	check.call(result.impacts.size() >= 1, "同士討ち: 検証環境で敵同士の衝突が起きている")
+	check.call(
+		result.loser_death_cause == "drain",
+		"同士討ち: 敗者の死因がdrainと記録される (%s)" % result.loser_death_cause
+	)
+	check.call(
+		not result.loser_hit_by_player,
+		"同士討ち: 接触ゼロの事実が記録される"
+	)
+	check.call(
+		not result.finished_by_knockout(),
+		"同士討ち: 敵が勝手に潰し合った勝ちは撃破扱いにしない"
+	)
 
 
 ## 敗北時も敗者(プレイヤー)の死因が記録され、撃破扱いにはならないこと。
@@ -280,6 +364,30 @@ func _test_serialization(check: Callable) -> void:
 		"往復: loser_death_causeがdict往復で保存される"
 	)
 	check.call(revived.finished_by_knockout(), "往復: 復元後も撃破判定が立つ")
+
+	# 接触ゼロの事実もdict往復で保存される。落ちるとサーバー化・リプレイで
+	# 自滅勝ちに撃破ボーナスが復活する。
+	result.loser_hit_by_player = false
+	var revived_nc := BattleResult.from_dict(result.to_dict())
+	check.call(
+		not revived_nc.loser_hit_by_player,
+		"往復: loser_hit_by_player=falseがdict往復で保存される"
+	)
+	check.call(
+		not revived_nc.finished_by_knockout(),
+		"往復: 復元後も接触ゼロの勝ちは撃破扱いにしない"
+	)
+	result.loser_hit_by_player = true
+
+	# 接触キーの無い旧dictは接触あり扱いで読み、当時の撃破判定(死因だけで決まる)を
+	# 当時のまま再現する。
+	var no_hit_key := result.to_dict()
+	no_hit_key.erase("loser_hit_by_player")
+	var legacy := BattleResult.from_dict(no_hit_key)
+	check.call(
+		legacy.loser_hit_by_player and legacy.finished_by_knockout(),
+		"往復: 接触キーの無い旧dictは従来どおり死因だけで撃破判定される"
+	)
 
 	# 体ごとの停止事実もdict往復で保存される。
 	result.player_death = {"cause": "wall", "time": 1.25}
