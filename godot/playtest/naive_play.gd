@@ -416,7 +416,7 @@ func _enemy_plans(enemies: Array, field: FieldData, bseed: int) -> Array:
 	var plans := []
 	for e in enemies:
 		# 実ゲーム(Battle._spawn_enemy)と同じく柱(障害物)を除けて出現させる。
-		plans.append(EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius(), [], 0.0, field.obstacles))
+		plans.append(EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng, e.stats.radius), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius(), [], 0.0, field.obstacles))
 	return plans
 
 func _ring_pos(field: FieldData, prad: float, from_deg: float) -> Vector2:
