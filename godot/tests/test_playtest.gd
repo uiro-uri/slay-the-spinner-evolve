@@ -28,6 +28,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_death_cause_text(check)
 	_test_naive_play_stop_text(check)
 	_test_naive_play_ghost_text(check)
+	_test_naive_play_victory_text(check)
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
@@ -875,3 +876,41 @@ func _test_naive_play_ghost_text(check: Callable) -> void:
 		check.call(
 			"ゴースト発動" in NaivePlay.ghost_text(result),
 			"naive_play: 実結果でも初衝突があれば発動行が出る")
+
+
+## 勝利成長の表示。上限到達で+0.0なのに「大きく成長」と祝う矛盾
+## (2026-07-30コールドプレイ、段5以降の全勝利で再現)を防ぐ。
+func _test_naive_play_victory_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	# 上限到達(成長0)は頭打ちと正直に言い、成長の祝辞を出さない。
+	var capped_ko: String = NaivePlay.victory_text(true, 0.0, SpinnerStats.RPS_CAP)
+	check.call(
+		"頭打ち" in capped_ko and "大きく成長" not in capped_ko,
+		"naive_play: 上限到達の撃破ボーナスは頭打ちと読める (%s)" % capped_ko)
+	check.call(
+		"★撃破ボーナス★" in capped_ko,
+		"naive_play: 頭打ちでも接触で仕留めた事実は残す")
+	var capped_passive: String = NaivePlay.victory_text(false, 0.0, SpinnerStats.RPS_CAP)
+	check.call(
+		"頭打ち" in capped_passive and "+0.0" not in capped_passive,
+		"naive_play: 上限到達の受け身勝利も頭打ちと読める (%s)" % capped_passive)
+	# 表示丸めで+0.0になる微小成長も頭打ち扱い(数字と文言の食い違い防止)。
+	check.call(
+		"頭打ち" in String(NaivePlay.victory_text(true, 0.04, SpinnerStats.RPS_CAP)),
+		"naive_play: 丸めて+0.0になる成長は頭打ちと言う")
+	# 通常の成長は従来どおり増加量つきで祝う。
+	var normal_ko: String = NaivePlay.victory_text(true, 1.2, 25.0)
+	check.call(
+		"大きく成長" in normal_ko and "+1.2" in normal_ko,
+		"naive_play: 通常の撃破ボーナスは増加量つきで祝う (%s)" % normal_ko)
+	var normal_passive: String = NaivePlay.victory_text(false, 0.5, 20.0)
+	check.call(
+		"勝利の勢い" in normal_passive and "+0.5" in normal_passive and "頭打ち" not in normal_passive,
+		"naive_play: 通常の受け身勝利は従来表示 (%s)" % normal_passive)
+	# 実装(grow_rps_by_victory)とも整合: 上限のコマは何度勝っても頭打ち表示になる。
+	var s := SpinnerStats.new()
+	s.rps = SpinnerStats.RPS_CAP
+	var gained := s.grow_rps_by_victory(true)
+	check.call(
+		"頭打ち" in String(NaivePlay.victory_text(true, gained, s.rps)),
+		"naive_play: 実成長関数の上限0成長が頭打ち表示に繋がる")

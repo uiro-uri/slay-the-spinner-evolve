@@ -293,12 +293,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			state["stats"] = stats_dict(grown)
 			state["won"] = true    # 撃ち直しによる勝利成長の二重取りを防ぐ
 			_save(state, path)
-			if knockout:
-				print("★撃破ボーナス★ 接触で仕留めた勝利で回転が大きく成長 rps=%.1f (+%.1f, 上限%.0f)" % [
-					grown.rps, gained, SpinnerStats.RPS_CAP])
-			else:
-				print("勝利の勢いで回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [
-					grown.rps, gained, SpinnerStats.RPS_CAP])
+			print(victory_text(knockout, gained, grown.rps))
 			print("→ reward --bseed=<R> で報酬を見る")
 	else:
 		# 敗北も保存する。以前は敗北が状態に残らず、残機を消費せずに同じノードを
@@ -800,6 +795,24 @@ static func ghost_text(result: BattleResult) -> String:
 		return "ゴースト: 発動せず(衝突が一度も起きなかった)"
 	return "ゴースト発動: %.2fsの初衝突から%.1fs間 敵をすり抜け" % [
 		result.ghost_start, result.ghost_duration]
+
+
+## 勝利成長の表示。回転が上限(RPS_CAP)に達すると成長量は0なのに、従来は
+## 「回転が大きく成長 (+0.0, 上限40)」と矛盾した祝辞が出ていた(2026-07-30の
+## コールドプレイ: 段5で上限到達後、段5〜8の勝利すべてでこの空文の祝辞が流れ、
+## 撃破ボーナスが何もしていない事実が読めなかった)。表示丸め(%.1f)で+0.0になる
+## 成長は「頭打ち」と正直に言う。判定閾値0.05は丸めと同じ境界にして、
+## 出す数字と文言が食い違わないようにする。
+static func victory_text(knockout: bool, gained: float, rps_now: float) -> String:
+	var cap := SpinnerStats.RPS_CAP
+	if gained < 0.05:
+		if knockout:
+			return "★撃破ボーナス★ 接触で仕留めたが、回転は上限%.0fで頭打ち・成長なし (rps=%.1f)" % [cap, rps_now]
+		return "回転は上限%.0fで頭打ち・勝利成長なし (rps=%.1f)" % [cap, rps_now]
+	if knockout:
+		return "★撃破ボーナス★ 接触で仕留めた勝利で回転が大きく成長 rps=%.1f (+%.1f, 上限%.0f)" % [
+			rps_now, gained, cap]
+	return "勝利の勢いで回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [rps_now, gained, cap]
 
 
 ## 勝敗表示。引き分け(相打ち・時間切れ)は進行上は敗北扱いだが、
