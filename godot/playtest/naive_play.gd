@@ -336,9 +336,11 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 		if state.get("last_rejected") != null:
 			for v in state["last_rejected"]:
 				skip.append(int(v))
+		# 乱戦はRAREの重みが頭数倍(実ゲームと同じ規則)。
 		choices = CustomPartCatalog.pick_choices(
 			CustomPartCatalog.REWARD_CHOICES, rng, level,
-			stats_from(state["stats"]), int(state["continues"]), skip
+			stats_from(state["stats"]), int(state["continues"]), skip,
+			node.enemy_count()
 		)
 		var ids := []
 		for c in choices: ids.append(c.id)
@@ -596,6 +598,11 @@ static func route_text(col: int, n: MapTree.MapNode) -> String:
 	if n.reward_count() <= 0:
 		return "col%+d : Lv%d %d体 %s 撃破でクリア(報酬なし)" % [
 			col, n.level(), n.enemy_count(), n.field.title_key]
+	# 乱戦は枚数だけでなく質も上がる(RARE重みが頭数倍)。リターンが読めないと
+	# 乱戦がリスクだけの部屋に見えるので、選択の時点で両方を明示する。
+	if n.enemy_count() > 1:
+		return "col%+d : Lv%d %d体→報酬%d枚(レア出やすさ×%d) %s" % [
+			col, n.level(), n.enemy_count(), n.reward_count(), n.enemy_count(), n.field.title_key]
 	return "col%+d : Lv%d %d体→報酬%d枚 %s" % [
 		col, n.level(), n.enemy_count(), n.reward_count(), n.field.title_key]
 

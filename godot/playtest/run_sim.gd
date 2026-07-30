@@ -141,9 +141,10 @@ static func play_one(
 		for _r in maxi(group.size(), 1):
 			# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを、
 			# 直前の画面で見送った札(last_rejected)も除外する。
+			# 乱戦はRAREの重みが頭数倍(実ゲームと同じ規則)。
 			var choices := CustomPartCatalog.pick_choices(
 				CustomPartCatalog.REWARD_CHOICES, rng, int(record["level"]),
-				stats, continues, last_rejected
+				stats, continues, last_rejected, group.size()
 			)
 			var part := _choose_part(choices, reward_policy, rng, stats, force_part_id)
 			last_rejected = CustomPartCatalog.rejected_ids(choices, part.id)

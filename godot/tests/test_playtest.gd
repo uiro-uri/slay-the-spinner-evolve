@@ -570,10 +570,16 @@ func _test_naive_play_route_text(check: Callable) -> void:
 	check.call(
 		"1体→報酬1枚" in single_text,
 		"naive_play: 単体ノードは報酬1枚が読める (%s)" % single_text)
+	check.call(
+		not ("レア" in single_text),
+		"naive_play: 単体ノードにレア倍率は出ない(単体は従来抽選のまま) (%s)" % single_text)
 	var group_text: String = NaivePlay.route_text(-2, group)
 	check.call(
 		("%d体→報酬%d枚" % [group.enemy_count(), group.enemy_count()]) in group_text,
 		"naive_play: 乱戦ノードは頭数ぶんの報酬枚数が読める (%s)" % group_text)
+	check.call(
+		("レア出やすさ×%d" % group.enemy_count()) in group_text,
+		"naive_play: 乱戦ノードはレアの出やすさ(頭数倍)が読める (%s)" % group_text)
 	check.call(group_text.begins_with("col-2"), "naive_play: 列表記は従来どおり (%s)" % group_text)
 
 	var goal_text: String = NaivePlay.route_text(2, goal)

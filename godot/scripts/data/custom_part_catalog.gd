@@ -19,10 +19,24 @@ const WEIGHTS := {
 const RARE_WEIGHT_MIN := 1
 const RARE_WEIGHT_MAX := 4
 
+## 乱戦(複数体ノード)のRARE重みに掛ける頭数の上限。ロスター最大の3で頭打ち。
+## 乱戦は報酬「枚数」が頭数倍になる(MapNode.reward_count)一方で「質」は単体と
+## 同じだったため、後半(Lv3+)の乱戦は報酬EVが高くても残機の期待損失が上回る
+## 「見えない罠」だった(コールドプレイとjournalの積み残し)。枚数と同じ規則
+## 「頭数倍」をレアの出やすさにも掛け、危険な部屋の見返りを質でも釣り合わせる。
+const MELEE_RARE_COUNT_MAX := 3
+
 
 ## 敵レベル(1..5)→RAREの抽選重み。範囲外はクランプする。
 static func rare_weight_for_level(level: int) -> int:
 	return clampi(RARE_WEIGHT_MIN + (level - 1), RARE_WEIGHT_MIN, RARE_WEIGHT_MAX)
+
+
+## 敵レベルと倒した頭数→RAREの抽選重み。乱戦は頭数を掛けてレアが出やすくなる
+## (経緯はMELEE_RARE_COUNT_MAXのコメント参照)。頭数1(単体・省略時)は
+## rare_weight_for_levelと厳密に同じ。
+static func rare_weight_for(level: int, enemy_count: int = 1) -> int:
+	return rare_weight_for_level(level) * clampi(enemy_count, 1, MELEE_RARE_COUNT_MAX)
 
 ## 報酬として一度に見せる枚数。画面(Main)もシミュレーション(RunSim)も
 ## これを参照する。別々に持つと乖離するため。
@@ -257,10 +271,12 @@ static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
 ## rejected_idsは直前の報酬画面で見送った札のID（rejected_ids()で作る）。
 ## 渡すとその札を今回の提示から外し、同じ顔ぶれが画面をまたいで続くのを防ぐ。
 ## 取った札はここに入らないので、同じ札を重ねて取る戦略は妨げない。
+## enemy_countは倒したノードの頭数。乱戦(2体以上)はRAREの重みが頭数倍になる
+## (rare_weight_for参照)。省略時1=単体で従来の抽選と厳密に同じ。
 static func pick_choices(
 	count: int, rng: RandomNumberGenerator = null, level: int = 1,
 	stats: SpinnerStats = null, lives_now: int = -1,
-	rejected_ids: Array[int] = []
+	rejected_ids: Array[int] = [], enemy_count: int = 1
 ) -> Array[CustomPart]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
@@ -287,7 +303,7 @@ static func pick_choices(
 			pool = fresh
 	var chosen: Array[CustomPart] = []
 	for i in mini(count, pool.size()):
-		var index := _weighted_index(pool, rng, level)
+		var index := _weighted_index(pool, rng, level, enemy_count)
 		chosen.append(pool[index])
 		pool.remove_at(index)
 	return chosen
@@ -303,19 +319,21 @@ static func rejected_ids(offered: Array[CustomPart], picked_id: int) -> Array[in
 	return out
 
 
-static func _weight_for(part: CustomPart, level: int) -> int:
+static func _weight_for(part: CustomPart, level: int, enemy_count: int = 1) -> int:
 	if part.rarity == CustomPart.Rarity.RARE:
-		return rare_weight_for_level(level)
+		return rare_weight_for(level, enemy_count)
 	return WEIGHTS[part.rarity]
 
 
-static func _weighted_index(pool: Array[CustomPart], rng: RandomNumberGenerator, level: int = 1) -> int:
+static func _weighted_index(
+	pool: Array[CustomPart], rng: RandomNumberGenerator, level: int = 1, enemy_count: int = 1
+) -> int:
 	var total := 0
 	for part in pool:
-		total += _weight_for(part, level)
+		total += _weight_for(part, level, enemy_count)
 	var roll := rng.randi_range(0, total - 1)
 	for i in pool.size():
-		roll -= _weight_for(pool[i], level)
+		roll -= _weight_for(pool[i], level, enemy_count)
 		if roll < 0:
 			return i
 	return pool.size() - 1

@@ -14,6 +14,7 @@ func run(check: Callable) -> void:
 	_test_selection(check)
 	_test_rarity_weighting(check)
 	_test_rarity_by_level(check)
+	_test_melee_rare_boost(check)
 	_test_titles_translated(check)
 	_test_no_debuffs(check)
 	_test_set_lives(check)
@@ -403,6 +404,47 @@ func _count_rares(level: int) -> int:
 			if part.rarity == CustomPart.Rarity.RARE:
 				rares += 1
 	return rares
+
+
+## 乱戦(複数体ノード)はRAREの重みが頭数倍になること。報酬枚数(頭数ぶん)と同じ
+## 「頭数倍」の規則で質も上がり、後半乱戦の残機コストに見返りが釣り合う設計。
+func _test_melee_rare_boost(check: Callable) -> void:
+	# 重みの規則そのもの: 頭数1は従来と厳密一致、頭数で倍、ロスター上限3で頭打ち。
+	for level in [1, 3, 5]:
+		check.call(
+			CustomPartCatalog.rare_weight_for(level, 1) == CustomPartCatalog.rare_weight_for_level(level),
+			"乱戦レア: 単体(頭数1)はレベル別重みと厳密一致 (Lv%d)" % level
+		)
+	check.call(
+		CustomPartCatalog.rare_weight_for(2, 3) == CustomPartCatalog.rare_weight_for_level(2) * 3,
+		"乱戦レア: 頭数3でRARE重みが3倍 (%d)" % CustomPartCatalog.rare_weight_for(2, 3)
+	)
+	check.call(
+		CustomPartCatalog.rare_weight_for(1, 0) == CustomPartCatalog.rare_weight_for_level(1),
+		"乱戦レア: 頭数0以下は1として扱う(壊れた入力に頑健)"
+	)
+	check.call(
+		CustomPartCatalog.rare_weight_for(1, 99) == CustomPartCatalog.rare_weight_for(1, CustomPartCatalog.MELEE_RARE_COUNT_MAX),
+		"乱戦レア: 頭数はロスター上限%dで頭打ち" % CustomPartCatalog.MELEE_RARE_COUNT_MAX
+	)
+
+	# 抽選の実挙動: 同レベルで頭数3はレアを引く回数が明確に増える(向きと大きさ)。
+	var single := 0
+	var melee := 0
+	var rng := RandomNumberGenerator.new()
+	for trial in TRIALS:
+		rng.seed = trial + 13000
+		for part in CustomPartCatalog.pick_choices(1, rng, 1):
+			if part.rarity == CustomPart.Rarity.RARE:
+				single += 1
+		rng.seed = trial + 13000
+		for part in CustomPartCatalog.pick_choices(1, rng, 1, null, -1, [], 3):
+			if part.rarity == CustomPart.Rarity.RARE:
+				melee += 1
+	check.call(
+		melee > single * 2,
+		"乱戦レア: 頭数3の抽選はレアが明確に増える (単体=%d 3体=%d)" % [single, melee]
+	)
 
 
 func _test_titles_translated(check: Callable) -> void:

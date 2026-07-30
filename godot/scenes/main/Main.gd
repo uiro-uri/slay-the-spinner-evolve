@@ -143,12 +143,14 @@ func goto_reward() -> void:
 	# 実レベル準拠にするため。RunSimも同じく実レベルで抽選している(record["level"])。
 	# 現在のステータスと残機を渡し、上限到達で効果ゼロの死にカードは提示しない。
 	# 直前の画面で見送った札も除外し、同じ顔ぶれの連続を防ぐ。
+	# 乱戦(複数体ノード)は報酬枚数だけでなく質も上がる: RAREの重みが頭数倍
+	# (CustomPartCatalog.rare_weight_for)。危険な部屋の見返りを質でも釣り合わせる。
 	var node: MapTree.MapNode = GameState.map_tree.nodes[GameState.map_tree.current_coord]
 	var level := node.level()
 	_reward_offer = CustomPartCatalog.pick_choices(
 		CustomPartCatalog.REWARD_CHOICES, null, level,
 		GameState.player_stats, GameState.continues_left,
-		GameState.last_rejected_ids
+		GameState.last_rejected_ids, node.enemy_count()
 	)
 	reward.setup(_reward_offer)
 
