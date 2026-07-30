@@ -27,6 +27,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_remaining_text(check)
 	_test_naive_play_death_cause_text(check)
 	_test_naive_play_stop_text(check)
+	_test_naive_play_ghost_text(check)
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
@@ -832,3 +833,34 @@ func _test_naive_play_stop_text(check: Callable) -> void:
 		check.call(
 			NaivePlay.death_cause_text(result.loser_death_cause) in enemy_text,
 			"naive_play: 実結果の敵停止行が決着死因と整合する (%s)" % enemy_text)
+
+
+## ゴースト発動行: 実UIの半透明表示に相当する事実がCLIにも出ること。
+## 札なし(duration=0)は行なし・不発(start<0)はその旨・発動は時刻と長さが読める。
+func _test_naive_play_ghost_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var no_ghost := BattleResult.new()
+	check.call(
+		NaivePlay.ghost_text(no_ghost) == "",
+		"naive_play: ゴースト札なしの戦いに発動行は出ない")
+	var unfired := BattleResult.new()
+	unfired.ghost_duration = 2.0
+	unfired.ghost_start = -1.0
+	check.call(
+		"発動せず" in NaivePlay.ghost_text(unfired),
+		"naive_play: 衝突ゼロの戦いは不発と読める")
+	var fired := BattleResult.new()
+	fired.ghost_duration = 2.0
+	fired.ghost_start = 1.25
+	var fired_text: String = NaivePlay.ghost_text(fired)
+	check.call(
+		"1.25s" in fired_text and "2.0s" in fired_text and "すり抜け" in fired_text,
+		"naive_play: 発動行は初衝突時刻と窓の長さで読める (%s)" % fired_text)
+	# 実リゾルバとも整合: ゴースト付きで衝突が起きた戦いでは発動行が出る。
+	var request := _request()
+	request.ghost_duration = 1.5
+	var result := _healthy_result(request)
+	if not result.impacts.is_empty():
+		check.call(
+			"ゴースト発動" in NaivePlay.ghost_text(result),
+			"naive_play: 実結果でも初衝突があれば発動行が出る")
