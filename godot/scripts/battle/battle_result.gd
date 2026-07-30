@@ -88,6 +88,13 @@ var ghost_start: float = -1.0
 ## (BattleMetrics)ではない。撃破ボーナスの判定に使う。
 var loser_death_cause: String = ""
 
+## 決着を付けた敵がプレイヤーと一度でも接触したか。撃破ボーナスの寄与判定に使う:
+## 死因がwall/drainでも、プレイヤーに一度も触れないまま壁や同士討ちで勝手に果てた
+## 敵は「接触で仕留めた」勝ちではない(受け身の「待てば自滅」まで撃破+1.0で
+## 報われていた)。リゾルバが勝ち分岐で必ず記録する事実。既定はtrue=接触あり扱いで、
+## この記録を持たない旧dict・手組みの結果は従来どおり死因だけで判定される。
+var loser_hit_by_player: bool = true
+
 ## プレイヤーが機構ごとに失ったrpsの内訳:
 ## {"drain": 衝突削り, "wall": 壁/障害物, "decay": 自然減衰, "wall_hits": 壁回数}。
 ## 死因ラベルは支配的な1機構しか語らないため、敗因分析にはこちらの量を使う。
@@ -113,10 +120,11 @@ func player_won() -> bool:
 
 
 ## 勝利が「接触(衝突削り/壁への弾き飛ばし)で決まった」なら真。敵の自然減衰を
-## 待っただけの勝ち("decay")と区別し、当てにいった勝ちに撃破ボーナス
+## 待っただけの勝ち("decay")と、決着を付けた敵に一度も触れないまま敵が勝手に
+## 果てた勝ち(壁自滅・同士討ち)を除き、当てにいった勝ちに撃破ボーナス
 ## (SpinnerStats.KNOCKOUT_RPS_GROWTH)を与えるための判定。
 func finished_by_knockout() -> bool:
-	return player_won() and loser_death_cause in ["drain", "wall"]
+	return player_won() and loser_death_cause in ["drain", "wall"] and loser_hit_by_player
 
 
 func duration() -> float:
@@ -165,6 +173,7 @@ func to_dict() -> Dictionary:
 		"ghost_duration": ghost_duration,
 		"ghost_start": ghost_start,
 		"loser_death_cause": loser_death_cause,
+		"loser_hit_by_player": loser_hit_by_player,
 		"player_rps_loss": player_rps_loss,
 		"enemy_rps_loss": enemy_rps_loss,
 		"player_death": player_death,
@@ -196,6 +205,9 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.ghost_duration = d.get("ghost_duration", 0.0)
 	r.ghost_start = d.get("ghost_start", -1.0)
 	r.loser_death_cause = d.get("loser_death_cause", "")
+	# 旧dictにこのキーは無い。true=接触あり扱いで読み、当時の結果の撃破判定を
+	# 当時のまま(死因だけで決まる)再現する。
+	r.loser_hit_by_player = d.get("loser_hit_by_player", true)
 	r.player_rps_loss = d.get("player_rps_loss", {})
 	r.enemy_rps_loss = d.get("enemy_rps_loss", [])
 	r.player_death = d.get("player_death", {})

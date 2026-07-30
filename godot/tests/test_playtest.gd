@@ -29,6 +29,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_stop_text(check)
 	_test_naive_play_ghost_text(check)
 	_test_naive_play_victory_text(check)
+	_test_naive_play_no_contact_note(check)
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
@@ -876,6 +877,49 @@ func _test_naive_play_ghost_text(check: Callable) -> void:
 		check.call(
 			"ゴースト発動" in NaivePlay.ghost_text(result),
 			"naive_play: 実結果でも初衝突があれば発動行が出る")
+
+
+## 接触ゼロ勝利の注記。死因が接触系(wall/drain)なのに撃破ボーナスが付かない勝ちで
+## 「なぜ+0.5なのか」が読めるように、自滅の事実を1行で明文化する。
+func _test_naive_play_no_contact_note(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	# 接触ゼロの壁自滅勝ち: 注記が出る。
+	var self_destruct := BattleResult.new()
+	self_destruct.outcome = BattleResult.Outcome.PLAYER_WIN
+	self_destruct.loser_death_cause = "wall"
+	self_destruct.loser_hit_by_player = false
+	var note: String = NaivePlay.no_contact_note(self_destruct)
+	check.call(
+		"接触ゼロ" in note and "撃破ボーナス対象外" in note,
+		"naive_play: 接触ゼロの壁自滅勝ちに自滅の注記が出る (%s)" % note)
+	# 同士討ちのdrain死も同様に出る。
+	self_destruct.loser_death_cause = "drain"
+	check.call(
+		NaivePlay.no_contact_note(self_destruct) != "",
+		"naive_play: 接触ゼロの同士討ち勝ちにも注記が出る")
+	# 接触して仕留めた勝ちには出ない。
+	var knockout := BattleResult.new()
+	knockout.outcome = BattleResult.Outcome.PLAYER_WIN
+	knockout.loser_death_cause = "wall"
+	knockout.loser_hit_by_player = true
+	check.call(
+		NaivePlay.no_contact_note(knockout) == "",
+		"naive_play: 接触で仕留めた勝ちに注記は出ない")
+	# 減衰待ちの勝ち(そもそも撃破対象外)と敗北にも出ない。
+	var decay_win := BattleResult.new()
+	decay_win.outcome = BattleResult.Outcome.PLAYER_WIN
+	decay_win.loser_death_cause = "decay"
+	decay_win.loser_hit_by_player = false
+	check.call(
+		NaivePlay.no_contact_note(decay_win) == "",
+		"naive_play: 減衰待ちの勝ちに注記は出ない")
+	var loss := BattleResult.new()
+	loss.outcome = BattleResult.Outcome.ENEMY_WIN
+	loss.loser_death_cause = "wall"
+	loss.loser_hit_by_player = false
+	check.call(
+		NaivePlay.no_contact_note(loss) == "",
+		"naive_play: 敗北に注記は出ない")
 
 
 ## 勝利成長の表示。上限到達で+0.0なのに「大きく成長」と祝う矛盾

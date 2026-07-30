@@ -40,6 +40,13 @@ class State:
 	var lost_decay: float = 0.0
 	var wall_hits: int = 0
 
+	## プレイヤーと一度でも衝突したか(敵にだけ意味を持つ。プレイヤー自身は常に偽)。
+	## 撃破ボーナスの寄与判定に使う事実: 死因がwall/drainでも、プレイヤーに一度も
+	## 触れないまま壁や同士討ちで勝手に果てた敵は「接触で仕留めた」とは呼ばない。
+	## resolve()のプレイヤー対敵ループが衝突を解いた瞬間に記録する
+	## (ゴースト窓で解かなかった衝突は接触していないので記録されない)。
+	var hit_by_player: bool = false
+
 	func _init(launch: BattleRequest.Launch) -> void:
 		stats = launch.stats
 		position = launch.position
@@ -96,6 +103,7 @@ static func resolve(request: BattleRequest) -> BattleResult:
 				and not ghost_blocks(t, ghost_start, request.ghost_duration)
 			):
 				if _resolve_disc_collision(player, enemies[i], request, t, result):
+					enemies[i].hit_by_player = true
 					if request.ghost_duration > 0.0 and ghost_start == INF:
 						ghost_start = t
 						result.ghost_start = t
@@ -132,13 +140,13 @@ static func resolve(request: BattleRequest) -> BattleResult:
 				# 敵を全滅させたのに残機を失うのは理不尽で、当てにいくプレイを報いる
 				# 方針(撃破ボーナス)とも逆行するため。DRAWは時間切れ同点にのみ残る。
 				result.outcome = BattleResult.Outcome.PLAYER_WIN
-				result.loser_death_cause = _decisive_enemy_cause(enemies)
+				_record_decisive_enemy(enemies, result)
 			elif player_out:
 				result.outcome = BattleResult.Outcome.ENEMY_WIN
 				result.loser_death_cause = player.death_cause
 			else:
 				result.outcome = BattleResult.Outcome.PLAYER_WIN
-				result.loser_death_cause = _decisive_enemy_cause(enemies)
+				_record_decisive_enemy(enemies, result)
 			return result
 
 	# 上限に達した。自然減衰があるので普通は来ないが、調整次第では
@@ -188,16 +196,20 @@ static func _dominant_cause(s: State, final_cause: String) -> String:
 	return best
 
 
-## 勝敗を決めた(=最後に力尽きた)敵の死因。乱戦では途中で落ちた敵ではなく、
-## 決着を付けた最後の1体で判定する。
-static func _decisive_enemy_cause(enemies: Array[State]) -> String:
-	var cause := ""
+## 勝敗を決めた(=最後に力尽きた)敵の事実(死因と、プレイヤーとの接触の有無)を
+## 結果へ写す。乱戦では途中で落ちた敵ではなく、決着を付けた最後の1体で判定する。
+## 撃破ボーナス(finished_by_knockout)はこの2つの事実に懸かる: 死因が接触系
+## (drain/wall)でも、その敵に一度も触れていなければ「接触で仕留めた」勝ちではない。
+static func _record_decisive_enemy(enemies: Array[State], result: BattleResult) -> void:
+	var decisive: State = null
 	var latest := -INF
 	for enemy in enemies:
 		if enemy.death_cause != "" and enemy.death_time > latest:
 			latest = enemy.death_time
-			cause = enemy.death_cause
-	return cause
+			decisive = enemy
+	if decisive != null:
+		result.loser_death_cause = decisive.death_cause
+		result.loser_hit_by_player = decisive.hit_by_player
 
 
 static func _integrate(s: State, center: Vector2, req: BattleRequest, dt: float) -> void:
