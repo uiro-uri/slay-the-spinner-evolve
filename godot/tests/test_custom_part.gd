@@ -560,6 +560,27 @@ func _test_rage(check: Callable) -> void:
 		"怒りの反射: 壁rps保持の上限は1.0未満(完全無損失=無敵化を防ぐ) (%.2f)" % CustomPartCatalog.RAGE_WALL_KEEP_MAX
 	)
 
+	# 説明が訳されていること(キーが素で出ていない)と、価値逆転の注記があること。
+	# 壁被弾がほぼ無い序盤に効果文だけ読むと死に効果に見えるが、終盤は壁での
+	# rps喪失が削りに並ぶ〜上回る(ボス戦で壁20.0 vs 削り12.0)。「いつ効くか」を
+	# 謳わないと初見が正しく損をする(コールドプレイで序盤2回見送りの一次証拠)。
+	TranslationServer.set_locale("ja")
+	check.call(
+		not rage.describe().contains("PART_EFFECT") and not rage.describe().contains("PART_NOTE"),
+		"怒りの反射: 説明に訳がある (%s)" % rage.describe()
+	)
+	check.call(
+		rage.describe().contains("終盤") and rage.describe().contains("壁"),
+		"怒りの反射: ja注記が終盤の壁喪失に触れる (%s)" % rage.describe()
+	)
+	TranslationServer.set_locale("en")
+	var rage_en := rage.describe().to_lower()
+	check.call(
+		rage_en.contains("late") and rage_en.contains("wall"),
+		"怒りの反射: en注記が終盤(late)と壁(wall)に触れる (%s)" % rage_en
+	)
+	TranslationServer.set_locale("ja")
+
 
 ## 巨大化(GROWTH)札。直径と質量の両方が上がる複合。直径だけ(旧GIANT_GROWTH)は
 ## 自然減衰の悪化が上回る唯一の純マイナス札=罠だったので、質量で釣り合わせた。

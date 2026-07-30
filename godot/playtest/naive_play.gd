@@ -523,7 +523,10 @@ static func card_text(c: CustomPart) -> String:
 		CustomPart.Effect.RAGE:
 			# wall_keepは割合なので%で出す(下の%表記の判断と同じ。実UIは数値なしの
 			# 「壁でrpsを失いにくい」だけで、CLIの方が情報は多い)。
-			return "反発 ×%.2f(上限%.2f)・壁でのrps喪失を%.0f%%軽減(重ねて最大%.0f%%) [RAGE]" % [
+			# 実UI(describe)と同じ価値逆転の注記を出す。壁被弾ゼロの序盤に読むと
+			# 死に効果に見えるが、終盤は壁喪失が削りに並ぶ(効果文だけで選ぶ
+			# コールドプレイが序盤に2回見送り、段5以降の壁喪失11〜17に泣いた)。
+			return "反発 ×%.2f(上限%.2f)・壁でのrps喪失を%.0f%%軽減(重ねて最大%.0f%%)・序盤は地味だが終盤は壁での喪失が削りに並ぶ、後半ほど効く [RAGE]" % [
 				c.multiplier, c.cap, c.wall_keep_step * 100.0, c.wall_keep_max * 100.0]
 		CustomPart.Effect.GUARD:
 			# 実UI(describe)と同じ%表記。生の「+0.17」は加算札の「回転+3.0」と並ぶと

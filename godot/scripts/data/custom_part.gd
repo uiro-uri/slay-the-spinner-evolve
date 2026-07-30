@@ -468,8 +468,14 @@ func describe() -> String:
 	if effect == Effect.MOMENTUM:
 		return tr("PART_EFFECT_MOMENTUM").format([_trim(multiplier)]) + "\n" + tr("PART_NOTE_MOMENTUM")
 	# 怒りの反射は反発倍率と壁rps保持の複合。両方を埋めた専用の説明を返す。
+	# 挙動注記(価値の逆転)を必ず添える——壁被弾がほぼ無い序盤に読むと死に効果に
+	# 見えるが、終盤は壁でのrps喪失が削りに並ぶ〜上回る(ボス戦で壁20.0 vs 削り12.0、
+	# コールドプレイでは序盤に2回見送った札の価値が段5以降に逆転した一次証拠)。
 	if effect == Effect.RAGE:
-		return tr("PART_EFFECT_RAGE").format([_trim(multiplier), _trim(cap)])
+		return (
+			tr("PART_EFFECT_RAGE").format([_trim(multiplier), _trim(cap)])
+			+ "\n" + tr("PART_NOTE_RAGE")
+		)
 	# 衝撃吸収は軽減率を%で見せる(0.17より17%の方が読める)。上限も%で併記する。
 	if effect == Effect.GUARD:
 		return tr("PART_EFFECT_GUARD").format(
