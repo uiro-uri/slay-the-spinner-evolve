@@ -33,6 +33,7 @@ const LAND_ARENA_POS := Vector2(390.0, 110.0)
 const LAND_ARENA_SCALE := Vector2(50.0, 50.0)
 const LAND_MESSAGE_RECT := Rect2(390.0, 300.0, 500.0, 60.0)
 const LAND_LOSS_RECT := Rect2(390.0, 360.0, 500.0, 40.0)
+const LAND_GROWTH_RECT := Rect2(390.0, 400.0, 500.0, 40.0)
 const LAND_BARS_RECT := Rect2(390.0, 622.0, 500.0, 60.0)
 
 ## アリーナの1辺(10ユニット×既定スケール50=500px)。当てはめの基準。
@@ -203,6 +204,11 @@ const BAR_ROW_H := 60.0
 ## 見えないので、リザルトで毎回事実を見せる。文言の組み立てはRpsLossTextに委譲。
 ## 動的生成(敵HPバーと同じ流儀)なのでtscnには居ない。
 var _loss_label: Label = null
+
+## 決着時に内訳の下へ出す、勝利成長(撃破ボーナス)の行。CLIでは見えていた
+## 「接触で仕留めた勝ちは大きく育つ」が実UIでは無言だったのを事実として見せる。
+## 文言の組み立てはVictoryGrowthTextに委譲。こちらも動的生成なのでtscnには居ない。
+var _growth_label: Label = null
 @onready var _bars: VBoxContainer = $UI/Bars
 @onready var _player_bar: ProgressBar = $UI/Bars/PlayerBar
 
@@ -270,6 +276,18 @@ func _ready() -> void:
 	_loss_label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
 	$UI.add_child(_loss_label)
 
+	# 勝利成長の行は内訳の直下。決着までは空文字で見えない。色は決着時に
+	# 撃破ボーナスかどうかで決める(既定は通常テキスト色)。
+	_growth_label = Label.new()
+	_growth_label.text = ""
+	_growth_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_growth_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_growth_label.add_theme_font_size_override("font_size", 20)
+	_growth_label.add_theme_color_override("font_color", Palette.TEXT_PRIMARY)
+	_growth_label.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
+	_growth_label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
+	$UI.add_child(_growth_label)
+
 	# プレイヤーのコマ色もPalette由来にする(tscnのリテラルではなくここが権威)。
 	# 本体グラデーションはプレイヤー=明側へ振る。
 	_player.body_color = Palette.PLAYER
@@ -321,6 +339,7 @@ func _recompute_layout() -> void:
 		_record_arena_base()
 		_set_rect(_message, LAND_MESSAGE_RECT)
 		_set_rect(_loss_label, LAND_LOSS_RECT)
+		_set_rect(_growth_label, LAND_GROWTH_RECT)
 		_set_rect(_bars, LAND_BARS_RECT)
 		return
 
@@ -341,6 +360,15 @@ func _recompute_layout() -> void:
 	_set_rect(
 		_loss_label,
 		Rect2(top_left.x, top_left.y + arena_px * 0.4 + BAR_ROW_H, arena_px, LAND_LOSS_RECT.size.y)
+	)
+	_set_rect(
+		_growth_label,
+		Rect2(
+			top_left.x,
+			top_left.y + arena_px * 0.4 + BAR_ROW_H + LAND_LOSS_RECT.size.y,
+			arena_px,
+			LAND_GROWTH_RECT.size.y
+		)
 	)
 	# バーはアリーナ直下、幅いっぱい。
 	_set_rect(_bars, Rect2(top_left.x, top_left.y + arena_px + BAND_GAP, arena_px, BAR_ROW_H))
@@ -535,6 +563,7 @@ func _begin(player_pos: Vector2, player_vel: Vector2) -> void:
 		telegraph.hide_plan()
 	_message.text = ""
 	_loss_label.text = ""
+	_growth_label.text = ""
 	start(player_pos, player_vel)
 
 
@@ -797,6 +826,20 @@ func _finish() -> void:
 	# 自動翻訳は素通りする(キーが無ければそのまま表示される)のが意図どおり。
 	_loss_label.text = RpsLossText.summary_line(_result.player_rps_loss)
 
+	# 内訳の下に、この勝ちで回転がどれだけ育つかを出す。適用はMainがfinished後に
+	# 行うが、同じgrow_rps_by_victoryを複製へ当てるので表示と適用は必ず同額。
+	# ボス(ゴール)は成長せずクリア画面へ直行するので出さない(Mainと同じ分岐)。
+	# 撃破ボーナス(接触で仕留めた勝ち)は金色で、当てにいく遊びの報酬だと分かるように。
+	_growth_label.text = ""
+	if player_won and not _is_goal_battle():
+		var knockout := _result.finished_by_knockout()
+		var preview := _player.stats.duplicate_stats()
+		var gained := preview.grow_rps_by_victory(knockout)
+		_growth_label.text = VictoryGrowthText.growth_line(knockout, gained, preview.rps)
+		_growth_label.add_theme_color_override(
+			"font_color", Palette.GOLD_CARD if knockout else Palette.TEXT_PRIMARY
+		)
+
 	# 力尽きたコマは即グレーアウトさせず、最後の姿を一拍見せてからフェードで消す。
 	var fade := _start_defeated_fadeout()
 
@@ -805,6 +848,12 @@ func _finish() -> void:
 	if fade != null and fade.is_valid() and fade.is_running():
 		await fade.finished
 	finished.emit(player_won, _result.finished_by_knockout())
+
+
+## この戦闘がボス(ゴール)戦か。ボス勝利は成長せずクリア画面へ直行するので、
+## 成長行を出すと嘘になる。ランの外(Battle.tscn単体調整)はmap_treeが無いので偽。
+func _is_goal_battle() -> bool:
+	return GameState.map_tree != null and GameState.map_tree.is_goal()
 
 
 ## 勝敗ジングルを result_se_delay 秒だけ遅らせて鳴らす。ここで戦闘の流れ(_finish)は
