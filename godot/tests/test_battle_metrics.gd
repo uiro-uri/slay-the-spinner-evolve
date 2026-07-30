@@ -14,6 +14,63 @@ func run(check: Callable) -> void:
 	_test_momentum_decay_death(check)
 	_test_rage_wall_death(check)
 	_test_default_drain_death(check)
+	_test_fact_over_signature(check)
+	_test_signature_fallback_for_old_result(check)
+
+
+## 支配的死因と最後の一滴がずれる戦い(強打で大半を削り、残りを減衰が落とす)では、
+## 署名照合(最後の一滴=decay)でなくリゾルバの記録した事実(drain)が優先される。
+## これが無いとレポートの死因内訳が壁・削りの寄与を隠す(死因分類の壁過小計上)。
+func _mismatch_request() -> BattleRequest:
+	var r := BattleRequest.new()
+	r.stage_strength = 0.0
+	var estats := SpinnerStats.new()
+	estats.mass = 1.0
+	estats.radius = 0.5
+	estats.friction = 3.0
+	estats.restitution = 1.0
+	estats.rps = 3.0
+	r.player = BattleRequest.Launch.new(SpinnerStats.default_player(), Vector2(3, 5), Vector2(6, 0))
+	r.enemies = [BattleRequest.Launch.new(estats, Vector2(5.5, 5), Vector2.ZERO)]
+	return r
+
+
+func _test_fact_over_signature(check: Callable) -> void:
+	var r := _mismatch_request()
+	var result := BattleResolver.resolve(r)
+	var m := BattleMetrics.classify(r, result)
+
+	check.call(result.player_won(), "事実優先: プレイヤーが勝つ")
+	check.call(
+		result.loser_death_cause == "drain",
+		"事実優先: リゾルバは支配的なdrainを記録している (%s)" % result.loser_death_cause
+	)
+	check.call(
+		m.get("death_cause") == "drain",
+		"事実優先: classifyが署名(最後の一滴=decay)でなく事実のdrainを返す (%s)"
+			% str(m.get("death_cause"))
+	)
+	check.call(
+		m.get("death_cause") == result.loser_death_cause,
+		"事実優先: 推定とリゾルバの記録が一致する (%s / %s)"
+			% [str(m.get("death_cause")), result.loser_death_cause]
+	)
+
+
+## 停止事実キーの無い旧結果(dict往復で欠落)では従来の署名照合に落ちる(後方互換)。
+func _test_signature_fallback_for_old_result(check: Callable) -> void:
+	var r := _mismatch_request()
+	var d := BattleResolver.resolve(r).to_dict()
+	d.erase("player_death")
+	d.erase("enemy_deaths")
+	var old := BattleResult.from_dict(d)
+	var m := BattleMetrics.classify(r, old)
+
+	check.call(
+		m.get("death_cause") == "decay",
+		"旧結果互換: 事実が無ければ署名照合(最後の一滴=decay)で読める (%s)"
+			% str(m.get("death_cause"))
+	)
 
 
 ## spin_decay<1 のプレイヤーが接触ゼロで自然減衰死 → 死因は decay、被弾は 0。

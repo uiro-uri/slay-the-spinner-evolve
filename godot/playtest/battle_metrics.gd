@@ -1,8 +1,11 @@
 class_name BattleMetrics
 extends RefCounted
 
-## 敗者がどう死んだかを、rpsの時系列だけから分類する。純粋な静的関数で、
-## Nodeにもシーンにも依存しない(invariants.gd と同型)。
+## 敗者の死に方を1レコードにまとめる。純粋な静的関数で、Nodeにもシーンにも
+## 依存しない(invariants.gd と同型)。死因はリゾルバが記録した事実
+## (BattleResult.player_death/enemy_deaths、最も多くrpsを奪った機構)を優先し、
+## 事実キーの無い旧結果だけrps時系列の署名照合で推定する。被弾数などの
+## 衝突クラスタの計数は引き続き時系列から数える。
 ##
 ## 「衝突1回で終わる」がどのコマに・どれくらいの頻度で起きているかを測るための
 ## 計測。BattleResult.impacts は衝突回数を数えるが、誰同士かを区別しないうえ、
@@ -33,11 +36,13 @@ static func classify(request: BattleRequest, result: BattleResult) -> Dictionary
 	var frames: Array[BattleResult.Snapshot]
 	var stats: SpinnerStats
 	var who: String
+	var fact: Dictionary = {}
 	if result.outcome == BattleResult.Outcome.ENEMY_WIN:
 		# プレイヤーが力尽きた。
 		frames = result.player_frames
 		stats = request.player.stats
 		who = "player"
+		fact = result.player_death
 	else:
 		# プレイヤーの勝ち。最後に力尽きた敵(＝最終rpsが最小の敵)を敗者とする。
 		var idx := _lowest_final_enemy(result)
@@ -46,8 +51,13 @@ static func classify(request: BattleRequest, result: BattleResult) -> Dictionary
 		frames = result.enemy_tracks[idx]
 		stats = request.enemies[idx].stats
 		who = "enemy"
+		if idx < result.enemy_deaths.size():
+			fact = result.enemy_deaths[idx]
 
-	return _classify_track(request, frames, stats, who, result.wall_impacts)
+	return _classify_track(
+		request, frames, stats, who, result.wall_impacts,
+		String(fact.get("cause", ""))
+	)
 
 
 static func _lowest_final_enemy(result: BattleResult) -> int:
@@ -64,9 +74,14 @@ static func _lowest_final_enemy(result: BattleResult) -> int:
 	return best
 
 
+## fact_cause はリゾルバが記録した敗者の死因(player_death/enemy_deaths)。
+## 死因は「最も多くrpsを奪った機構」の事実で、空でなければ署名照合の推定より
+## これを優先する(最後の一滴の署名では壁で大半を失った死が"decay"に化けるため)。
+## 空(=事実キーの無い旧結果)のときだけ従来の署名照合にフォールバックする。
 static func _classify_track(
 	request: BattleRequest, frames: Array[BattleResult.Snapshot],
-	stats: SpinnerStats, who: String, wall_impacts: Array[BattleResult.Impact]
+	stats: SpinnerStats, who: String, wall_impacts: Array[BattleResult.Impact],
+	fact_cause: String = ""
 ) -> Dictionary:
 	var dt := request.time_step
 	# リゾルバが実際に適用する式と同じ実効値で照合する(battle_resolver.gd参照)。
@@ -131,7 +146,7 @@ static func _classify_track(
 
 	return {
 		"loser": who,
-		"death_cause": death_cause,
+		"death_cause": fact_cause if fact_cause != "" else death_cause,
 		"hits_taken": hits_taken,
 		"wall_hits": wall_hits,
 		"fatal_hit_index": fatal_hit_index,

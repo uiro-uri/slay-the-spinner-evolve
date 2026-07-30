@@ -26,16 +26,15 @@ class State:
 	## 積分・自然減衰・軌跡の記録だけは続ける(そのまま止まってフェードアウトさせる)。
 	var alive: bool = true
 
-	## 初めてrpsが閾値を割った瞬間の原因("drain"/"wall"/"decay")と時刻。
-	## 未死亡は空文字と-1。各機構がrpsを減らした直後に_mark_if_deadで確定する。
+	## 初めてrpsが閾値を割った瞬間に確定する死因("drain"/"wall"/"decay")と時刻。
+	## 死因は閾値を割らせた最後の一滴でなく「最も多くrpsを奪った機構」で分類する
+	## (_dominant_cause)。未死亡は空文字と-1。
 	var death_cause: String = ""
 	var death_time: float = -1.0
 
 	## 機構ごとに実際に失ったrpsの累計と、壁・障害物にぶつかった回数。
-	## death_causeは「閾値を割った最後の一撃」しか語らないため、壁で6割削られて
-	## 最後の一滴が自然減衰だと死因が"decay"になり、敗因分析が壁を見落とす
-	## (実際にコールドプレイの一次証拠がこれで壊れた)。内訳は事実として
-	## ここで数え、BattleResultに載せて表示側が使う。
+	## 死因分類(_dominant_cause)と、BattleResultに載せる敗因分析の内訳の
+	## 両方がこの事実を使う。
 	var lost_drain: float = 0.0
 	var lost_wall: float = 0.0
 	var lost_decay: float = 0.0
@@ -165,13 +164,28 @@ static func _snapshot(s: State) -> BattleResult.Snapshot:
 
 
 ## rpsを減らす各機構(衝突削り/壁・障害物/自然減衰)が、減らした直後に呼ぶ。
-## 初めて閾値を割った瞬間の原因と時刻だけを確定する(以後は上書きしない)。
+## 初めて閾値を割った瞬間の死因と時刻だけを確定する(以後は上書きしない)。
 ## 敗者の死因が「接触で決まった」か「自然減衰待ちだった」かは撃破ボーナス
 ## (SpinnerStats.grow_rps_by_victory)の判定に使うので、推定でなくここで記録する。
-static func _mark_if_dead(s: State, cause: String, req: BattleRequest, t: float) -> void:
+static func _mark_if_dead(s: State, final_cause: String, req: BattleRequest, t: float) -> void:
 	if s.death_cause == "" and s.rps <= req.lose_threshold:
-		s.death_cause = cause
+		s.death_cause = _dominant_cause(s, final_cause)
 		s.death_time = t
+
+
+## 死因の分類: そのコマから最も多くrpsを奪った機構。閾値を割らせた最後の一滴
+## (final_cause)で分類すると、壁や削りで大半を失った死が最後の微小な自然減衰で
+## "decay"になり、敗因分析と撃破ボーナスの両方が実態とずれる(壁9回で削られた敵の
+## 死因が「減衰」と出る一次証拠がコールドプレイで繰り返し出た)。逆に、減衰待ちの
+## 末の最後の一撫でを「接触で仕留めた」と呼ばないのも同じ規則から出る。
+## 同率(1機構しか働いていない場合を含む)は最後の一滴の機構に倒す=従来と一致。
+static func _dominant_cause(s: State, final_cause: String) -> String:
+	var losses := {"drain": s.lost_drain, "wall": s.lost_wall, "decay": s.lost_decay}
+	var best := final_cause
+	for cause in losses:
+		if losses[cause] > losses[best]:
+			best = cause
+	return best
 
 
 ## 勝敗を決めた(=最後に力尽きた)敵の死因。乱戦では途中で落ちた敵ではなく、
