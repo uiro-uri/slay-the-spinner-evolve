@@ -1,0 +1,106 @@
+extends RefCounted
+
+## victory_growth_text.gd のテスト。決着リザルトに出す「勝利で回転がどれだけ育つか」の
+## 行が、実際の成長(SpinnerStats.grow_rps_by_victory)と食い違わないことを固定する。
+##
+## 見た目(位置・色)は静止画で確かめられない(CLAUDE.mdの方針)ので、ここでは
+## 数値の転記・上限での正直表示・訳の存在・実成長との一致・Battle側の配線という、
+## レイアウトを手触りで変えても生き残る性質だけを固定する。
+
+
+func run(check: Callable) -> void:
+	var saved_locale := TranslationServer.get_locale()
+	_test_values_appear(check)
+	_test_capped_is_honest(check)
+	_test_locales(check)
+	_test_matches_real_growth(check)
+	_test_battle_wires_label(check)
+	_test_knockout_color_readable(check)
+	TranslationServer.set_locale(saved_locale)
+
+
+## 成長量と成長後rpsが行に転記され、撃破ボーナスと通常勝利で文言が分かれる。
+func _test_values_appear(check: Callable) -> void:
+	TranslationServer.set_locale("ja")
+	var ko := VictoryGrowthText.growth_line(true, 1.0, 16.0)
+	check.call(ko.contains("1.0"), "撃破: 成長+1.0が出る: %s" % ko)
+	check.call(ko.contains("16.0"), "撃破: 成長後16.0が出る: %s" % ko)
+	check.call(ko.contains("撃破ボーナス"), "撃破: ボーナスだと分かる: %s" % ko)
+
+	var passive := VictoryGrowthText.growth_line(false, 0.5, 16.5)
+	check.call(passive.contains("0.5"), "通常: 成長+0.5が出る: %s" % passive)
+	check.call(passive.contains("16.5"), "通常: 成長後16.5が出る: %s" % passive)
+	check.call(not passive.contains("撃破ボーナス"), "通常: 撃破ボーナスを名乗らない: %s" % passive)
+
+
+## 上限到達(表示丸めで+0.0)の成長は「頭打ち」と正直に言い、+0.0を成長と呼ばない。
+## 閾値はCLI(naive_play.victory_text)と同じ0.05で、丸め表示との食い違いを防ぐ。
+func _test_capped_is_honest(check: Callable) -> void:
+	TranslationServer.set_locale("ja")
+	var ko := VictoryGrowthText.growth_line(true, 0.0, 40.0)
+	check.call(ko.contains("頭打ち"), "撃破+上限: 頭打ちと言う: %s" % ko)
+	check.call(ko.contains("撃破ボーナス"), "撃破+上限: 接触で仕留めた事実は残す: %s" % ko)
+	check.call(not ko.contains("+0.0"), "撃破+上限: +0.0を出さない: %s" % ko)
+
+	var passive := VictoryGrowthText.growth_line(false, 0.0, 40.0)
+	check.call(passive.contains("頭打ち"), "通常+上限: 頭打ちと言う: %s" % passive)
+	check.call(not passive.contains("撃破ボーナス"), "通常+上限: ボーナスを名乗らない: %s" % passive)
+
+	var boundary := VictoryGrowthText.growth_line(true, 0.04, 40.0)
+	check.call(boundary.contains("頭打ち"), "丸めで+0.0になる0.04も頭打ち扱い: %s" % boundary)
+
+
+## 両言語に訳があり、キーが素通りしない(訳抜けならキーがそのまま出て気付ける)。
+func _test_locales(check: Callable) -> void:
+	TranslationServer.set_locale("en")
+	var ko := VictoryGrowthText.growth_line(true, 1.0, 16.0)
+	check.call(ko.containsn("knockout"), "en撃破: 'knockout'を含む: %s" % ko)
+	check.call(not ko.contains("BATTLE_GROWTH_KNOCKOUT"), "en撃破: キーが素通りしていない: %s" % ko)
+	var capped := VictoryGrowthText.growth_line(false, 0.0, 40.0)
+	check.call(capped.containsn("cap"), "en上限: 'cap'を含む: %s" % capped)
+	check.call(not capped.contains("BATTLE_GROWTH_CAPPED"), "en上限: キーが素通りしていない: %s" % capped)
+
+
+## 実際の成長関数に複製を通した値で行を作ると、適用される成長と数字が一致する。
+## (Battle._finishはこの手順で表示するので、ここが通れば表示=適用が保たれる)
+func _test_matches_real_growth(check: Callable) -> void:
+	TranslationServer.set_locale("ja")
+	var stats := SpinnerStats.default_player()
+	stats.rps = 15.0
+	var preview := stats.duplicate_stats()
+	var gained := preview.grow_rps_by_victory(true)
+	var line := VictoryGrowthText.growth_line(true, gained, preview.rps)
+	check.call(line.contains("%.1f" % gained), "実成長の増分がそのまま出る: %s" % line)
+	check.call(line.contains("%.1f" % preview.rps), "実成長後のrpsがそのまま出る: %s" % line)
+
+	var capped_stats := stats.duplicate_stats()
+	capped_stats.rps = SpinnerStats.RPS_CAP
+	var capped_preview := capped_stats.duplicate_stats()
+	var capped_gain := capped_preview.grow_rps_by_victory(true)
+	var capped_line := VictoryGrowthText.growth_line(true, capped_gain, capped_preview.rps)
+	check.call(capped_line.contains("頭打ち"), "上限rpsの実成長0は頭打ち表示になる: %s" % capped_line)
+
+
+## Battle.gdが成長行をこのヘルパーで組み立て、発射時に消している(配線の退行検知)。
+func _test_battle_wires_label(check: Callable) -> void:
+	var source := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
+	check.call(
+		source.contains("VictoryGrowthText.growth_line("),
+		"Battle.gdが成長行をVictoryGrowthTextで組み立てる"
+	)
+	check.call(
+		source.contains("_growth_label.text = \"\""),
+		"Battle.gdが成長行をクリアする経路を持つ"
+	)
+	check.call(
+		source.contains("grow_rps_by_victory("),
+		"Battle.gdが表示額を実成長関数(複製適用)から得る"
+	)
+
+
+## 撃破ボーナスの金色文字が、出る場所(土俵の床の上)で読めるコントラストを持つ。
+func _test_knockout_color_readable(check: Callable) -> void:
+	var vs_floor := ColorContrast.ratio(Palette.GOLD_CARD, Palette.FLOOR)
+	check.call(vs_floor >= 4.5, "金色は床に対しWCAG AA(4.5)以上: %.2f" % vs_floor)
+	var vs_outline := ColorContrast.ratio(Palette.GOLD_CARD, Palette.TEXT_OUTLINE)
+	check.call(vs_outline >= 4.5, "金色は縁取りに対しWCAG AA(4.5)以上: %.2f" % vs_outline)

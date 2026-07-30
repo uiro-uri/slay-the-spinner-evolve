@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "wallimpact", "bitefloor", "mutualdrain", "sparkscale", "battledefaults"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "bitefloor", "mutualdrain", "sparkscale", "battledefaults"
 ]
 
 
@@ -160,6 +160,9 @@ func _init() -> void:
 
 	print("== losstext ==")
 	_test_loss_text()
+
+	print("== growthtext ==")
+	_test_growth_text()
 
 	print("== battledefaults ==")
 	_test_battle_defaults()
@@ -508,6 +511,12 @@ func _test_loss_text() -> void:
 	var suite = load("res://tests/test_rps_loss_text.gd").new()
 	suite.run(_check)
 	_done("losstext")
+
+
+func _test_growth_text() -> void:
+	var suite = load("res://tests/test_victory_growth_text.gd").new()
+	suite.run(_check)
+	_done("growthtext")
 
 
 func _test_battle_defaults() -> void:

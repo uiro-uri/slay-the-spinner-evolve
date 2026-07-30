@@ -18,6 +18,10 @@ BATTLE_WIN,You Win!,勝利!
 BATTLE_LOSE,You Lose...,敗北...
 BATTLE_DRAW,Draw,引き分け
 BATTLE_RPS_LOSS_BREAKDOWN,Spin lost — clash {0} / wall {1} (x{2}) / decay {3},失った回転 — 削り{0} / 壁{1}({2}回) / 減衰{3}
+BATTLE_GROWTH_KNOCKOUT,Knockout bonus! Spin +{0} → {1},撃破ボーナス! 接触で仕留めて回転 +{0} → {1}
+BATTLE_GROWTH_VICTORY,Victory — spin +{0} → {1},勝利の勢いで回転 +{0} → {1}
+BATTLE_GROWTH_KNOCKOUT_CAPPED,Knockout bonus — but spin is capped at {0},撃破ボーナス — だが回転は上限{0}で頭打ち
+BATTLE_GROWTH_CAPPED,Spin at cap {0} — no growth,回転は上限{0}で頭打ち・成長なし
 GAMEOVER_TITLE,GAME OVER,ゲームオーバー
 GAMEOVER_CONTINUE,Continue,コンティニュー
 GAMEOVER_GIVE_UP,Give Up,あきらめる
