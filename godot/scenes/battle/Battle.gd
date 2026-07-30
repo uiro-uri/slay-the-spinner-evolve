@@ -404,8 +404,9 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	_bars.add_child(bar)
 
 	# 発射速度は自機と共通のレンジから出現ごとに抽選する(位置・向きと同じ扱い)。
+	# 大型の敵は体格スケールの上限(LaunchSpeed.max_for_radius)で暴発を抑える。
 	# EnemyTelegraphがplan.velocityをそのまま予告するので、速度も自動で予告される。
-	var speed := LaunchSpeed.random(rng)
+	var speed := LaunchSpeed.random(rng, disc.stats.radius)
 
 	# 発射前の表示が重ならないよう、プレイヤーの初期位置と既に決めた敵の位置を
 	# 除け所として渡す。min_gapはコマの縁同士がspawn_clearanceだけ空く距離。

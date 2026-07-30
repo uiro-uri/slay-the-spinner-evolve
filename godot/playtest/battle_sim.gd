@@ -76,7 +76,7 @@ static func play_one(
 		# 発射速度は実ゲーム(Battle._spawn_enemy)と同じく共通レンジから出現ごとに抽選。
 		# 柱(障害物)の除けも実ゲームと同じ。
 		var plan := EnemySpawn.plan(
-			field.center(), SPAWN_RING, LaunchSpeed.random(rng),
+			field.center(), SPAWN_RING, LaunchSpeed.random(rng, enemy.stats.radius),
 			SPAWN_SPREAD_DEG, rng, enemy.stats.radius, field.inradius(),
 			[], 0.0, field.obstacles
 		)
