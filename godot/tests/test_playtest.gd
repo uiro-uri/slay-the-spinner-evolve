@@ -362,6 +362,11 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	check.call("17%" in rage_text and "50%" in rage_text,
 		"naive_play: RAGE札の壁軽減は%%表記 (%s)" % rage_text)
 	check.call(not ("0.17" in rage_text), "naive_play: RAGE札に生の小数を出さない (%s)" % rage_text)
+	# 価値逆転(いつ効くか)も謳うこと。発見の経緯: 壁被弾ほぼゼロの序盤に効果文だけ
+	# 読んで2回見送り、段5以降は壁喪失11〜17が支配的になって僅差負けした
+	# (終盤はボス戦で壁20.0 vs 削り12.0と、壁が削りを上回ることさえある)。
+	check.call("終盤" in rage_text and "壁" in rage_text,
+		"naive_play: RAGE札は価値逆転(終盤は壁喪失が膨らむ)も謳う (%s)" % rage_text)
 	var momentum := CustomPartCatalog.by_id(5)    # MOMENTUM(摩擦+回転減衰)
 	var momentum_text: String = NaivePlay.card_text(momentum)
 	check.call("回転減衰" in momentum_text, "naive_play: MOMENTUM札は回転減衰を謳う (%s)" % momentum_text)
