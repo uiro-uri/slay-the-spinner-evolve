@@ -82,14 +82,15 @@ var ghost_duration: float = 0.0
 var ghost_start: float = -1.0
 
 ## 敗者(決着を付けられた側)がどう力尽きたか: "drain"(衝突削り)・"wall"(壁/障害物)・
-## "decay"(自然減衰)。引き分け・時間切れは空文字。リゾルバが解決時に記録する
-## 事実で、軌跡からの推定(BattleMetrics)ではない。撃破ボーナスの判定に使う。
+## "decay"(自然減衰)。その敗者から最も多くrpsを奪った機構で分類する(閾値を割らせた
+## 最後の一滴で分類すると、壁で大半を失った死が最後の微小な減衰で"decay"に化ける)。
+## 引き分け・時間切れは空文字。リゾルバが解決時に記録する事実で、軌跡からの推定
+## (BattleMetrics)ではない。撃破ボーナスの判定に使う。
 var loser_death_cause: String = ""
 
 ## プレイヤーが機構ごとに失ったrpsの内訳:
 ## {"drain": 衝突削り, "wall": 壁/障害物, "decay": 自然減衰, "wall_hits": 壁回数}。
-## loser_death_causeは「閾値を割った最後の一撃」しか語らない(壁で大半を失っても
-## 最後の一滴が減衰なら"decay"になる)ため、敗因分析にはこちらの事実を使う。
+## 死因ラベルは支配的な1機構しか語らないため、敗因分析にはこちらの量を使う。
 ## drain+wall+decay = 初期rps - 最終rps。旧結果のdictには無いので空dictで互換。
 var player_rps_loss: Dictionary = {}
 

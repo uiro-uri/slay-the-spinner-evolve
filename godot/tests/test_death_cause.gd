@@ -7,6 +7,10 @@ extends RefCounted
 ## 遊びが報われない。その対策の撃破ボーナス(勝利成長の増額)は「接触で決着したか」
 ## の判定に懸かっているので、リゾルバが3つの死因(drain/wall/decay)を取り違えずに
 ## 記録することをここで固定する。各ケースは他の死因が起こり得ない理想環境を組む。
+##
+## 死因は「最も多くrpsを奪った機構」で分類する(_dominant_cause)。閾値を割らせた
+## 最後の一滴で分類すると、削りや壁で大半を失った死が最後の微小な減衰で"decay"に
+## 化け、敗因分析と撃破ボーナスが実態とずれる(コールドプレイの一次証拠あり)。
 
 const EPS := 1e-4
 
@@ -16,6 +20,9 @@ func run(check: Callable) -> void:
 	_test_drain_kill(check)
 	_test_wall_kill(check)
 	_test_player_loss(check)
+	_test_dominant_cause_unit(check)
+	_test_dominant_drain_over_final_decay(check)
+	_test_dominant_decay_over_final_drain(check)
 	_test_serialization(check)
 
 
@@ -127,6 +134,138 @@ func _test_player_loss(check: Callable) -> void:
 	check.call(
 		result.enemy_deaths.size() == 1 and result.enemy_deaths[0].is_empty(),
 		"停止事実(敗北): 生存した敵は空Dictionary (%s)" % str(result.enemy_deaths)
+	)
+
+
+## 分類規則そのもの(_mark_if_dead → _dominant_cause)の単体テスト。
+## 累計を直接組んで、最後の一滴と支配的機構がずれる全パターンを固定する。
+func _test_dominant_cause_unit(check: Callable) -> void:
+	var req := BattleRequest.new()
+
+	# 壁が支配的なのに最後の一滴が減衰 → wall。
+	var s := _dead_state(1.0, 6.0, 3.0)
+	BattleResolver._mark_if_dead(s, "decay", req, 1.0)
+	check.call(
+		s.death_cause == "wall",
+		"支配的死因: 壁が最大なら最後の一滴が減衰でもwall (%s)" % s.death_cause
+	)
+
+	# 削りが支配的なのに最後の一滴が減衰 → drain。
+	s = _dead_state(6.0, 1.0, 3.0)
+	BattleResolver._mark_if_dead(s, "decay", req, 1.0)
+	check.call(
+		s.death_cause == "drain",
+		"支配的死因: 削りが最大なら最後の一滴が減衰でもdrain (%s)" % s.death_cause
+	)
+
+	# 減衰が支配的なのに最後の一滴が削り(受け身の末の一撫で) → decay。
+	s = _dead_state(1.0, 0.0, 6.0)
+	BattleResolver._mark_if_dead(s, "drain", req, 1.0)
+	check.call(
+		s.death_cause == "decay",
+		"支配的死因: 減衰が最大なら最後の一撫ではdecay (%s)" % s.death_cause
+	)
+
+	# 同率は最後の一滴の機構に倒す(1機構だけの戦いは従来と厳密一致)。
+	s = _dead_state(2.0, 2.0, 2.0)
+	BattleResolver._mark_if_dead(s, "wall", req, 1.0)
+	check.call(
+		s.death_cause == "wall",
+		"支配的死因: 同率は最後の一滴に倒す (%s)" % s.death_cause
+	)
+
+	# 一度確定した死因は上書きされない。
+	s = _dead_state(6.0, 1.0, 0.0)
+	BattleResolver._mark_if_dead(s, "drain", req, 1.0)
+	s.lost_decay = 100.0
+	BattleResolver._mark_if_dead(s, "decay", req, 2.0)
+	check.call(
+		s.death_cause == "drain" and is_equal_approx(s.death_time, 1.0),
+		"支配的死因: 確定済みの死因と時刻は上書きされない (%s@%f)" % [s.death_cause, s.death_time]
+	)
+
+
+## rps0で機構別の累計だけを持つ死亡直後のState。
+func _dead_state(drain: float, wall: float, decay: float) -> BattleResolver.State:
+	var s := BattleResolver.State.new(
+		BattleRequest.Launch.new(_enemy_stats(10.0), Vector2.ZERO, Vector2.ZERO)
+	)
+	s.rps = 0.0
+	s.lost_drain = drain
+	s.lost_wall = wall
+	s.lost_decay = decay
+	return s
+
+
+## E2E: 強打で大半を削った敵が生き延び、残りを自然減衰で落とす。最後の一滴は
+## 減衰だが、支配的なのは削りなので死因はdrain=撃破扱い。当てて仕留めたのに
+## 最後の一滴のせいで受け身勝ち(+0.5)扱いになっていた実戦(コールドプレイ段4)の再現。
+func _test_dominant_drain_over_final_decay(check: Callable) -> void:
+	var r := BattleRequest.new()
+	r.stage_strength = 0.0
+	var pstats := SpinnerStats.default_player()
+	var estats := _enemy_stats(3.0)
+	estats.friction = 3.0
+	r.player = BattleRequest.Launch.new(pstats, Vector2(3, 5), Vector2(6, 0))
+	r.enemies = [BattleRequest.Launch.new(estats, Vector2(5.5, 5), Vector2.ZERO)]
+	var result := BattleResolver.resolve(r)
+
+	check.call(result.player_won(), "支配drain/最後decay: プレイヤーが勝つ")
+	check.call(result.impacts.size() >= 1, "支配drain/最後decay: 衝突が起きている")
+	var loss: Dictionary = result.enemy_rps_loss[0]
+	check.call(
+		float(loss.get("drain", 0.0)) > float(loss.get("decay", 0.0))
+		and float(loss.get("drain", 0.0)) > float(loss.get("wall", 0.0)),
+		"支配drain/最後decay: 検証環境で削りが支配的 (%s)" % str(loss)
+	)
+	var last_impact: float = result.impacts[result.impacts.size() - 1].time
+	check.call(
+		float(result.enemy_deaths[0].get("time", -1.0)) > last_impact + r.time_step,
+		"支配drain/最後decay: 敵は最後の接触を生き延びてから尽きる(最後の一滴は減衰)"
+	)
+	check.call(
+		result.loser_death_cause == "drain",
+		"支配drain/最後decay: 死因は支配的なdrain (%s)" % result.loser_death_cause
+	)
+	check.call(
+		result.finished_by_knockout(),
+		"支配drain/最後decay: 削りで大半を奪った勝ちは撃破扱い"
+	)
+
+
+## E2E: 遠くからゆっくり近づく間に敵が減衰でほぼ尽き、最後の一撫でで落とす。
+## 最後の一滴は削りだが、支配的なのは減衰なので死因はdecay=撃破扱いにしない
+## (減衰待ちの末のタップを「接触で仕留めた」と呼ばない)。
+func _test_dominant_decay_over_final_drain(check: Callable) -> void:
+	var r := BattleRequest.new()
+	r.stage_strength = 0.0
+	var pstats := SpinnerStats.default_player()
+	pstats.friction = 0.0
+	var estats := _enemy_stats(2.0)
+	r.player = BattleRequest.Launch.new(pstats, Vector2(1, 5), Vector2(1.5, 0))
+	r.enemies = [BattleRequest.Launch.new(estats, Vector2(8, 5), Vector2.ZERO)]
+	var result := BattleResolver.resolve(r)
+
+	check.call(result.player_won(), "支配decay/最後drain: プレイヤーが勝つ")
+	check.call(result.impacts.size() >= 1, "支配decay/最後drain: 最後の一撫でが当たっている")
+	var loss: Dictionary = result.enemy_rps_loss[0]
+	check.call(
+		float(loss.get("decay", 0.0)) > float(loss.get("drain", 0.0))
+		and int(loss.get("wall_hits", -1)) == 0,
+		"支配decay/最後drain: 検証環境で減衰が支配的・壁なし (%s)" % str(loss)
+	)
+	var last_impact: float = result.impacts[result.impacts.size() - 1].time
+	check.call(
+		float(result.enemy_deaths[0].get("time", -1.0)) <= last_impact + r.time_step + EPS,
+		"支配decay/最後drain: 敵は最後の接触で尽きる(最後の一滴は削り)"
+	)
+	check.call(
+		result.loser_death_cause == "decay",
+		"支配decay/最後drain: 死因は支配的なdecay (%s)" % result.loser_death_cause
+	)
+	check.call(
+		not result.finished_by_knockout(),
+		"支配decay/最後drain: 減衰待ちの末の一撫では撃破扱いにしない"
 	)
 
 
