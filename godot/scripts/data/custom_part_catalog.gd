@@ -42,6 +42,28 @@ static func rare_weight_for(level: int, enemy_count: int = 1) -> int:
 ## これを参照する。別々に持つと乖離するため。
 const REWARD_CHOICES := 3
 
+## 残機が満タン(ランの初期値以上)のときのSET_LIVES札(SPARE_CORE)の抽選重み。
+## 保険の価値は残機を失って初めて生まれるのに、無敗のランでも通常のRARE重み
+## (レベル・頭数で最大12)で提示枠を占有していた(コールドプレイ: 無敗ランで
+## 6回提示・6回見送りが一次証拠。journalでも「無敗ランでは死に枠」が再発)。
+## 単純除外はしない——満タンでも5への引き上げは効くので、保険として先取りする
+## 自由は最小重みで残す。残機を失った後は通常のRARE重みに戻り、「残機1での
+## SPARE_CORE vs SPIN_ENGINE」(journal 2026-07-21)のような選択はそのまま生きる。
+const SET_LIVES_FULL_WEIGHT := 1
+
+## SET_LIVES札の「満タン」判定に使うランの初期残機。GameState.MAX_CONTINUESの
+## 写し(データ層はGameStateを参照しない約束のため。ズレはテストが照合する)。
+const RUN_STARTING_LIVES := 3
+
+
+## SET_LIVES札(SPARE_CORE)のRARE重み。残機を失っていれば(または負=不明なら)
+## 通常のRARE重み(レベル・頭数倍)で、満タンなら最小のSET_LIVES_FULL_WEIGHTへ
+## 落とす(経緯はSET_LIVES_FULL_WEIGHTのコメント参照)。
+static func set_lives_weight(level: int, enemy_count: int = 1, lives_now: int = -1) -> int:
+	if lives_now >= RUN_STARTING_LIVES:
+		return SET_LIVES_FULL_WEIGHT
+	return rare_weight_for(level, enemy_count)
+
 ## 反発の上限。
 ##
 ## プロトタイプは2.0だったが、1.0を超えると壁で跳ねるたびに速度が増える。
@@ -266,7 +288,8 @@ static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
 ##
 ## statsを渡すと死にカード（取っても何も変わらない札。rps上限40での
 ## SPIN_ENGINEなど。CustomPart.would_change_anything参照）を抽選から外す。
-## lives_nowは現在の残機（SET_LIVES札の死に判定に使う。負=不明なら常に有効扱い）。
+## lives_nowは現在の残機（SET_LIVES札の死に判定と抽選重みに使う。負=不明なら
+## 常に有効扱い・通常重み。満タンならSET_LIVES札の重みが最小へ落ちる）。
 ## 省略時(null)は従来どおり全札から引く。
 ## rejected_idsは直前の報酬画面で見送った札のID（rejected_ids()で作る）。
 ## 渡すとその札を今回の提示から外し、同じ顔ぶれが画面をまたいで続くのを防ぐ。
@@ -303,7 +326,7 @@ static func pick_choices(
 			pool = fresh
 	var chosen: Array[CustomPart] = []
 	for i in mini(count, pool.size()):
-		var index := _weighted_index(pool, rng, level, enemy_count)
+		var index := _weighted_index(pool, rng, level, enemy_count, lives_now)
 		chosen.append(pool[index])
 		pool.remove_at(index)
 	return chosen
@@ -319,21 +342,27 @@ static func rejected_ids(offered: Array[CustomPart], picked_id: int) -> Array[in
 	return out
 
 
-static func _weight_for(part: CustomPart, level: int, enemy_count: int = 1) -> int:
+static func _weight_for(
+	part: CustomPart, level: int, enemy_count: int = 1, lives_now: int = -1
+) -> int:
+	# 残機札だけは現在の残機で重みが変わる(set_lives_weight参照)。
+	if part.effect == CustomPart.Effect.SET_LIVES:
+		return set_lives_weight(level, enemy_count, lives_now)
 	if part.rarity == CustomPart.Rarity.RARE:
 		return rare_weight_for(level, enemy_count)
 	return WEIGHTS[part.rarity]
 
 
 static func _weighted_index(
-	pool: Array[CustomPart], rng: RandomNumberGenerator, level: int = 1, enemy_count: int = 1
+	pool: Array[CustomPart], rng: RandomNumberGenerator, level: int = 1,
+	enemy_count: int = 1, lives_now: int = -1
 ) -> int:
 	var total := 0
 	for part in pool:
-		total += _weight_for(part, level, enemy_count)
+		total += _weight_for(part, level, enemy_count, lives_now)
 	var roll := rng.randi_range(0, total - 1)
 	for i in pool.size():
-		roll -= _weight_for(pool[i], level, enemy_count)
+		roll -= _weight_for(pool[i], level, enemy_count, lives_now)
 		if roll < 0:
 			return i
 	return pool.size() - 1

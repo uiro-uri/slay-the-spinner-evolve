@@ -15,6 +15,7 @@ func run(check: Callable) -> void:
 	_test_rarity_weighting(check)
 	_test_rarity_by_level(check)
 	_test_melee_rare_boost(check)
+	_test_spare_core_insurance_weight(check)
 	_test_titles_translated(check)
 	_test_no_debuffs(check)
 	_test_set_lives(check)
@@ -444,6 +445,61 @@ func _test_melee_rare_boost(check: Callable) -> void:
 	check.call(
 		melee > single * 2,
 		"乱戦レア: 頭数3の抽選はレアが明確に増える (単体=%d 3体=%d)" % [single, melee]
+	)
+
+
+## 残機満タン時はSPARE_CORE(SET_LIVES札)の抽選重みが最小へ落ちること。
+## 無敗のランで保険札がRAREの通常重みのまま提示枠を占有していた
+## (コールドプレイ: 無敗ランで6回提示・6回見送り)。単純除外はせず、
+## 残機を失えば通常のRARE重みに戻る。
+func _test_spare_core_insurance_weight(check: Callable) -> void:
+	# 重みの規則そのもの。
+	check.call(
+		CustomPartCatalog.set_lives_weight(3, 2, CustomPartCatalog.RUN_STARTING_LIVES)
+			== CustomPartCatalog.SET_LIVES_FULL_WEIGHT,
+		"保険重み: 残機満タンでは最小重み%d" % CustomPartCatalog.SET_LIVES_FULL_WEIGHT
+	)
+	check.call(
+		CustomPartCatalog.set_lives_weight(3, 2, 4) == CustomPartCatalog.SET_LIVES_FULL_WEIGHT,
+		"保険重み: 初期値超(SPARE_CORE取得後の残機4)でも最小重み"
+	)
+	check.call(
+		CustomPartCatalog.set_lives_weight(3, 2, 1) == CustomPartCatalog.rare_weight_for(3, 2),
+		"保険重み: 残機を失っていれば通常のRARE重み(レベル・頭数倍)"
+	)
+	check.call(
+		CustomPartCatalog.set_lives_weight(3, 2, -1) == CustomPartCatalog.rare_weight_for(3, 2),
+		"保険重み: 残機不明(負)は従来どおり通常重み"
+	)
+	# 満タン判定の基準はGameState.MAX_CONTINUES(ランの初期残機)とズレないこと。
+	# データ層はGameStateを参照しない約束なので写し(RUN_STARTING_LIVES)を照合する。
+	check.call(
+		CustomPartCatalog.RUN_STARTING_LIVES == GameStateScript.MAX_CONTINUES,
+		"保険重み: 満タン基準はGameState.MAX_CONTINUESと一致 (%d)" % CustomPartCatalog.RUN_STARTING_LIVES
+	)
+
+	# 抽選の実挙動: 同条件で残機満タンはSPARE_COREを引く回数が明確に減る。
+	# 満タンの出現率はLv5でも1/72程度なので、ゼロでないことの確認は多めに回す。
+	var draws := TRIALS * 10
+	var full := 0
+	var hurt := 0
+	var rng := RandomNumberGenerator.new()
+	for trial in draws:
+		rng.seed = trial + 50000
+		for part in CustomPartCatalog.pick_choices(1, rng, 5, null, CustomPartCatalog.RUN_STARTING_LIVES):
+			if part.id == 8:
+				full += 1
+		rng.seed = trial + 50000
+		for part in CustomPartCatalog.pick_choices(1, rng, 5, null, 1):
+			if part.id == 8:
+				hurt += 1
+	check.call(
+		full * 2 < hurt,
+		"保険重み: 満タンの抽選はSPARE_COREが明確に減る (満タン=%d 残機1=%d)" % [full, hurt]
+	)
+	check.call(
+		full > 0,
+		"保険重み: 満タンでも単純除外はしない(保険の先取りは残る) (%d回)" % full
 	)
 
 
