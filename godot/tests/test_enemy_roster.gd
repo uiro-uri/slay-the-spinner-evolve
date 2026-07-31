@@ -29,6 +29,8 @@ func run(check: Callable) -> void:
 	_test_intra_level_trade_evenness(check)
 	_test_vanguard_steps(check)
 	_test_vanguard_group_rules(check)
+	_test_reroll_group(check)
+	_test_find_by_name(check)
 
 
 ## 乱戦メンバーはどれも頭数で弱められていないこと。各体の耐久(=rps×質量×半径²)が、
@@ -261,3 +263,66 @@ func _test_vanguard_group_rules(check: Callable) -> void:
 		"斥候の出現規則(単体・+1レベル・率・封印)%s" % (
 			"" if violations.is_empty() else " / 例: " + violations[0])
 	)
+
+
+## リトライの個体入れ替え(reroll_group)。位置しか変わらない再戦は「同じ相手に
+## 同じ負け方」を繰り返す徒労だった(コールドプレイで段5 ENEMY_3_1と3連戦・
+## 段8 同型ペアに4連敗が一次証拠)。守る性質:
+##  - 頭数と各スロットのレベルが保たれる(マップ表示のLv[体数]と報酬の実レベルを
+##    嘘にしない。斥候ノードのLv+1もそのまま)
+##  - 各スロットは必ず別個体になる(同レベルに他の個体がいる限り。現状全レベル5種)
+##  - シード付きRNGで決定的(CLIがbseedから予告と同じ相手を復元する前提)
+func _test_reroll_group(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260731
+	var count_ok := true
+	var level_ok := true
+	var changed_ok := true
+	for _i in 300:
+		var step := rng.randi_range(1, 9)
+		var group := EnemyRoster.pick_group_for_step(step, rng)
+		var rerolled := EnemyRoster.reroll_group(group, rng)
+		if rerolled.size() != group.size():
+			count_ok = false
+			continue
+		for i in group.size():
+			if rerolled[i].level != group[i].level:
+				level_ok = false
+			var alternatives := EnemyRoster.of_level(group[i].level).size() > 1
+			if alternatives and rerolled[i].display_name == group[i].display_name:
+				changed_ok = false
+	check.call(count_ok, "reroll_group: 頭数が保たれる")
+	check.call(level_ok, "reroll_group: 各スロットのレベルが保たれる(表示と報酬を嘘にしない)")
+	check.call(changed_ok, "reroll_group: 各スロットは必ず別個体になる(同じ負けの繰り返し防止)")
+
+	# 決定性: 同じシードなら同じ入れ替え(CLIのretryがbseedから引く前提)。
+	var base_rng := RandomNumberGenerator.new()
+	base_rng.seed = 77
+	var base := EnemyRoster.pick_group_for_step(8, base_rng)
+	var rng_a := RandomNumberGenerator.new()
+	rng_a.seed = 1234
+	var rng_b := RandomNumberGenerator.new()
+	rng_b.seed = 1234
+	var a := EnemyRoster.reroll_group(base, rng_a)
+	var b := EnemyRoster.reroll_group(base, rng_b)
+	var deterministic := a.size() == b.size()
+	if deterministic:
+		for i in a.size():
+			if a[i].display_name != b[i].display_name:
+				deterministic = false
+	check.call(deterministic, "reroll_group: シード付きRNGで決定的(予告=実戦の前提)")
+
+
+## 表示名からの逆引き(find_by_name)。CLIのretryが保存した名前列から相手を
+## 復元するのに使う。知らない名前はnull(呼び側がノード生成時の個体へ戻す)。
+func _test_find_by_name(check: Callable) -> void:
+	var all_ok := true
+	for enemy in EnemyRoster.all():
+		var found := EnemyRoster.find_by_name(enemy.display_name)
+		if found == null or found.display_name != enemy.display_name \
+				or found.level != enemy.level:
+			all_ok = false
+	check.call(all_ok, "find_by_name: 全個体が表示名で逆引きできる")
+	check.call(
+		EnemyRoster.find_by_name("ENEMY_9_9") == null,
+		"find_by_name: 知らない名前はnull")

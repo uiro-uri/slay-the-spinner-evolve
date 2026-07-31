@@ -18,7 +18,8 @@ extends SceneTree
 ##   pick   --state=path --id=ID              報酬を1枚取る。乱戦は倒した頭数ぶん
 ##                                            reward→pickを繰り返す(実ゲームと同じ)
 ##                                            (直前のrewardで提示された札しか取れない)
-##   retry  --state=path --bseed=B            残機を1消費して同ノードを再抽選(新しい予告)
+##   retry  --state=path --bseed=B            残機を1消費して同ノードへ再挑戦(新しい予告)。
+##                                            相手は同レベルの別個体に入れ替わる(実UIと同じ)
 ##   giveup --state=path                      あきらめてラン終了
 ##
 ## 予告(enter/retry)と解決(launch)は同じ --bseed を渡すこと(敵の出現が一致する)。
@@ -66,6 +67,7 @@ func _default_state(seed_value: int) -> Dictionary:
 		"offered": null,       # 直前のrewardで提示した札id列 (pickの検証と再抽選防止)
 		"rewards_left": null,  # この勝利で残っている報酬選択回数 (乱戦=頭数ぶん)
 		"bseed": null,         # enter/retryで予告したbseed (launchは必ずこれで解決する)
+		"enemies": null,       # retryで入れ替えた個体の名前列 (null=ノード生成時のまま)
 		"must_retry": false,   # 敗北済み。retry(残機消費)かgiveup以外を受け付けない
 		"won": false,          # 勝利済み。reward→pickでノードを確定するまで撃ち直せない
 		"continues": 3,
@@ -143,6 +145,7 @@ func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
 	state["offered"] = null    # 古い提示札で新ノードをpickできないように
 	state["rewards_left"] = null
 	state["bseed"] = bseed     # launchはこの予告と同じ敵で解決する
+	state["enemies"] = null    # 新ノードはノード生成時の個体(入れ替えはretryだけ)
 	state["must_retry"] = false
 	state["won"] = false
 	_save(state, path)
@@ -159,10 +162,19 @@ func _retry(state: Dictionary, path: String, bseed: int) -> void:
 	state["offered"] = null
 	state["bseed"] = bseed     # 新しい予告。launchはこのbseedで解決する
 	state["must_retry"] = false
-	_save(state, path)
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
-	print("=== RETRY 残機を1消費 (残り%d) 敵を再抽選 ===" % state["continues"])
+	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
+	# 同じ相手に同じ負け方を繰り返させない: いま戦った個体を基準に、同レベルの
+	# 別個体へ入れ替える(EnemyRoster.reroll_group。実UIのMain._on_continue_requestedと
+	# 同じ規則)。入れ替えはbseedから決定的に引き、名前でstateに保存する
+	# (launchはこの名前列から同じ相手を復元する=予告と実戦は一致したまま)。
+	var reroll_rng := RandomNumberGenerator.new()
+	reroll_rng.seed = bseed
+	state["enemies"] = group_names(
+		EnemyRoster.reroll_group(node_group(state, node), reroll_rng))
+	_save(state, path)
+	print("=== RETRY 残機を1消費 (残り%d) 同レベルの別個体と再戦 ===" % state["continues"])
 	_reveal(state, tree, bseed)
 
 ## 交戦中ノードの敵予告と土俵を出す。プレイヤーが撃つ前に見える情報。
@@ -179,11 +191,12 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		float(state["stats"].get("drill", 0.0)),
 		field.inradius() - float(state["stats"]["radius"]) - 0.5])
 	print("ゴースト(初衝突後すり抜け): %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
-	var plans := _enemy_plans(node.enemies, field, bseed)
-	print("敵 %d体 (bseed=%d):" % [node.enemies.size(), bseed])
-	for i in node.enemies.size():
+	var enemies := node_group(state, node)
+	var plans := _enemy_plans(enemies, field, bseed)
+	print("敵 %d体 (bseed=%d):" % [enemies.size(), bseed])
+	for i in enemies.size():
 		print(enemy_line(
-			i, node.enemies[i], plans[i],
+			i, enemies[i], plans[i],
 			float(state["stats"]["radius"]), field.inradius()))
 	print("→ launch --bseed=%d --from-deg=<0-360> --target=center|enemy1..|x,y --force=<0-1>" % bseed)
 
@@ -200,14 +213,16 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
 	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
 	var field: FieldData = node.field
-	var plans := _enemy_plans(node.enemies, field, use_bseed)
+	# retryで個体を入れ替えていれば、予告(_reveal)と同じ保存済みの相手で解決する。
+	var enemies := node_group(state, node)
+	var plans := _enemy_plans(enemies, field, use_bseed)
 	var pstats := stats_from(state["stats"])
 
 	# 発射位置は壁の内側かつ敵予告の間合い(LaunchStandoff)の外。実UIと同じ制約で、
 	# 予告の真横に置いて動く前に殴る「至近スポーン殴り」はできない。
 	var want := _ring_pos(field, pstats.radius, from_deg)
 	var pos := field.clamp_launch(
-		want, spawn_points_of(plans), enemy_radii_of(node.enemies), pstats.radius)
+		want, spawn_points_of(plans), enemy_radii_of(enemies), pstats.radius)
 	if pos.distance_to(want) > 0.05:
 		print("(発射位置の制約: 敵予告の間合いの内側・柱の上には置けない。%s → %s へ退避)" % [str(want), str(pos)])
 	var tgt := _target_point(field, plans, target)
@@ -222,8 +237,8 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	req.ghost_duration = CustomPartCatalog.total_ghost_seconds(_ids(state))
 	req.player = BattleRequest.Launch.new(pstats, pos, vel)
 	var elaunch: Array[BattleRequest.Launch] = []
-	for i in node.enemies.size():
-		elaunch.append(BattleRequest.Launch.new(node.enemies[i].stats, plans[i].position, plans[i].velocity))
+	for i in enemies.size():
+		elaunch.append(BattleRequest.Launch.new(enemies[i].stats, plans[i].position, plans[i].velocity))
 	req.enemies = elaunch
 
 	var result := BattleResolver.resolve(req)
@@ -716,6 +731,35 @@ static func defeat_prompt(continues: int) -> String:
 	if continues <= 0:
 		return "→ 残機なし。giveup で終了"
 	return "→ retry --bseed=<新B> (残機%d、1消費して残り%d) か giveup" % [continues, continues - 1]
+
+
+## 交戦中ノードの敵グループ。retryで個体を入れ替えた場合はstate["enemies"]の
+## 名前列から復元し、無ければノード生成時の個体をそのまま使う。名前で持つのは
+## stateがJSONだから。往復の性質は test_playtest.gd が守る。
+static func node_group(state: Dictionary, node: MapTree.MapNode) -> Array[EnemyData]:
+	return group_from_names(state.get("enemies"), node.enemies)
+
+
+## 名前列からEnemyDataの列を復元する。名前でない/知らない名前が混ざっていたら
+## (手で書き換えた・ロスターから消えた等)、部分的に混ぜず丸ごとfallbackへ戻す。
+static func group_from_names(names, fallback: Array[EnemyData]) -> Array[EnemyData]:
+	if not (names is Array) or (names as Array).is_empty():
+		return fallback
+	var result: Array[EnemyData] = []
+	for name_value in names:
+		var enemy := EnemyRoster.find_by_name(str(name_value))
+		if enemy == null:
+			return fallback
+		result.append(enemy)
+	return result
+
+
+## グループを保存用の名前列にする。group_from_namesと往復する。
+static func group_names(group: Array[EnemyData]) -> Array:
+	var names: Array = []
+	for enemy in group:
+		names.append(enemy.display_name)
+	return names
 
 
 ## launchで使うbseed。enter/retryで予告したbseedが保存されていればそれを使う。

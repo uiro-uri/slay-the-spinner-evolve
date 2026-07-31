@@ -144,6 +144,43 @@ static func pick_for_step(step: int, rng: RandomNumberGenerator = null) -> Enemy
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
 
 
+## 表示名から敵を引く。CLI(naive_play)がリトライで入れ替えた個体をJSONの
+## 名前列から復元するために使う。知らない名前はnull。
+static func find_by_name(display_name: String) -> EnemyData:
+	for enemy in all():
+		if enemy.display_name == display_name:
+			return enemy
+	return null
+
+
+## リトライ(コンティニュー)用: グループの各個体を「同レベルの別個体」に入れ替える。
+## 頭数・並び・各スロットのレベルは保つので、マップ表示のLv[体数]も報酬の
+## 実レベル(MapNode.level())も嘘にならない。同レベルに他の個体がいる限り
+## 同じ個体は選ばない(現状は全レベル5種なので必ず入れ替わる)。
+##
+## 発見の経緯: リトライは出現位置しか変わらず、同じ相手に同じ負け方を繰り返す
+## 徒労感が強かった(コールドプレイで段5 ENEMY_3_1と3連戦・段8 同型ペアに4連敗、
+## 喪失内訳までほぼ同一)。同レベルは硬さをほぼ揃え形で個性を出す設計なので、
+## 個体の入れ替えは難易度を保ったまま接触トレードの手触りだけを変える。
+static func reroll_group(
+	group: Array[EnemyData], rng: RandomNumberGenerator = null
+) -> Array[EnemyData]:
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	var result: Array[EnemyData] = []
+	for enemy in group:
+		var others: Array[EnemyData] = []
+		for candidate in of_level(enemy.level):
+			if candidate.display_name != enemy.display_name:
+				others.append(candidate)
+		if others.is_empty():
+			result.append(enemy)
+		else:
+			result.append(others[rng.randi_range(0, others.size() - 1)])
+	return result
+
+
 ## 斥候(次レベルの単体エリート)が混ざりうる段か。
 ##
 ## 各レベル帯の2段目(段2・4・6)だけ。帯の1段目(段3・5・7)は次レベルとの初対面が

@@ -62,7 +62,8 @@ static func play_one(
 	# 次の抽選から除外して、実ゲームと同じ提示ルールで測る。
 	var last_rejected: Array[int] = []
 	# 残機(コンティニュー)。実プレイのGameStateと同じく開始3。敗北しても残機が
-	# あれば同じ相手・同じ土俵で再挑戦する(Main._on_continue_requested)。
+	# あれば同じノード・同じ土俵で再挑戦する(Main._on_continue_requested)。
+	# 相手は同レベルの別個体に入れ替わる(下のreroll_group参照)。
 	var continues := START_CONTINUES
 	var continues_used := 0
 	var won_all := false
@@ -83,8 +84,7 @@ static func play_one(
 		# 取得済みのゴースト札から無敵時間を出して戦闘に渡す。Battle.build_requestと同じ。
 		var ghost_duration := CustomPartCatalog.total_ghost_seconds(parts)
 
-		# その段の戦闘。敗北しても残機がある限り、同じノードで再挑戦する
-		# (Main._on_continue_requestedはpending/coordを触らず同グループ再戦)。
+		# その段の戦闘。敗北しても残機がある限り、同じノードで再挑戦する。
 		# 毎回の記録は1回=1レコードで残す(段ごとの1戦あたり勝率は従来どおりの意味)。
 		var record: Dictionary = {}
 		var attempt := 0
@@ -115,10 +115,13 @@ static func play_one(
 			if record["win"]:
 				break
 			# 敗北: 残機があれば1消費して再挑戦、無ければこの段で力尽きる。
+			# Main._on_continue_requestedと同じく、相手は同レベルの別個体に
+			# 入れ替える(位置しか変わらない同型再戦の徒労感対策)。
 			if continues > 0:
 				continues -= 1
 				continues_used += 1
 				attempt += 1
+				group = EnemyRoster.reroll_group(group, rng)
 				continue
 			break
 
