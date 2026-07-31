@@ -164,8 +164,11 @@ func _build(rng: RandomNumberGenerator) -> void:
 		nodes[coord] = node
 	nodes[GOAL_COORD] = MapNode.new(GOAL_COORD)
 
+	# prev_pivot: 直前の段で1択を押し込んだ列。次の段では避けて、1択ノードが
+	# 縦に連なるレール(一本道回廊)を作らない。
+	var prev_pivot := -1
 	for step in range(1, 8):
-		_assign_arrows_for_step(step, rng)
+		prev_pivot = _assign_arrows_for_step(step, rng, prev_pivot)
 		_widen_single_choices(step, rng)
 
 
@@ -177,8 +180,8 @@ func _build(rng: RandomNumberGenerator) -> void:
 ## （＝次の段の矢印確定前）に呼ばれるので、作られたノードは次の反復で
 ## 普通に矢印を貰い、行き止まりにならない。ただし段7だけはゴール手前の
 ## 3ノードへ着地する必要があるので、実在するノードにしか足せない。
-## 幾何的に足せない場合（例: 右端の列で、左隣が右下へ出している）だけ
-## 1本のまま残る。段0は3本固定、段8はゴールへ集約する設計なので触らない。
+## 幾何的に足せない場合（ピボット列と段7の両端。_assign_arrows_for_step参照）
+## だけ1本のまま残る。段0は3本固定、段8はゴールへ集約する設計なので触らない。
 func _widen_single_choices(step: int, rng: RandomNumberGenerator) -> void:
 	var columns: Array[int] = []
 	for coord in nodes:
@@ -380,55 +383,122 @@ func _parents_keep_escape_without(coord: Vector2i) -> bool:
 	return true
 
 
-func _assign_arrows_for_step(step: int, rng: RandomNumberGenerator) -> void:
+## この段の全ノードへ矢印を割り当てる。戻り値はこの段の「ピボット列」(下記)。
+##
+## 交差禁止は隣へ連鎖する: 端の列は矢印2種しか持てないので、全5列が埋まった
+## 段では「どこか1列が1択になる」のが幾何的に避けられない(例: 左端が2本
+## 持つには必ず右下が要り、それが列1の左下を塞ぎ、列1も右下頼み……と続いて
+## 右端は真下しか残らない)。かつては常に左から確定していたため、この
+## しわ寄せが毎段右端に溜まり、右端を縦に貫く多段の一本道回廊ができていた。
+##
+## そこで、しわ寄せを受ける「ピボット列」を段ごとに抽選し、両端からピボットへ
+## 向かって確定していく。ピボットは直前の段のピボット列(prev_pivot)を避ける
+## ので、1択ノードが1択ノードへ縦に連なるレールにはならない。盤の端まで
+## 埋まっていない段は端に向かって普通に掃引すれば、しわ寄せは盤の空きに
+## 逃げて消える(その場合ピボットは無し=-1を返す)。
+func _assign_arrows_for_step(step: int, rng: RandomNumberGenerator, prev_pivot: int) -> int:
 	var columns: Array[int] = []
 	for coord in nodes:
 		if coord.x == step:
 			columns.append(coord.y)
 	columns.sort()
 
-	# ひとつ左のノードが右下へ進んだ場合、このノードが左下へ進むと矢印が交差する。
-	# 交差しうるのは隣接した列だけ——列の間に空きがあれば矢印は届かないので、
-	# 制約を粘着させず「直前に処理した列が本当にひとつ左か」を見る。
-	var last_column := -99
-	var last_took_right := false
 	var is_last := step == 7
+	var pivot := _pick_pivot(step, columns, prev_pivot, rng)
 
-	for column in columns:
-		var cant_go_left := last_took_right and last_column == column - 1
+	# 処理順: ピボットの左側を左から、右側を右から、最後にピボット。
+	# ピボットが無い段は、盤の端に接している側から遠い側へ掃引する
+	# (端の列を先に確定すれば2本持てて、しわ寄せが端に溜まらない)。
+	var order: Array[int] = []
+	if pivot >= 0:
+		for c in columns:
+			if c < pivot:
+				order.append(c)
+		var right_side: Array[int] = []
+		for c in columns:
+			if c > pivot:
+				right_side.append(c)
+		right_side.reverse()
+		order.append_array(right_side)
+		order.append(pivot)
+	else:
+		order = columns.duplicate()
+		if columns[0] != 0:
+			order.reverse()
+
+	for column in order:
 		var node: MapNode = nodes[Vector2i(step, column)]
-		node.arrows = _pick_arrows(step, column, cant_go_left, is_last, rng)
+		# 先に確定した隣がこちら側へ斜めを出していたら、こちらの対向斜めは
+		# 交差になるので出せない。未確定の隣は矢印が空なので自然に無視される。
+		node.arrows = _pick_arrows(
+			step, column,
+			_neighbor_has(step, column - 1, Arrow.RIGHT),
+			_neighbor_has(step, column + 1, Arrow.LEFT),
+			is_last, rng
+		)
 
 		if not is_last:
 			for coord in node.targets():
 				if not nodes.has(coord):
 					nodes[coord] = MapNode.new(coord)
 
-		last_column = column
-		last_took_right = Arrow.RIGHT in node.arrows
+	return pivot
 
 
+## しわ寄せ(1択)を受けるピボット列を選ぶ。両端まで埋まった段だけが対象で、
+## それ以外は -1(しわ寄せ自体が発生しない)。直前の段のピボットは避ける。
+## 段6と段7は端の列を避ける: 段7の両端(7,0)/(7,4)は着地先が1つしかない
+## 構造的1択なので、その親まで1択にすると2段連続の一本道になってしまう。
+func _pick_pivot(step: int, columns: Array[int], prev_pivot: int, rng: RandomNumberGenerator) -> int:
+	if columns[0] != 0 or columns[columns.size() - 1] != COLUMN_COUNT - 1:
+		return -1
+	var candidates: Array[int] = []
+	for c in columns:
+		if c == prev_pivot:
+			continue
+		if step >= 6 and (c == 0 or c == COLUMN_COUNT - 1):
+			continue
+		candidates.append(c)
+	if candidates.is_empty():
+		return prev_pivot
+	return candidates[rng.randi_range(0, candidates.size() - 1)]
+
+
+## cant_left / cant_right には交差禁止で出せない斜めを渡す。
 func _pick_arrows(
-	_step: int, column: int, cant_go_left: bool, is_last: bool, rng: RandomNumberGenerator
+	_step: int, column: int, cant_left: bool, cant_right: bool,
+	is_last: bool, rng: RandomNumberGenerator
 ) -> Array[Arrow]:
 	# 段7だけは、ゴール手前の3ノード(列1..3)に必ず着地させる必要がある。
+	# 端の列の唯一の斜めは着地先(8,1)/(8,3)を隣が指せない(列1の左下・列3の
+	# 右下は盤外行きで確定時に消される)ので、交差禁止と衝突しない。
+	# 矢印を2種しか持てないノード(端の列や、交差禁止で1方向を失った列)は
+	# 2本とも持つ。1本に絞ると後段の交差禁止と重なって1択ノードが量産され、
+	# 「全ノード2択以上」の保証(_widen_single_choices)が幾何的に成立しなくなる。
 	if column == 0:
 		if is_last:
 			return [Arrow.RIGHT]
-		return _sample([Arrow.STRAIGHT, Arrow.RIGHT], _pick_count([1, 1, 2], rng), rng)
+		if cant_right:
+			return [Arrow.STRAIGHT]
+		return [Arrow.STRAIGHT, Arrow.RIGHT]
 
 	if column == COLUMN_COUNT - 1:
 		if is_last:
 			return [Arrow.LEFT]
-		if cant_go_left:
+		if cant_left:
 			return [Arrow.STRAIGHT]
-		return _sample([Arrow.LEFT, Arrow.STRAIGHT], _pick_count([1, 1, 2], rng), rng)
+		return [Arrow.LEFT, Arrow.STRAIGHT]
 
 	var pool: Array[Arrow] = [Arrow.LEFT, Arrow.STRAIGHT, Arrow.RIGHT]
 	var weights := [1, 1, 1, 2, 2, 2, 3]
-	if cant_go_left:
-		pool = [Arrow.STRAIGHT, Arrow.RIGHT]
-		weights = [1, 1, 2]
+	if cant_left:
+		pool.erase(Arrow.LEFT)
+	if cant_right:
+		pool.erase(Arrow.RIGHT)
+	if pool.size() == 2:
+		weights = [2, 2, 2]
+	elif pool.size() == 1:
+		return pool
 	var arrows := _sample(pool, _pick_count(weights, rng), rng)
 
 	if is_last:
