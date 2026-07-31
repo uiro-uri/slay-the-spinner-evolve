@@ -951,10 +951,34 @@ func _test_naive_play_victory_text(check: Callable) -> void:
 	check.call(
 		"勝利の勢い" in normal_passive and "+0.5" in normal_passive and "頭打ち" not in normal_passive,
 		"naive_play: 通常の受け身勝利は従来表示 (%s)" % normal_passive)
-	# 実装(grow_rps_by_victory)とも整合: 上限のコマは何度勝っても頭打ち表示になる。
+	# 余勢転化: 上限で堰き止められた撃破ボーナスは前後のspin_decayが渡され、
+	# 頭打ちでなく「長持ち」と実値つきで読める。
+	var overflow_ko: String = NaivePlay.victory_text(true, 0.0, SpinnerStats.RPS_CAP, 0.80, 0.76)
+	check.call(
+		"長持ち" in overflow_ko and "0.80" in overflow_ko and "0.76" in overflow_ko,
+		"naive_play: 余勢転化は減衰の前後値つきで長持ちと読める (%s)" % overflow_ko)
+	check.call(
+		"★撃破ボーナス★" in overflow_ko and "頭打ち" not in overflow_ko,
+		"naive_play: 余勢転化は撃破ボーナスとして祝い頭打ちと矛盾しない")
+	# 表示丸め(%.2f)で見えない低下は従来どおり頭打ち(数字と文言の食い違い防止)。
+	check.call(
+		"頭打ち" in String(NaivePlay.victory_text(true, 0.0, SpinnerStats.RPS_CAP, 0.402, 0.400)),
+		"naive_play: 丸めで見えない転化は頭打ちのまま")
+	# 実装(grow_rps_by_victory)とも整合: 上限のコマの撃破勝利は余勢転化の表示、
+	# spin_decayが床のコマは転化できず頭打ち表示に落ちる。
 	var s := SpinnerStats.new()
 	s.rps = SpinnerStats.RPS_CAP
+	var decay_before := s.spin_decay
 	var gained := s.grow_rps_by_victory(true)
 	check.call(
-		"頭打ち" in String(NaivePlay.victory_text(true, gained, s.rps)),
-		"naive_play: 実成長関数の上限0成長が頭打ち表示に繋がる")
+		"長持ち" in String(NaivePlay.victory_text(true, gained, s.rps, decay_before, s.spin_decay)),
+		"naive_play: 実成長関数の余勢転化が長持ち表示に繋がる")
+	var floored := SpinnerStats.new()
+	floored.rps = SpinnerStats.RPS_CAP
+	floored.spin_decay = SpinnerStats.OVERFLOW_DECAY_FLOOR
+	var floored_before := floored.spin_decay
+	var floored_gain := floored.grow_rps_by_victory(true)
+	check.call(
+		"頭打ち" in String(NaivePlay.victory_text(
+			true, floored_gain, floored.rps, floored_before, floored.spin_decay)),
+		"naive_play: 床に達したコマは頭打ち表示に戻る")

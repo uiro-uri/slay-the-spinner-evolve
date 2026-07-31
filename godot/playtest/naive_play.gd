@@ -292,11 +292,13 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			var knockout := result.finished_by_knockout()
 			var grown := stats_from(state["stats"])
 			# 成長量は現在rpsに比例する(下限あり)ので、定数でなく実増加量を表示する。
+			# 余勢転化(上限超過ぶんのspin_decay低下)も前後の実値で表示する。
+			var decay_before := grown.spin_decay
 			var gained := grown.grow_rps_by_victory(knockout)
 			state["stats"] = stats_dict(grown)
 			state["won"] = true    # 撃ち直しによる勝利成長の二重取りを防ぐ
 			_save(state, path)
-			print(victory_text(knockout, gained, grown.rps))
+			print(victory_text(knockout, gained, grown.rps, decay_before, grown.spin_decay))
 			print("→ reward --bseed=<R> で報酬を見る")
 	else:
 		# 敗北も保存する。以前は敗北が状態に残らず、残機を消費せずに同じノードを
@@ -821,8 +823,18 @@ static func no_contact_note(result: BattleResult) -> String:
 ## 撃破ボーナスが何もしていない事実が読めなかった)。表示丸め(%.1f)で+0.0になる
 ## 成長は「頭打ち」と正直に言う。判定閾値0.05は丸めと同じ境界にして、
 ## 出す数字と文言が食い違わないようにする。
-static func victory_text(knockout: bool, gained: float, rps_now: float) -> String:
+## decay_before/decay_afterは成長適用の前後のspin_decay。撃破ボーナスの余りが
+## 寿命へ転化した(SpinnerStats.grow_rps_by_victoryの余勢転化)ときは頭打ちでなく
+## 転化の事実を出す。閾値0.005は表示丸め(%.2f)と同じ境界
+## (VictoryGrowthText.DECAY_SHOWN_MINと同値)。省略時(-1.0)は従来どおり。
+static func victory_text(
+	knockout: bool, gained: float, rps_now: float,
+	decay_before: float = -1.0, decay_after: float = -1.0
+) -> String:
 	var cap := SpinnerStats.RPS_CAP
+	if knockout and decay_before > 0.0 and decay_before - decay_after >= 0.005:
+		return "★撃破ボーナス★ 勢いは上限%.0fを超過・余りで回転が長持ちに 回転減衰 %.2f→%.2f (rps=%.1f)" % [
+			cap, decay_before, decay_after, rps_now]
 	if gained < 0.05:
 		if knockout:
 			return "★撃破ボーナス★ 接触で仕留めたが、回転は上限%.0fで頭打ち・成長なし (rps=%.1f)" % [cap, rps_now]
