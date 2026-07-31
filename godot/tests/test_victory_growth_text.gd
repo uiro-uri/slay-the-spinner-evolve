@@ -12,6 +12,7 @@ func run(check: Callable) -> void:
 	var saved_locale := TranslationServer.get_locale()
 	_test_values_appear(check)
 	_test_capped_is_honest(check)
+	_test_overflow_line(check)
 	_test_locales(check)
 	_test_matches_real_growth(check)
 	_test_battle_wires_label(check)
@@ -50,6 +51,25 @@ func _test_capped_is_honest(check: Callable) -> void:
 	check.call(boundary.contains("頭打ち"), "丸めで+0.0になる0.04も頭打ち扱い: %s" % boundary)
 
 
+## 余勢転化(上限で堰き止められた撃破ボーナスがspin_decayへ)の行。前後の実値が
+## 転記され、表示丸め(%.2f)で見えない低下は「長持ち」と呼ばない。
+func _test_overflow_line(check: Callable) -> void:
+	TranslationServer.set_locale("ja")
+	var line := VictoryGrowthText.growth_line(true, 0.0, 40.0, 0.80, 0.76)
+	check.call(line.contains("0.80") and line.contains("0.76"), "余勢: 減衰の前後値が出る: %s" % line)
+	check.call(line.contains("長持ち"), "余勢: 寿命が伸びたと読める: %s" % line)
+	check.call(line.contains("撃破ボーナス"), "余勢: ボーナスだと分かる: %s" % line)
+	check.call(not line.contains("頭打ち"), "余勢: 頭打ちと矛盾しない: %s" % line)
+
+	# 丸め表示で同じ値になる低下(閾値DECAY_SHOWN_MIN未満)は従来の頭打ち表示。
+	var tiny := VictoryGrowthText.growth_line(true, 0.0, 40.0, 0.402, 0.400)
+	check.call(tiny.contains("頭打ち"), "余勢: 見えない低下は頭打ちのまま: %s" % tiny)
+
+	# 受け身の勝ちは機構が転化しない。仮に値が来ても撃破と偽らない(knockoutゲート)。
+	var passive := VictoryGrowthText.growth_line(false, 0.0, 40.0, 0.80, 0.76)
+	check.call(not passive.contains("撃破ボーナス"), "余勢: 受け身は撃破を名乗らない: %s" % passive)
+
+
 ## 両言語に訳があり、キーが素通りしない(訳抜けならキーがそのまま出て気付ける)。
 func _test_locales(check: Callable) -> void:
 	TranslationServer.set_locale("en")
@@ -59,6 +79,12 @@ func _test_locales(check: Callable) -> void:
 	var capped := VictoryGrowthText.growth_line(false, 0.0, 40.0)
 	check.call(capped.containsn("cap"), "en上限: 'cap'を含む: %s" % capped)
 	check.call(not capped.contains("BATTLE_GROWTH_CAPPED"), "en上限: キーが素通りしていない: %s" % capped)
+	var overflow := VictoryGrowthText.growth_line(true, 0.0, 40.0, 0.80, 0.76)
+	check.call(overflow.containsn("decay"), "en余勢: 'decay'を含む: %s" % overflow)
+	check.call(
+		not overflow.contains("BATTLE_GROWTH_KNOCKOUT_OVERFLOW"),
+		"en余勢: キーが素通りしていない: %s" % overflow
+	)
 
 
 ## 実際の成長関数に複製を通した値で行を作ると、適用される成長と数字が一致する。
@@ -73,12 +99,31 @@ func _test_matches_real_growth(check: Callable) -> void:
 	check.call(line.contains("%.1f" % gained), "実成長の増分がそのまま出る: %s" % line)
 	check.call(line.contains("%.1f" % preview.rps), "実成長後のrpsがそのまま出る: %s" % line)
 
+	# 上限のコマの撃破勝利は余勢転化が起き、Battleと同じ手順(前後のspin_decayを渡す)で
+	# 「長持ち」表示になる。実際の低下量がそのまま行に出る。
 	var capped_stats := stats.duplicate_stats()
 	capped_stats.rps = SpinnerStats.RPS_CAP
 	var capped_preview := capped_stats.duplicate_stats()
+	var decay_before := capped_preview.spin_decay
 	var capped_gain := capped_preview.grow_rps_by_victory(true)
-	var capped_line := VictoryGrowthText.growth_line(true, capped_gain, capped_preview.rps)
-	check.call(capped_line.contains("頭打ち"), "上限rpsの実成長0は頭打ち表示になる: %s" % capped_line)
+	var capped_line := VictoryGrowthText.growth_line(
+		true, capped_gain, capped_preview.rps, decay_before, capped_preview.spin_decay
+	)
+	check.call(capped_line.contains("長持ち"), "上限rpsの撃破勝利は余勢転化の表示になる: %s" % capped_line)
+	check.call(
+		capped_line.contains("%.2f" % capped_preview.spin_decay),
+		"転化後のspin_decayがそのまま出る: %s" % capped_line
+	)
+
+	# spin_decayが床(OVERFLOW_DECAY_FLOOR)のコマは転化できず、頭打ちの正直表示に戻る。
+	var floored := capped_stats.duplicate_stats()
+	floored.spin_decay = SpinnerStats.OVERFLOW_DECAY_FLOOR
+	var floored_before := floored.spin_decay
+	var floored_gain := floored.grow_rps_by_victory(true)
+	var floored_line := VictoryGrowthText.growth_line(
+		true, floored_gain, floored.rps, floored_before, floored.spin_decay
+	)
+	check.call(floored_line.contains("頭打ち"), "床に達したコマは頭打ち表示に戻る: %s" % floored_line)
 
 
 ## Battle.gdが成長行をこのヘルパーで組み立て、発射時に消している(配線の退行検知)。
@@ -95,6 +140,10 @@ func _test_battle_wires_label(check: Callable) -> void:
 	check.call(
 		source.contains("grow_rps_by_victory("),
 		"Battle.gdが表示額を実成長関数(複製適用)から得る"
+	)
+	check.call(
+		source.contains("decay_before"),
+		"Battle.gdが余勢転化の前後spin_decayをヘルパーへ渡す(渡し忘れ退行の検知)"
 	)
 
 

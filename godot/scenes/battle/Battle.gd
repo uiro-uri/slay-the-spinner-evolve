@@ -834,8 +834,11 @@ func _finish() -> void:
 	if player_won and not _is_goal_battle():
 		var knockout := _result.finished_by_knockout()
 		var preview := _player.stats.duplicate_stats()
+		var decay_before := preview.spin_decay
 		var gained := preview.grow_rps_by_victory(knockout)
-		_growth_label.text = VictoryGrowthText.growth_line(knockout, gained, preview.rps)
+		_growth_label.text = VictoryGrowthText.growth_line(
+			knockout, gained, preview.rps, decay_before, preview.spin_decay
+		)
 		_growth_label.add_theme_color_override(
 			"font_color", Palette.GOLD_CARD if knockout else Palette.TEXT_PRIMARY
 		)

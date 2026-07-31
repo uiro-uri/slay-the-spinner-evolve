@@ -78,19 +78,39 @@ const KNOCKOUT_RPS_GROWTH := 1.0
 ## 撃破ボーナスの存在意義(当てにいく方が報われる)が崩れるため。
 const KNOCKOUT_RPS_GROWTH_RATE := 0.05
 
+## 撃破ボーナスの余勢転化でspin_decayを下げるときの下限。MOMENTUM札
+## (CustomPartCatalog.FULL_STEAM_FLOOR)と同じ0.4で、勝ち続けても自然減衰は
+## 通常の40%までしか軽くならない(無限に回るコマを作らないための床)。
+## 同値であることはテストが照合する。
+const OVERFLOW_DECAY_FLOOR := 0.4
+
 
 ## 戦闘に勝ったときに呼ぶ。回転を少しだけ成長させる(上限RPS_CAP)。
 ## knockout=真(接触で決着。BattleResult.finished_by_knockout)なら撃破ボーナスで
 ## 大きく育つ(現在rpsに比例、下限KNOCKOUT_RPS_GROWTH)。実プレイ(Main経由の
 ## GameState)とシミュレーション(RunSim)の両方がここを使う。
 ## 戻り値は実際に増えた量(上限で頭打ちした場合は要求より小さい)。表示用。
+##
+## 上限で堰き止められた撃破ボーナスの余りは寿命へ転化する(余勢)。強ビルドは
+## 中盤に上限40へ到達し、以降の勝利で「当てにいく理由」を機構ごと失っていた
+## (2026-07-30/31のコールドプレイで頭打ち表示が終盤の勝利に流れ続けた)。
+## 寿命目安はrps/(radius×spin_decay)なので、spin_decayをRPS_CAP/(RPS_CAP+余り)倍
+## することで、堰き止められたrpsが入っていた場合と厳密に同じだけ寿命が伸びる。
+## 受け身の勝ち(knockout=偽)は転化しない: 上限後こそ差を付けたい場面だから。
 func grow_rps_by_victory(knockout: bool = false) -> float:
 	var growth := VICTORY_RPS_GROWTH
 	if knockout:
 		growth = maxf(KNOCKOUT_RPS_GROWTH, rps * KNOCKOUT_RPS_GROWTH_RATE)
 	var before := rps
 	rps = minf(rps + growth, RPS_CAP)
-	return rps - before
+	var gained := rps - before
+	if knockout:
+		var overflow := growth - gained
+		if overflow > 0.0:
+			spin_decay = maxf(
+				OVERFLOW_DECAY_FLOOR, spin_decay * RPS_CAP / (RPS_CAP + overflow)
+			)
+	return gained
 
 
 func duplicate_stats() -> SpinnerStats:
