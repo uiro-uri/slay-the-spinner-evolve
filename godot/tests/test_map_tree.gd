@@ -17,6 +17,7 @@ func run(check: Callable) -> void:
 	_test_encounters(check)
 	_test_encounters_deterministic(check)
 	_test_no_needless_single_choice(check)
+	_test_no_single_choice_rails(check)
 	_test_single_escape_guarantee(check)
 	_test_vanguard_choice_guarantee(check)
 	_test_node_level_is_max(check)
@@ -274,6 +275,49 @@ func _test_no_needless_single_choice(check: Callable) -> void:
 		failures.is_empty(),
 		"マップ分岐保証: %d回の生成で1択ノードは幾何的に不可避な場合だけ(残存1択 %d/%d)%s" % [
 			TRIALS, single_total, node_total,
+			"" if failures.is_empty() else " / 例: " + failures[0]
+		]
+	)
+
+
+## 1択ノードが1択ノードへ連ならないこと(一本道回廊の根絶)。
+##
+## 全5列が埋まった段では、交差禁止の玉突きでどこか1列が1択になるのは幾何的に
+## 避けられない(端の列は矢印2種しか持てず、制約が隣へ連鎖する)。生成器は
+## そのしわ寄せ先(ピボット列)を段ごとに散らし、直前の段のピボットを避ける
+## ので、1択に入っても次の段では必ず選択肢が戻る——それをここで照合する。
+## かつては常に左から確定していたため右端に1択が毎段溜まり、右端を縦に貫く
+## 3〜6段の一本道回廊が62%のマップにあった。
+## 段8以降はゴールへ集約する設計(1択が正)なので、連なりの終点としても見ない。
+func _test_no_single_choice_rails(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var failures: Array[String] = []
+	var single_total := 0
+
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			failures.append("seed=%d: 生成に失敗" % trial)
+			continue
+		for coord in tree.nodes:
+			if coord.x < 1 or coord.x >= 8:
+				continue
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if node.arrows.size() != 1:
+				continue
+			single_total += 1
+			var target: Vector2i = node.targets()[0]
+			if target.x >= 8:
+				continue
+			var target_node: MapTree.MapNode = tree.nodes.get(target)
+			if target_node != null and target_node.arrows.size() == 1:
+				failures.append("seed=%d: 1択が連なっている %s -> %s" % [trial, coord, target])
+
+	check.call(
+		failures.is_empty(),
+		"マップ一本道レール: %d回の生成で1択ノードの先は必ず2択以上(1択ノード自体は%d個)%s" % [
+			TRIALS, single_total,
 			"" if failures.is_empty() else " / 例: " + failures[0]
 		]
 	)
