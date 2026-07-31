@@ -122,6 +122,17 @@ const BAR_ROW_H := 60.0
 ## 勝敗ジングルを鳴らすまでの遅延(秒)。決着の瞬間に重ねず、少し余韻を置いてから鳴らす。
 @export_range(0.0, 3.0, 0.05) var result_se_delay: float = 0.8
 
+@export_group("早送り")
+
+## 押している間だけ再生を倍速にする。長い戦闘(17〜20秒)の後半は微衝突が延々続く
+## 消耗戦で間延びするが、どこが退屈かの自動判定はしない(接戦のクライマックスまで
+## 早送りしかねない)——プレイヤーが押した間だけ速める。計算はPlaybackPacing
+## (純関数)、ここは配線だけ。勝敗・軌跡には影響しない。決着ズーム演出の最中は
+## 押していても等速へ戻し、一番熱い瞬間がスローのまま流れないようにする。
+
+## 押している間の再生速度。1.0で早送り無効。
+@export_range(1.0, 8.0, 0.5) var fast_forward_multiplier: float = 3.0
+
 ## 力尽きたコマが、消え始めるまでの待機(秒)。この間は最後の姿のまま残す。
 ## 乱戦の戦闘中に倒れた敵にも、決着で力尽きたコマ(敗者・引き分けの両者)にも同じ尺を使う。
 @export_range(0.0, 5.0, 0.05) var enemy_fadeout_delay: float = EnemyFadeout.DEFAULT_DELAY
@@ -248,6 +259,9 @@ var _arena_base_scale: Vector2 = Vector2.ONE
 
 ## 決着を付けたコマ衝突の時刻。負なら演出しない(play()で決める)。
 var _decisive_time: float = -1.0
+
+## いま早送り表示を出しているか。境目をまたいだときだけメッセージを書き換える。
+var _fast_forward_shown: bool = false
 
 ## いまゴースト(無敵)中か。無敵時間の境目でプレイヤーの見た目とSEを切り替える。
 var _ghost_active: bool = false
@@ -637,6 +651,8 @@ func play(result: BattleResult) -> void:
 		_enemies[i].modulate.a = 1.0
 		_enemy_bars[i].modulate.a = 1.0
 
+	_fast_forward_shown = false
+
 	_apply_frame(0.0)
 	# ゴースト(無敵)の見た目とSEをt=0の状態に合わせる。無敵ありなら開始SEが鳴り、
 	# コマがシマーで透け始める。無ければ何も起きない。
@@ -651,7 +667,13 @@ func _physics_process(delta: float) -> void:
 	if _result == null:
 		return
 
-	_playback_time += delta
+	# 押している間だけ再生を速める。勝敗は計算済みで、軌跡には触れない。
+	var pace := PlaybackPacing.speed_at(
+		_fast_forward_held(), fast_forward_multiplier,
+		_playback_time, _decisive_time, finish_zoom_lead
+	)
+	_update_fast_forward_note(pace)
+	_playback_time += delta * pace
 	_apply_frame(_playback_time)
 	_update_ghost(_playback_time)
 	# 自分のコマの残り回転で回転音を鳴らす。力尽きれば AudioLevels 側で無音になる。
@@ -662,6 +684,27 @@ func _physics_process(delta: float) -> void:
 
 	if _playback_time >= _result.finish_time:
 		_finish()
+
+
+## 早送りの入力。画面のどこかを押し続けている(タッチ長押しはGodot既定の
+## マウスエミュレーションで左ボタン扱いになる)か、キーボードの決定キー。
+## 発射後はLaunchControllerが無効なので、押しっぱなしが他と衝突することはない。
+func _fast_forward_held() -> bool:
+	return (
+		Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+		or Input.is_action_pressed("ui_accept")
+	)
+
+
+## 早送り中はメッセージ欄に「▶▶ 早送り」を出す。無言で時間が縮むと物理の
+## 不具合に見えるため、圧縮していることを事実として見せる。決着(_finish)が
+## 勝敗メッセージで上書きするので、後始末はここでは要らない。
+func _update_fast_forward_note(pace: float) -> void:
+	var active := pace > 1.05
+	if active == _fast_forward_shown:
+		return
+	_fast_forward_shown = active
+	_message.text = "BATTLE_FAST_FORWARD" if active else ""
 
 
 ## ゴースト(すり抜け)の見た目とSEを、時刻tが窓の内か外かに合わせる。

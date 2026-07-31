@@ -23,6 +23,7 @@ BATTLE_GROWTH_VICTORY,Victory — spin +{0} → {1},勝利の勢いで回転 +{0
 BATTLE_GROWTH_KNOCKOUT_CAPPED,Knockout bonus — but spin is capped at {0},撃破ボーナス — だが回転は上限{0}で頭打ち
 BATTLE_GROWTH_KNOCKOUT_OVERFLOW,Knockout bonus! Overflow steadies your spin — decay {0}→{1},撃破ボーナス! 勢い余って回転が長持ちに 回転減衰 {0}→{1}
 BATTLE_GROWTH_CAPPED,Spin at cap {0} — no growth,回転は上限{0}で頭打ち・成長なし
+BATTLE_FAST_FORWARD,▶▶ Fast-forward,▶▶ 早送り
 GAMEOVER_TITLE,GAME OVER,ゲームオーバー
 GAMEOVER_CONTINUE,Continue,コンティニュー
 GAMEOVER_GIVE_UP,Give Up,あきらめる
