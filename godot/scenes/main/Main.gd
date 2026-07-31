@@ -117,14 +117,18 @@ func goto_gameover() -> void:
 	gameover.setup(GameState.continues_left)
 
 
-## コンティニュー: 回数を1消費し、同じ相手・同じマップ位置で戦闘へ戻る。
-## pending_enemiesもcurrent_coordも触らないので、同じグループでそのまま再挑戦になる。
+## コンティニュー: 回数を1消費し、同じマップ位置で戦闘へ戻る。相手は同レベルの
+## 別個体に入れ替える(EnemyRoster.reroll_group)。以前は出現位置しか変わらず、
+## 同じ相手に同じ負け方を繰り返す徒労だった。レベル・頭数は保たれるので、
+## マップ表示も報酬(node.level())も嘘にならない。ノード自体(node.enemies)は
+## 触らず、この戦闘のpending_enemiesだけを差し替える。current_coordも触らない。
 func _on_continue_requested() -> void:
 	AudioManager.play("ui_confirm")
 	if not GameState.use_continue():
 		# 残0で来たら念のためタイトルへ（通常はボタンが隠れて起きない）。
 		goto_title()
 		return
+	GameState.pending_enemies = EnemyRoster.reroll_group(GameState.pending_enemies)
 	goto_battle()
 
 

@@ -40,6 +40,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_reward_guard(check)
 	_test_naive_play_defeat_prompt(check)
 	_test_naive_play_bseed_pin(check)
+	_test_naive_play_group_persistence(check)
 
 
 func _request() -> BattleRequest:
@@ -982,3 +983,29 @@ func _test_naive_play_victory_text(check: Callable) -> void:
 		"頭打ち" in String(NaivePlay.victory_text(
 			true, floored_gain, floored.rps, floored_before, floored.spin_decay)),
 		"naive_play: 床に達したコマは頭打ち表示に戻る")
+
+
+## retryの個体入れ替えは名前でstateに保存され、launchが同じ相手を復元すること
+## (group_names/group_from_namesの往復)。名前で持つのはstateがJSONだから。
+## 復元できない名前が混ざったら部分的に混ぜず、丸ごとノード生成時の個体へ戻す。
+func _test_naive_play_group_persistence(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var fallback := EnemyRoster.of_level(4)
+	var group := EnemyRoster.of_level(3)
+	var names: Array = NaivePlay.group_names(group)
+	var restored: Array[EnemyData] = NaivePlay.group_from_names(names, fallback)
+	var roundtrip := restored.size() == group.size()
+	if roundtrip:
+		for i in restored.size():
+			if restored[i].display_name != group[i].display_name:
+				roundtrip = false
+	check.call(roundtrip, "naive_play: 個体入れ替えは名前で往復できる(予告と同じ相手で解決)")
+	check.call(
+		NaivePlay.group_from_names(null, fallback) == fallback,
+		"naive_play: 名前未保存(旧state/enter直後)はノード生成時の個体を使う")
+	check.call(
+		NaivePlay.group_from_names([], fallback) == fallback,
+		"naive_play: 空の名前列はノード生成時の個体を使う")
+	check.call(
+		NaivePlay.group_from_names(["ENEMY_9_9"], fallback) == fallback,
+		"naive_play: 知らない名前が混ざったら丸ごとノード生成時の個体へ戻す")
