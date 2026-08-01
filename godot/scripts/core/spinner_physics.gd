@@ -184,6 +184,16 @@ static func drilled_spin_drain(drain: float, drill: float, pierce_drain: float) 
 	return drain + maxf(drill, 0.0) * maxf(pierce_drain, 0.0)
 
 
+## 壁で失うrpsを、現在rpsの割合でなく絶対量で出す版。式はspin_drainと同じ形で、
+## 壁を「無限に重い相手」と見なして進入速度に比例させ、自分の硬さ(質量×半径²)で割る。
+static func absolute_wall_drain(
+	normal_speed: float, own_mass: float, own_radius: float, violence: float
+) -> float:
+	if own_mass <= 0.0 or own_radius <= 0.0:
+		return 0.0
+	return violence * maxf(normal_speed, 0.0) / (own_mass * own_radius * own_radius)
+
+
 ## 衝突削りの計算に使う速さの床。相手の速さがfloor_speed未満でも、floor_speed
 ## ぶんの削りが出る=遅い接触でも最低限「噛み合う」。
 ##

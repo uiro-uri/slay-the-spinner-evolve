@@ -66,6 +66,9 @@ func _one_wall_hit_request(launch_speed: float, ref_speed: float, wall_keep: flo
 	var r := BattleRequest.new()
 	r.natural_damping = 0.0
 	r.stage_strength = 0.0
+	# ここで見るのは乗算側(impact_scaled_wall_damping)なので、絶対量への寄せは切る。
+	# 絶対量とのブレンド自体は test_wall_absolute.gd が受け持つ。
+	r.wall_absolute_share = 0.0
 	r.wall_impact_ref_speed = ref_speed
 	r.max_duration = 0.5
 	# 下の壁(y=0)へ一直線。半径0.7なので0.8進むと接触する。

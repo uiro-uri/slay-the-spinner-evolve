@@ -118,7 +118,8 @@ static func _classify_track(
 		var prev := frames[i - 1].rps
 		var cur := frames[i].rps
 		var kind := _event_kind(
-			prev, cur, decay_amt, own_walls.has(i), wall_damping_floor)
+			prev, cur, decay_amt, own_walls.has(i), wall_damping_floor,
+			request.wall_absolute_share > 0.0)
 
 		if kind == "wall":
 			wall_hits += 1
@@ -164,9 +165,12 @@ static func _classify_track(
 ## 見分ける。衝突と壁が同フレームで重なった場合、壁の下限係数(wall_damping_floor)
 ## でも説明できない大きさの喪失なら "drain" に寄せる(衝突が起きた事実を優先する
 ## 旧実装と同じ向き。壁だけの喪失は同フレーム2回でも prev*(1-floor²) を超えない)。
+## wall_absolute が真のとき(request.wall_absolute_share>0)は、壁の喪失が現在rpsの
+## 割合ではなく絶対量になるため「prev の何割まで」という上界そのものが成り立たない。
+## 値では説明を切り分けられないので、リゾルバが記録した壁衝突の事実をそのまま採る。
 static func _event_kind(
 	prev: float, cur: float, decay_amt: float,
-	has_wall: bool, wall_damping_floor: float
+	has_wall: bool, wall_damping_floor: float, wall_absolute: bool = false
 ) -> String:
 	if prev <= 0.0:
 		return "decay"
@@ -178,6 +182,8 @@ static func _event_kind(
 	if absf(before_decay - prev) <= tol:
 		return "decay"
 	if has_wall:
+		if wall_absolute:
+			return "wall"
 		var max_wall_loss := prev * (1.0 - wall_damping_floor * wall_damping_floor)
 		if prev - before_decay > max_wall_loss + tol:
 			return "drain"

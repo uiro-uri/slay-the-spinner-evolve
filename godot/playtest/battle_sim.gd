@@ -19,12 +19,21 @@ class Overrides:
 
 	var stage_shape := -1  # -1なら既定
 	var violence := -1.0
+	var wall_absolute_share := -1.0
+	var natural_damping := -1.0
+	## 敵の硬さ(質量)と回転の一律倍率。物理側を接触寄りに変えた際の難易度補償を測る。
+	var enemy_mass_scale := 1.0
+	var enemy_rps_scale := 1.0
 
 	func apply(request: BattleRequest) -> void:
 		if stage_shape >= 0:
 			request.stage_shape = stage_shape as SpinnerPhysics.StageShape
 		if violence >= 0.0:
 			request.violence = violence
+		if wall_absolute_share >= 0.0:
+			request.wall_absolute_share = wall_absolute_share
+		if natural_damping >= 0.0:
+			request.natural_damping = natural_damping
 
 
 ## 何も指定されなかったときの土俵。BattleRequestの既定値(＝Battle.tscnの
@@ -82,8 +91,15 @@ static func play_one(
 		)
 		plans.append(plan)
 		enemy_radii.append(enemy.stats.radius)
+		var enemy_stats := enemy.stats
+		if overrides != null and (
+			overrides.enemy_mass_scale != 1.0 or overrides.enemy_rps_scale != 1.0
+		):
+			enemy_stats = enemy.stats.duplicate_stats()
+			enemy_stats.mass *= overrides.enemy_mass_scale
+			enemy_stats.rps *= overrides.enemy_rps_scale
 		enemy_launches.append(
-			BattleRequest.Launch.new(enemy.stats, plan.position, plan.velocity)
+			BattleRequest.Launch.new(enemy_stats, plan.position, plan.velocity)
 		)
 		top_level = maxi(top_level, enemy.level)
 
@@ -113,6 +129,10 @@ static func play_one(
 		# リゾルバが記録した事実。BattleMetrics(軌跡からの推定)とは別に持つ。
 		# RunSimが撃破ボーナス(勝利成長の増額)の判定に使う。
 		"knockout": result.finished_by_knockout(),
+		# 機構別のrps喪失内訳(drain/wall/decay/wall_hits)。バランス調整で
+		# 「何が勝敗を決めたか」を統計で追うために事実のまま載せる。
+		"player_rps_loss": result.player_rps_loss,
+		"enemy_rps_loss": result.enemy_rps_loss.duplicate(true),
 	}
 	# 死因の内訳(一撃死かどうか、決着までの衝突回数)を足す。集計側が読む。
 	record.merge(BattleMetrics.classify(request, result))

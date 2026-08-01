@@ -86,11 +86,17 @@ var obstacles: Array[Vector3] = []
 ## 当てにいかず低速で待つ受け身が最適解だった。削りを1.5倍・自然減衰を0.75倍にして
 ## 決着を接触寄りに。第2弾(2026-07-22)はLv3+の敵spin_decay<1(寿命の逆転解消)と対で
 ## violence 0.06→0.07。spin_kick_scaleは削り比例なので反比例(1.35→1.15)で勢いを維持。
+##
+## 第3弾(2026-08-01)「壁支配の是正」: 壁の喪失を絶対量へ寄せた(wall_absolute_share)
+## だけでは決着が自然減衰待ちに倒れる(段9の死因が減衰350/366)ので、減衰を薄くして
+## (0.75→0.30)接触の取り分を空け、そのぶん削りを強めて(0.07→0.16)決着の速さを保つ。
+## 3つは一体で、どれか1つだけ動かすと必ずどれか別の機構が支配する(計測はjournal参照)。
+## spin_kick_scaleは今回あえて据え置き=弾き飛ばしは強くなる(当てた手応えを上げる方向)。
 var stage_strength: float = 4.9
 var stage_shape: SpinnerPhysics.StageShape = SpinnerPhysics.StageShape.DISH
-var violence: float = 0.07
+var violence: float = 0.16
 var spin_kick_scale: float = 1.15
-var natural_damping: float = 0.75
+var natural_damping: float = 0.30
 var wall_damping: float = 0.75
 
 ## 壁ダンピングを衝突の激しさに比例させる基準速度。壁法線方向の進入速度が
@@ -104,6 +110,11 @@ var wall_impact_ref_speed: float = 8.0
 ## 対の泥仕合対策で、低速の微衝突の応酬が何も生まず決着が壁・減衰任せになるのを
 ## 防ぐ。0以下で床なし(旧挙動)。詳細はSpinnerPhysics.bitten_speed。
 var bite_floor_speed: float = 4.0
+
+## 壁の喪失を「現在rpsへの乗算」から「絶対量」へ寄せる度合いと、その威力。
+## 1.0で完全に絶対量、0で従来の乗算のみ(旧挙動)。詳細はBattleResolver._wall_damaged_rps。
+var wall_absolute_share: float = 0.6
+var wall_violence: float = 0.35
 
 ## 敵同士の衝突で互いに与える削り(と削り比例のspin_kick)の倍率。1.0で対等
 ## (プレイヤーと同じ扱い)。「乱戦一択」の検証(2026-07-29)で、Lv1-2の乱戦は
@@ -150,6 +161,8 @@ func to_dict() -> Dictionary:
 		"wall_damping": wall_damping,
 		"wall_impact_ref_speed": wall_impact_ref_speed,
 		"bite_floor_speed": bite_floor_speed,
+		"wall_absolute_share": wall_absolute_share,
+		"wall_violence": wall_violence,
 		"enemy_mutual_drain_scale": enemy_mutual_drain_scale,
 		"lose_threshold": lose_threshold,
 		"ghost_duration": ghost_duration,
@@ -182,6 +195,9 @@ static func from_dict(d: Dictionary) -> BattleRequest:
 	r.wall_impact_ref_speed = d.get("wall_impact_ref_speed", 0.0)
 	# 同上: 旧い保存データは床なし(0)で補い、当時の結果をそのまま再現する。
 	r.bite_floor_speed = d.get("bite_floor_speed", 0.0)
+	# 旧データは0=無効(従来の乗算のみ)で読む。記録当時の挙動をそのまま再現するため。
+	r.wall_absolute_share = d.get("wall_absolute_share", 0.0)
+	r.wall_violence = d.get("wall_violence", 0.0)
 	# 同上: 旧い保存データはスケール無効(1.0=対等)で補い、当時の結果を再現する。
 	r.enemy_mutual_drain_scale = d.get("enemy_mutual_drain_scale", 1.0)
 	r.lose_threshold = d["lose_threshold"]

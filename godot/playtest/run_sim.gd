@@ -107,6 +107,8 @@ static func play_one(
 				"loser": record.get("loser", "none"),
 				"fatal_hit_index": record.get("fatal_hit_index", 0),
 				"hits_taken": record.get("hits_taken", 0),
+				"player_rps_loss": record.get("player_rps_loss", {}),
+				"enemy_rps_loss": record.get("enemy_rps_loss", []),
 			}
 			if record.has("violations"):
 				entry["violations"] = record["violations"]

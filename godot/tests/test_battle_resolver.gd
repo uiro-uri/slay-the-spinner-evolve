@@ -311,6 +311,9 @@ func _test_mutual_ko(check: Callable) -> void:
 	# 乱戦版: 1体は正面衝突の相打ち、もう1体は同じステップ内に自然減衰で落ちる。
 	# 全員が同一ステップで力尽きても勝ち扱いになること。
 	var r2 := BattleRequest.new()
+	# 1ステップぶんの自然減衰量そのものに懸かる筋書きなので、既定値の調整に
+	# 巻き込まれないよう減衰率をこの場で固定する。
+	r2.natural_damping = 0.75
 	r2.player = BattleRequest.Launch.new(_stats(1.5, 0.5, 0.4), Vector2(4.7, 5), Vector2(3, 0))
 	r2.enemies = [
 		BattleRequest.Launch.new(_stats(1.0, 0.5, 0.4), Vector2(5.3, 5), Vector2(-3, 0)),
