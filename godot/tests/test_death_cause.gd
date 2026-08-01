@@ -287,6 +287,10 @@ func _dead_state(drain: float, wall: float, decay: float) -> BattleResolver.Stat
 func _test_dominant_drain_over_final_decay(check: Callable) -> void:
 	var r := BattleRequest.new()
 	r.stage_strength = 0.0
+	# 「大半を削られた敵が一瞬生き延び、最後の一滴は自然減衰」という配分そのものが
+	# 筋書きなので、削り/減衰の比を既定値の調整に委ねずこの場で固定する。
+	r.violence = 0.07
+	r.natural_damping = 0.75
 	var pstats := SpinnerStats.default_player()
 	var estats := _enemy_stats(3.0)
 	estats.friction = 3.0
@@ -323,6 +327,10 @@ func _test_dominant_drain_over_final_decay(check: Callable) -> void:
 func _test_dominant_decay_over_final_drain(check: Callable) -> void:
 	var r := BattleRequest.new()
 	r.stage_strength = 0.0
+	# 「近づく間に減衰でほぼ尽き、最後の一撫でで落ちる」配分が筋書きなので、
+	# 削り/減衰の比を既定値の調整に委ねずこの場で固定する。
+	r.violence = 0.07
+	r.natural_damping = 0.75
 	var pstats := SpinnerStats.default_player()
 	pstats.friction = 0.0
 	var estats := _enemy_stats(2.0)

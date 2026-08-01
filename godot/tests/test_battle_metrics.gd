@@ -24,6 +24,10 @@ func run(check: Callable) -> void:
 func _mismatch_request() -> BattleRequest:
 	var r := BattleRequest.new()
 	r.stage_strength = 0.0
+	# 「大半を削られた敵が一瞬生き延び、最後の一滴は自然減衰」という配分そのものが
+	# 筋書きなので、削り/減衰の比を既定値の調整に委ねずこの場で固定する。
+	r.violence = 0.07
+	r.natural_damping = 0.75
 	var estats := SpinnerStats.new()
 	estats.mass = 1.0
 	estats.radius = 0.5
@@ -60,6 +64,9 @@ func _test_fact_over_signature(check: Callable) -> void:
 ## 停止事実キーの無い旧結果(dict往復で欠落)では従来の署名照合に落ちる(後方互換)。
 func _test_signature_fallback_for_old_result(check: Callable) -> void:
 	var r := _mismatch_request()
+	# 署名照合は「壁の喪失は現在rpsの割合」を前提にした旧経路なので、絶対量への
+	# 寄せは切って当時の環境で読ませる(絶対量が乗ると値では切り分けられない)。
+	r.wall_absolute_share = 0.0
 	var d := BattleResolver.resolve(r).to_dict()
 	d.erase("player_death")
 	d.erase("enemy_deaths")

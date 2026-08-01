@@ -83,7 +83,10 @@ func _one_hit_request(player_edge: float, enemy_guard: float = 0.0) -> BattleReq
 	var r := BattleRequest.new()
 	r.natural_damping = 0.0
 	r.stage_strength = 0.0
-	r.max_duration = 1.0
+	# 1回だけ衝突させる窓。既定のviolenceを上げると弾き返された後に再接近して
+	# 2回目が入り、「ちょうど(1+edge)倍」が崩れるので、初撃だけを見る長さに切る
+	# (4ユニット離れて相対速度8で接近、縁が触れるのは約0.35秒)。
+	r.max_duration = 0.45
 	r.player = BattleRequest.Launch.new(pstats, Vector2(3, 5), Vector2(4, 0))
 	r.enemies = [BattleRequest.Launch.new(estats, Vector2(7, 5), Vector2(-4, 0))]
 	return r
@@ -131,7 +134,10 @@ func _giant_request(player_edge: float, enemy_mass: float) -> BattleRequest:
 	var r := BattleRequest.new()
 	r.natural_damping = 0.0
 	r.stage_strength = 0.0
-	r.max_duration = 1.0
+	# 1回だけ衝突させる窓。既定のviolenceを上げると弾き返された後に再接近して
+	# 2回目が入り、「ちょうど(1+edge)倍」が崩れるので、初撃だけを見る長さに切る
+	# (4ユニット離れて相対速度8で接近、縁が触れるのは約0.35秒)。
+	r.max_duration = 0.45
 	r.arena_bounds = Rect2(-100, -100, 200, 200)
 	r.player = BattleRequest.Launch.new(pstats, Vector2(3, 5), Vector2(4, 0))
 	r.enemies = [BattleRequest.Launch.new(estats, Vector2(7, 5), Vector2(-4, 0))]

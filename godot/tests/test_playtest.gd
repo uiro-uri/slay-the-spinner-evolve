@@ -213,12 +213,18 @@ func _test_field_reaches_battle(check: Callable) -> void:
 			plate = field
 		elif field.title_key == "FIELD_PILLARS":
 			pillars = field
-	var a := BattleSim.play_one(5, enemies, LaunchPolicy.Kind.INTERCEPT, stats, null, plate)
-	var b := BattleSim.play_one(5, enemies, LaunchPolicy.Kind.INTERCEPT, stats, null, pillars)
-	check.call(
-		a["finish_time"] != b["finish_time"] or a["impacts"] != b["impacts"],
-		"battle_sim: 土俵が変われば戦いも変わる"
-	)
+	# 単一シードだと「柱に触れる前に決着した」だけで落ちうる(決着が速くなると起きる)。
+	# 複数シードを見て、1本でも違えば土俵は届いている。
+	var differs := false
+	for seed_value in range(5, 25):
+		var a := BattleSim.play_one(
+			seed_value, enemies, LaunchPolicy.Kind.INTERCEPT, stats, null, plate)
+		var b := BattleSim.play_one(
+			seed_value, enemies, LaunchPolicy.Kind.INTERCEPT, stats, null, pillars)
+		if a["finish_time"] != b["finish_time"] or a["impacts"] != b["impacts"]:
+			differs = true
+			break
+	check.call(differs, "battle_sim: 土俵が変われば戦いも変わる")
 
 
 ## スイープの上書きは土俵より後に載ること。逆だとフィールドが上書きを潰して、

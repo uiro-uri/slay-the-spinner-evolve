@@ -58,8 +58,10 @@ const BAR_ROW_H := 60.0
 ## 8割が自然減衰で、当てにいかない受け身が最適解だった。決着を接触寄りに。
 ## 0.06→0.07は第2弾(2026-07-22): Lv3+の敵spin_decay<1(寿命の逆転解消)と対で、
 ## 敵が長生きになるぶん削りを増やし、接触で決めきれる速さを保つ。
+## 0.07→0.16は第3弾(2026-08-01「壁支配の是正」): 壁を絶対量へ寄せ・自然減衰を薄くした
+## ぶん、削りを強めて決着の速さを保つ。3つで一体(battle_request.gdの経緯コメント参照)。
 ## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
-@export_range(0.0, 1.0, 0.01) var violence: float = 0.07
+@export_range(0.0, 1.0, 0.01) var violence: float = 0.16
 
 ## 削れたRPSがどれだけ弾き飛ばしに変わるか。
 ## 弾きは削り量に比例するので、violenceを上げた際に反比例で下げて
@@ -67,7 +69,9 @@ const BAR_ROW_H := 60.0
 @export_range(0.0, 5.0, 0.05) var spin_kick_scale: float = 1.15
 
 ## 何もしなくても失われる回転(毎秒、半径に比例)。1.0→0.75はviolenceと対の再設計。
-@export_range(0.0, 5.0, 0.05) var natural_damping: float = 0.75
+## 0.75→0.30は第3弾(2026-08-01): 壁を絶対量へ寄せると決着が減衰待ちに倒れるため、
+## 減衰を薄くして接触の取り分を空ける。
+@export_range(0.0, 5.0, 0.05) var natural_damping: float = 0.30
 
 ## 壁にぶつかった時に残る回転の割合。
 @export_range(0.0, 1.0, 0.01) var wall_damping: float = 0.75
@@ -82,6 +86,13 @@ const BAR_ROW_H := 60.0
 ## 任せになる泥仕合対策。0で床なし(旧挙動)。
 ## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
 @export_range(0.0, 12.0, 0.5) var bite_floor_speed: float = 4.0
+
+## 壁の回転喪失を「現在rpsへの乗算」から「絶対量」へ寄せる度合い(0で旧挙動、
+## 1で完全に絶対量)と、その威力。乗算はrpsを積むほど1回の壁が高くつくので、
+## 後半だけ壁が勝敗を独占していた。詳細はBattleResolver._wall_damaged_rps。
+## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
+@export_range(0.0, 1.0, 0.05) var wall_absolute_share: float = 0.6
+@export_range(0.0, 2.0, 0.05) var wall_violence: float = 0.35
 
 ## 敵同士の衝突で互いに与える削り(と削り比例の弾き)の倍率。1.0で対等(旧挙動)。
 ## 下げると同士討ちの自滅が減り、乱戦が頭数どおり手強くなる(柔らかい序盤の
@@ -620,6 +631,8 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 	request.wall_damping = wall_damping
 	request.wall_impact_ref_speed = wall_impact_ref_speed
 	request.bite_floor_speed = bite_floor_speed
+	request.wall_absolute_share = wall_absolute_share
+	request.wall_violence = wall_violence
 	request.enemy_mutual_drain_scale = enemy_mutual_drain_scale
 	request.lose_threshold = lose_threshold
 	# 取得済みのゴースト札から無敵時間を決める。単体調整時は取得0で0秒になり従来どおり。

@@ -14,6 +14,22 @@ extends RefCounted
 const SIZE_SCALE := 0.75
 
 
+## 「壁支配の是正」(2026-08-01)で物理を接触寄りに振ったぶんの難易度補償。表の設計値は
+## そのまま残し、生成時に掛ける(SIZE_SCALEと同じ方式)。
+##
+## 接触で勝敗が決まるようにすると、接触こそがプレイヤーの札(EDGE/DRILL/質量/回転)の
+## 置き場所なので、同じ物理でもプレイヤーだけが一方的に強くなる(ランボット150で
+## クリア率 48.7→68.0%)。敵の回転ゲージを厚くして元の勝率へ戻す。
+##
+## 回転だけを動かすのは、質量と半径が「被/与比」や硬さの不変条件に効くため。
+## 被削りは相手の質量に比例し与削りは相手の硬さ(質量×半径²)に反比例するので、
+## 質量を一律に上げると被/与比が質量²で膨らみ、ボスが接触トレードの上限
+## (test_enemy_roster.gdのBOSS_TRADE_RATIO_CAP)を割る。rpsはこの比に入らない。
+## 感度は高く、1.20まで上げるとクリア率42.0%まで落ちる。いじったら
+## playtest/measure_wall_share.gd か scripts/playtest.sh で測り直すこと。
+const RPS_SCALE := 1.16
+
+
 ## 段(1..9)に対する敵レベル(1..5)。ゴール(段9)がレベル5のボスになる。
 ## プロトタイプに「エネミーが強くなる周期が変だったので修正（ボスがレベル5に
 ## なるようにしたい）」というコミットがあり、この式に落ち着いている。
@@ -270,7 +286,7 @@ static func _enemy(
 	stats.radius = radius * SIZE_SCALE
 	stats.friction = friction
 	stats.restitution = restitution
-	stats.rps = rps
+	stats.rps = rps * RPS_SCALE
 	# 既定1.0(Lv1〜2)。Lv3以降は<1にして自然減衰を弱め、寿命の逆転(高レベルほど
 	# 短命=待てば勝てる)を防ぐ。上の表の末尾引数がそれ。
 	stats.spin_decay = spin_decay

@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "bitefloor", "mutualdrain", "sparkscale", "battledefaults", "pacing"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "sparkscale", "battledefaults", "pacing"
 ]
 
 
@@ -145,6 +145,9 @@ func _init() -> void:
 
 	print("== wallimpact ==")
 	_test_wall_impact_damping()
+
+	print("== wallabsolute ==")
+	_test_wall_absolute()
 
 	print("== bitefloor ==")
 	_test_bite_floor()
@@ -484,6 +487,12 @@ func _test_wall_impact_damping() -> void:
 	var suite = load("res://tests/test_wall_impact_damping.gd").new()
 	suite.run(_check)
 	_done("wallimpact")
+
+
+func _test_wall_absolute() -> void:
+	var suite = load("res://tests/test_wall_absolute.gd").new()
+	suite.run(_check)
+	_done("wallabsolute")
 
 
 func _test_bite_floor() -> void:

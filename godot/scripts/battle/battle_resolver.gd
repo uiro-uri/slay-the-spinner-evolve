@@ -287,6 +287,10 @@ static func _resolve_disc_collision(
 	# edgeのpierce下限があっても素の削りは硬さ反比例で痩せるため、対巨体の攻め軸として
 	# 加算で確実に食い込む(詳細はdrilled_spin_drainのコメント)。guardの内側なので
 	# 受け手のhit_guardは追加分にも効く(防御札が貫通で無意味にならない)。
+	# 最後に攻め手の「今の回転」を威力へ乗せる(rps_powered_spin_drain)。攻め札の上乗せも
+	# 含めた合計に掛かり、受け手のhit_guardの内側=防御札は従来どおり効く。削りだけが
+	# 絶対量で、壁(現在rpsへの乗算)と自然減衰(時間比例)だけが後半に育つ偏りの是正。
+	# 攻め手のrpsはこの衝突で減る前の値を使う(a/bの解決順で威力が変わらないように)。
 	var a_drain := SpinnerPhysics.guarded_spin_drain(
 		SpinnerPhysics.drilled_spin_drain(
 			SpinnerPhysics.sharpened_spin_drain(
@@ -368,12 +372,7 @@ static func _resolve_walls(
 		var normal_speed := -wall.normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
 		var before := s.rps
-		s.rps *= SpinnerPhysics.effective_wall_damping(
-			SpinnerPhysics.impact_scaled_wall_damping(
-				req.wall_damping, normal_speed, req.wall_impact_ref_speed
-			),
-			s.stats.wall_keep
-		)
+		s.rps = _wall_damaged_rps(s, normal_speed, req)
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
 		# 接触点。法線は内向きなので、中心から壁側へ半径分ずらすとコマの縁＝
@@ -403,12 +402,7 @@ static func _resolve_obstacles(
 		var normal_speed := -normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
 		var before := s.rps
-		s.rps *= SpinnerPhysics.effective_wall_damping(
-			SpinnerPhysics.impact_scaled_wall_damping(
-				req.wall_damping, normal_speed, req.wall_impact_ref_speed
-			),
-			s.stats.wall_keep
-		)
+		s.rps = _wall_damaged_rps(s, normal_speed, req)
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
 		# 強度=この1回で実際に失ったrps(壁と同じ扱いで衝撃波をスケールする)。
@@ -416,6 +410,34 @@ static func _resolve_obstacles(
 			BattleResult.Impact.new(t, s.position - normal * s.stats.radius, before - s.rps)
 		)
 		_mark_if_dead(s, "wall", req, t)
+
+
+## 壁・障害物に1回ぶつかった後のrps。壁と柱で同じ規則を使う。
+##
+## 従来は「現在rpsへの乗算」だけだった。rpsの3つの喪失機構のうち乗算はこれだけで、
+## 報酬でrpsを積むほど1回の壁が高くつく=後半は壁だけが勝敗を決める偏りの正体
+## (ランボット300で段9の敗者死因は 削り1 / 壁159 / 減衰160、段1は 削り244 / 壁8)。
+## wall_absolute_shareのぶんだけ、削り(spin_drain)と同じ絶対量の式へ寄せる:
+## 壁を無限に重い相手と見なし、進入速度に比例・自分の硬さに反比例。
+## 0で従来と厳密一致、1で完全に絶対量。wall_keep(Rage Reflection)は両方に効く。
+static func _wall_damaged_rps(s: State, normal_speed: float, req: BattleRequest) -> float:
+	var keep := clampf(s.stats.wall_keep, 0.0, 1.0)
+	var proportional := s.rps * SpinnerPhysics.effective_wall_damping(
+		SpinnerPhysics.impact_scaled_wall_damping(
+			req.wall_damping, normal_speed, req.wall_impact_ref_speed
+		),
+		keep
+	)
+	var share := clampf(req.wall_absolute_share, 0.0, 1.0)
+	if share <= 0.0:
+		return proportional
+	var absolute := maxf(
+		s.rps - SpinnerPhysics.absolute_wall_drain(
+			normal_speed, s.stats.mass, s.stats.radius, req.wall_violence
+		) * (1.0 - keep),
+		0.0
+	)
+	return lerpf(proportional, absolute, share)
 
 
 static func _apply_natural_decay(s: State, req: BattleRequest, dt: float) -> void:
