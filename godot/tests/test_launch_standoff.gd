@@ -17,6 +17,8 @@ func run(check: Callable) -> void:
 	_test_multi_spawn(check)
 	_test_degenerate_on_spawn(check)
 	_test_infeasible_stays_inside(check)
+	_test_retreat_is_nearest(check)
+	_test_retreat_is_continuous(check)
 	_test_policies_respect_standoff(check)
 
 
@@ -154,6 +156,114 @@ func _test_infeasible_stays_inside(check: Callable) -> void:
 	check.call(
 		nearest >= 1.2,
 		"詰み配置: 届く中で間合いに最も近い点を選ぶ (最寄り %.2f)" % nearest
+	)
+
+
+## コールドプレイ(2026-08-01)で実際に出た段1の2体配置。乱戦の退避が壊れるのは
+## 敵が複数いる時だけなので、この2点を退避テストの共通の土台にする。
+const _MELEE_SPAWNS := [Vector2(1.534765, 3.001964), Vector2(3.242293, 8.593114)]
+const _MELEE_RADII := [0.35, 0.35]
+const _AIM_RING := 3.8
+
+
+func _melee_spawns() -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for s in _MELEE_SPAWNS:
+		out.append(s)
+	return out
+
+
+func _melee_radii() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	for r in _MELEE_RADII:
+		out.append(r)
+	return out
+
+
+## 発射リング上の角度degの狙い点(実UI・CLIとも「土俵の縁寄りのどこから行くか」を選ぶ)。
+func _aim_at(field: FieldData, deg: float) -> Vector2:
+	return field.arena_bounds.get_center() + Vector2.RIGHT.rotated(deg_to_rad(deg)) * _AIM_RING
+
+
+## 格子総当たりで求めた「wantに最も近い合法点」までの距離。
+func _nearest_legal_distance(field: FieldData, want: Vector2, player_radius: float) -> float:
+	var spawns := _melee_spawns()
+	var radii := _melee_radii()
+	var reqs := PackedFloat32Array()
+	for i in spawns.size():
+		reqs.append(LaunchStandoff.required_distance(player_radius, radii[i], field.inradius()))
+	var b := field.arena_bounds
+	var step := 0.05
+	var best := INF
+	var x := b.position.x + player_radius
+	while x <= b.end.x - player_radius:
+		var y := b.position.y + player_radius
+		while y <= b.end.y - player_radius:
+			var p := Vector2(x, y)
+			var ok := true
+			for i in spawns.size():
+				if p.distance_to(spawns[i]) < reqs[i]:
+					ok = false
+					break
+			if ok:
+				best = minf(best, p.distance_to(want))
+			y += step
+		x += step
+	return best
+
+
+## 退避先は「間合いを満たす点のうち、狙った場所に最も近いもの」であること。
+##
+## 以前の実装は「一番深く踏んでいる敵から押し出す」反復で、乱戦だと敵Aの押し出し先が
+## 敵Bを踏み→Bから押し出し…と玉突きして要求点と無関係な場所へ収束していた。実測では
+## 左上(3.22, 8.36)を狙って土俵の反対側の右下(4.60, 3.00)へ飛ばされ、最近合法点より
+## 2.78ユニット余分に退避していた(「狙ったのと違う所から始まる」の正体)。
+## 格子総当たりの最近合法点と突き合わせて、余分な退避が出ないことを固定する。
+func _test_retreat_is_nearest(check: Callable) -> void:
+	var field := _field()
+	var spawns := _melee_spawns()
+	var radii := _melee_radii()
+	var worst := 0.0
+	var worst_deg := 0.0
+	for i in 24:
+		var deg := float(i) * 15.0
+		var want := _aim_at(field, deg)
+		var got := field.clamp_launch(want, spawns, radii, 0.7)
+		# 格子の刻み(0.05)ぶんは総当たり側が不利なので、その半分を許容に足す。
+		var excess := want.distance_to(got) - _nearest_legal_distance(field, want, 0.7)
+		if excess > worst:
+			worst = excess
+			worst_deg = deg
+	check.call(
+		worst < 0.15,
+		"退避先は最近合法点(余分な退避 最大%.2f, deg=%.0f)" % [worst, worst_deg]
+	)
+
+
+## 狙いを少し動かしたら退避先も少ししか動かないこと。
+##
+## 狙い中のコマは退避後の位置に表示される(Battle._on_aim_moved)ので、退避先が
+## 飛べばコマが土俵を横断してワープして見える。以前は1度動かしただけで4.37ユニット
+## (土俵の対角のほぼ半分)飛ぶ角度があった。合法領域は円板の外側=非凸なので継ぎ目は
+## 幾何的に消せないが、「敵の出現点をまたぐたびに反対側へ飛ぶ」ほどの跳びは消せる。
+func _test_retreat_is_continuous(check: Callable) -> void:
+	var field := _field()
+	var spawns := _melee_spawns()
+	var radii := _melee_radii()
+	var prev := field.clamp_launch(_aim_at(field, 0.0), spawns, radii, 0.7)
+	var worst := 0.0
+	var worst_deg := 0.0
+	for i in range(1, 361):
+		var deg := float(i)
+		var got := field.clamp_launch(_aim_at(field, deg), spawns, radii, 0.7)
+		var jump := prev.distance_to(got)
+		if jump > worst:
+			worst = jump
+			worst_deg = deg
+		prev = got
+	check.call(
+		worst < 2.5,
+		"狙い1度あたりの退避先の跳びが小さい (最大%.2f, deg=%.0f)" % [worst, worst_deg]
 	)
 
 
