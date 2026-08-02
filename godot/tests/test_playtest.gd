@@ -662,6 +662,32 @@ func _test_naive_play_route_text(check: Callable) -> void:
 		"naive_play: 乱戦ノードはレアの出やすさ(頭数倍)が読める (%s)" % group_text)
 	check.call(group_text.begins_with("col-2"), "naive_play: 列表記は従来どおり (%s)" % group_text)
 
+	# 相手の硬さの取り分。実UIのマップに載ったメーターのCLI版で、**値も判定も
+	# ThreatMeter と一致していなければならない**——ここがずれると、コールドプレイの
+	# エージェントと実プレイヤーが違う情報で部屋を選ぶ(過去4回踏んだ型のズレ)。
+	var player := SpinnerStats.default_player()
+	var lv1: MapTree.MapNode = MapTree.MapNode.new(Vector2i(1, 2))
+	lv1.enemies = EnemyRoster.of_level(1)
+	lv1.field = single.field
+	var lv3: MapTree.MapNode = MapTree.MapNode.new(Vector2i(5, 2))
+	lv3.enemies = EnemyRoster.of_level(3)
+	lv3.field = single.field
+
+	var lv1_text: String = NaivePlay.route_text(1, lv1, player)
+	var lv3_text: String = NaivePlay.route_text(1, lv3, player)
+	check.call(
+		("%.2f" % ThreatMeter.share(player, lv1.enemies)) in lv1_text,
+		"naive_play: 取り分の値がThreatMeterと一致 (%s)" % lv1_text)
+	check.call(
+		"格下" in lv1_text and not ("格上" in lv1_text),
+		"naive_play: 初期ビルドから見てLv1は格下と出る (%s)" % lv1_text)
+	check.call(
+		"格上" in lv3_text,
+		"naive_play: 初期ビルドから見てLv3は格上と出る (%s)" % lv3_text)
+	check.call(
+		not ("取り分" in NaivePlay.route_text(1, lv3)),
+		"naive_play: 自分のビルドを渡さなければ従来どおり何も足さない")
+
 	var goal_text: String = NaivePlay.route_text(2, goal)
 	check.call(
 		"撃破でクリア" in goal_text,
