@@ -73,8 +73,20 @@ func _on_map_node_chosen(coord: Vector2i) -> void:
 
 
 func goto_battle() -> void:
-	var battle := _swap_screen(BATTLE_SCENE)
+	# ビルド表示に「この部屋の相手はどれだけ硬いか」を出すため、相手のstatsを渡す。
+	# 戦闘画面へ入るときだけ渡すこと(pending_enemiesは次の戦闘まで消えないので、
+	# StatPanelがGameStateを直接見るとマップ画面に前の相手が残る)。
+	var battle := _swap_screen(BATTLE_SCENE, true, _pending_enemy_stats())
 	battle.finished.connect(_on_battle_finished)
+
+
+## これから戦う相手のステータス一覧。StatPanelの取り分バーに渡す。
+func _pending_enemy_stats() -> Array[SpinnerStats]:
+	var out: Array[SpinnerStats] = []
+	for enemy in GameState.pending_enemies:
+		if enemy != null and enemy.stats != null:
+			out.append(enemy.stats)
+	return out
 
 
 ## 負けたらゲームオーバー画面へ。勝てば報酬を選んでマップへ戻る。
@@ -179,14 +191,17 @@ func _on_part_chosen(part: CustomPart) -> void:
 
 ## 画面を差し替える。show_stats=true(既定)のときはビルド表示HUDを今のGameStateへ
 ## 更新して見せ、ランの外の画面(タイトル/サウンドテスト)はfalseで隠す。
-func _swap_screen(scene: PackedScene, show_stats: bool = true) -> Node:
+## enemy_stats を渡すと、その相手との硬さ・寿命の取り分もHUDに並ぶ(戦闘画面だけ)。
+func _swap_screen(
+	scene: PackedScene, show_stats: bool = true, enemy_stats: Array[SpinnerStats] = []
+) -> Node:
 	for child in _screen_holder.get_children():
 		_screen_holder.remove_child(child)
 		child.queue_free()
 	var screen := scene.instantiate()
 	_screen_holder.add_child(screen)
 	if show_stats:
-		_stat_panel.refresh()
+		_stat_panel.refresh(enemy_stats)
 	else:
 		_stat_panel.hide_panel()
 	return screen
