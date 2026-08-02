@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks"
 ]
 
 
@@ -182,6 +182,9 @@ func _init() -> void:
 	print("== threatmeter ==")
 	_test_threat_meter()
 
+	print("== obstaclemarks ==")
+	_test_obstacle_marks()
+
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
 			_failures.append("%s が完走しなかった（実行時エラーの可能性）" % test_name)
@@ -328,6 +331,12 @@ func _test_threat_meter() -> void:
 	var suite = load("res://tests/test_threat_meter.gd").new()
 	suite.run(_check)
 	_done("threatmeter")
+
+
+func _test_obstacle_marks() -> void:
+	var suite = load("res://tests/test_obstacle_marks.gd").new()
+	suite.run(_check)
+	_done("obstaclemarks")
 
 
 func _test_roster() -> void:
