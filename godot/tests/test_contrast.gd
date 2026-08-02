@@ -52,6 +52,27 @@ func _test_reward_rare_card(check: Callable) -> void:
 		"レアカード: 暗色文字 vs 金の地 = %.2f (>= %.1f)" % [r, ColorContrast.AA_NORMAL]
 	)
 
+	# 報酬カードの見積もり(硬さ・寿命の増減)の色。通常カードは暗い地(SURFACE)に
+	# 直接乗り、レアカードは金の地なので暗色の縁取りを敷いて読ませる(戦闘メッセージ
+	# と同じ手口)。どちらの地でも通常テキスト基準を満たすこと。
+	for entry in [
+		{"name": "良化", "color": Palette.STAT_UP},
+		{"name": "悪化", "color": Palette.STAT_DOWN},
+	]:
+		var color: Color = entry["color"]
+		var vs_surface := ColorContrast.ratio(color, Palette.SURFACE)
+		check.call(
+			vs_surface >= ColorContrast.AA_NORMAL,
+			"見積もり(%s): 文字 vs カードの地 = %.2f (>= %.1f)" % [
+				entry["name"], vs_surface, ColorContrast.AA_NORMAL]
+		)
+		var vs_outline := ColorContrast.ratio(color, Palette.TEXT_OUTLINE)
+		check.call(
+			vs_outline >= ColorContrast.AA_NORMAL,
+			"見積もり(%s): 文字 vs レアカードでの縁取り = %.2f (>= %.1f)" % [
+				entry["name"], vs_outline, ColorContrast.AA_NORMAL]
+		)
+
 
 ## メニュー。既定の明るいラベル文字が、暗い既定クリア色の上で読める。
 ## クリア色は project.godot のリテラルなので Palette.BG と一致していることも確かめる

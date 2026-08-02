@@ -14,8 +14,23 @@ const CHOICE_COUNT := 3
 
 var _shine := 0.0
 
+## 見積もりの基準になる今のビルド。setup()で受け取る。nullなら見積もりを出さない
+## (ステータス無しで呼ばれる古い経路・テストのため)。
+var _stats: SpinnerStats = null
+var _continues := -1
+var _ghost_seconds := 0.0
 
-func setup(parts: Array[CustomPart]) -> void:
+
+## 選択肢を並べる。stats/continues/ghost_secondsは各カードの「取るとどうなるか」
+## (PartPreview)の基準で、Mainが今のGameStateから渡す。
+func setup(
+	parts: Array[CustomPart], stats: SpinnerStats = null,
+	continues: int = -1, ghost_seconds: float = 0.0
+) -> void:
+	_stats = stats
+	_continues = continues
+	_ghost_seconds = ghost_seconds
+
 	for child in _cards.get_children():
 		_cards.remove_child(child)
 		child.queue_free()
@@ -51,6 +66,22 @@ func _build_card(part: CustomPart) -> Control:
 	text.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(text)
 
+	# 「取るとどうなるか」の見積もり。効果テキストは倍率までしか言わないので、
+	# 勝敗を決める複合量(硬さ・寿命)がどちらへ動くかをここで見せる。詳細は
+	# scripts/ui/part_preview.gd の冒頭コメント。
+	var preview_labels: Array[Label] = []
+	if _stats != null:
+		var heading := Label.new()
+		heading.text = "REWARD_PREVIEW_HEADING"
+		heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		heading.add_theme_font_size_override("font_size", 12)
+		box.add_child(heading)
+		preview_labels.append(heading)
+		for row in PartPreview.rows(_stats, part, _continues, _ghost_seconds):
+			var line := _build_preview_row(row, is_rare)
+			box.add_child(line)
+			preview_labels.append(line.get_child(0) as Label)
+
 	if is_rare:
 		var tag := Label.new()
 		tag.text = "PART_RARITY_RARE"
@@ -58,7 +89,9 @@ func _build_card(part: CustomPart) -> Control:
 		box.add_child(tag)
 		# 金の地は明るいまま残る唯一の面なので、暗色文字＋明色縁取りで読ませる
 		# (戦闘メッセージの明色文字＋暗色縁取りと対の関係)。文字色はCustomPartが出所。
-		for label in [title, text, tag]:
+		var dark: Array[Label] = [title, text, tag]
+		dark.append_array(preview_labels)
+		for label in dark:
 			label.add_theme_color_override("font_color", CustomPart.RARE_TEXT_COLOR)
 			label.add_theme_color_override("font_outline_color", Palette.TEXT_PRIMARY)
 			label.add_theme_constant_override("outline_size", 3)
@@ -69,6 +102,40 @@ func _build_card(part: CustomPart) -> Control:
 	box.add_child(button)
 
 	return panel
+
+
+## 見積もり1行。左に項目名、右に「今の値 → 取った後の値」。
+## 良し悪しは値の色で見せる(変化なしは既定色のまま)。
+##
+## レアカードは地が明るい金なので、明色の値には暗色の縁取りを付けて読ませる
+## (戦闘メッセージと同じ手口。項目名の方は呼び出し側が暗色文字にする)。
+func _build_preview_row(row: Dictionary, is_rare: bool) -> HBoxContainer:
+	var line := HBoxContainer.new()
+
+	var name_label := Label.new()
+	name_label.text = row["label_key"]
+	name_label.add_theme_font_size_override("font_size", 13)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(name_label)
+
+	var value := Label.new()
+	value.text = PartPreview.format_row(row)
+	value.add_theme_font_size_override("font_size", 13)
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	if row["better"] != 0:
+		value.add_theme_color_override(
+			"font_color", Palette.STAT_UP if row["better"] > 0 else Palette.STAT_DOWN
+		)
+		if is_rare:
+			value.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
+			value.add_theme_constant_override("outline_size", 3)
+	elif is_rare:
+		value.add_theme_color_override("font_color", CustomPart.RARE_TEXT_COLOR)
+		value.add_theme_color_override("font_outline_color", Palette.TEXT_PRIMARY)
+		value.add_theme_constant_override("outline_size", 3)
+	line.add_child(value)
+
+	return line
 
 
 func _process(delta: float) -> void:

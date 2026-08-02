@@ -43,6 +43,8 @@ func _init() -> void:
 		overrides.stage_shape = int(args["shape"])
 	if args.has("violence"):
 		overrides.violence = float(args["violence"])
+	if args.has("launch-force"):
+		overrides.launch_force_scale = float(args["launch-force"])
 
 	var policy := LaunchPolicy.by_name(args.get("policy", "random"))
 	var violations := 0

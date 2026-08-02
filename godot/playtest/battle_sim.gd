@@ -24,6 +24,8 @@ class Overrides:
 	## 敵の硬さ(質量)と回転の一律倍率。物理側を接触寄りに変えた際の難易度補償を測る。
 	var enemy_mass_scale := 1.0
 	var enemy_rps_scale := 1.0
+	## 自機の発射初速の倍率(=実UIの引き量/フォース)。1.0で満引き=従来と厳密一致。
+	var launch_force_scale := 1.0
 
 	func apply(request: BattleRequest) -> void:
 		if stage_shape >= 0:
@@ -110,7 +112,10 @@ static func play_one(
 		top_level = maxi(top_level, enemy.level)
 
 	# 全敵の予告を渡す(狙う基準は先頭、間合いは全敵に効く)。
-	var launch := LaunchPolicy.decide(policy, field, player_stats.radius, plans, enemy_radii, rng)
+	var force_scale := 1.0 if overrides == null else overrides.launch_force_scale
+	var launch := LaunchPolicy.decide(
+		policy, field, player_stats.radius, plans, enemy_radii, rng, force_scale
+	)
 
 	request.player = BattleRequest.Launch.new(player_stats, launch.position, launch.velocity)
 	request.enemies = enemy_launches

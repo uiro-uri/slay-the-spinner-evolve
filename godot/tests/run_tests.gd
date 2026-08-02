@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "sparkscale", "battledefaults", "pacing"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "sparkscale", "battledefaults", "pacing", "partpreview"
 ]
 
 
@@ -172,6 +172,9 @@ func _init() -> void:
 
 	print("== pacing ==")
 	_test_playback_pacing()
+
+	print("== partpreview ==")
+	_test_part_preview()
 
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
@@ -541,6 +544,12 @@ func _test_playback_pacing() -> void:
 	var suite = load("res://tests/test_playback_pacing.gd").new()
 	suite.run(_check)
 	_done("pacing")
+
+
+func _test_part_preview() -> void:
+	var suite = load("res://tests/test_part_preview.gd").new()
+	suite.run(_check)
+	_done("partpreview")
 
 
 func _test_ghost_visual() -> void:
