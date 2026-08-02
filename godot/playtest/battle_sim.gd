@@ -81,14 +81,20 @@ static func play_one(
 	var enemy_radii := PackedFloat32Array()
 	var enemy_launches: Array[BattleRequest.Launch] = []
 	var top_level := 0
+	# 乱戦で敵同士が重なって湧かないよう、実ゲームと同じ間隔の規則を通す。
+	# プレイヤーは除け所に入れない: 実ゲームは発射前のコマの位置を避けるが、
+	# ここでは発射(LaunchPolicy)が出現より後に決まるので入れようがなく、
+	# 発射位置は LaunchStandoff が全敵の間合いの外へクランプしている。
+	var group := EnemySpawn.Group.new()
 	for enemy in enemies:
 		# 発射速度は実ゲーム(Battle._spawn_enemy)と同じく共通レンジから出現ごとに抽選。
 		# 柱(障害物)の除けも実ゲームと同じ。
 		var plan := EnemySpawn.plan(
 			field.center(), SPAWN_RING, LaunchSpeed.random(rng, enemy.stats.radius),
 			SPAWN_SPREAD_DEG, rng, enemy.stats.radius, field.inradius(),
-			[], 0.0, field.obstacles
+			group.avoid(), group.min_gap(enemy.stats.radius), field.obstacles
 		)
+		group.add(plan.position, enemy.stats.radius)
 		plans.append(plan)
 		enemy_radii.append(enemy.stats.radius)
 		var enemy_stats := enemy.stats

@@ -35,6 +35,8 @@ static func check(request: BattleRequest, result: BattleResult) -> Array[String]
 			result.finish_time, request.max_duration
 		])
 
+	_check_spawn_overlap(request, violations)
+
 	for impact in result.impacts:
 		if impact.time < 0.0 or impact.time > result.finish_time + request.time_step:
 			violations.append("衝突時刻が戦闘の外 (%.3f / 決着 %.3f)" % [
@@ -43,6 +45,32 @@ static func check(request: BattleRequest, result: BattleResult) -> Array[String]
 			break
 
 	return violations
+
+
+## 出現の時点で敵同士が重なっていないこと。
+##
+## 出現の間隔規則(EnemySpawn.Group)を通していない経路があると、敵が縁を食い込ませた
+## 状態で湧き、プレイヤーが着く前に勝手に潰し合う。実プレイ(Battle._spawn_enemy)は
+## 通しているので、通していない経路で測ると**実プレイに存在しない乱戦**の数字が出る。
+## 実際にBattleSimとnaive_playが渡しておらず、乱戦の組の13.1%(段7では21.8%、
+## 最大2.44ユニット)が重なっていた。「乱戦は報酬が頭数ぶん増えるのに脅威は増えない」
+## という所見が何サイクルも積み残されていた一因がこれ。
+##
+## 経路が増えても同じ穴が開かないよう、全戦闘に掛ける検査として常設する。
+## プレイヤーは対象外: 発射位置は LaunchStandoff が全敵の間合い(半径和より広い)の
+## 外へクランプしており、詰み配置での最後の手段(_best_effort)まで含めて
+## 重なりゼロを保証してはいないので、ここで拾うと誤報になる。
+static func _check_spawn_overlap(request: BattleRequest, violations: Array[String]) -> void:
+	for a in request.enemies.size():
+		for b in range(a + 1, request.enemies.size()):
+			var ea := request.enemies[a]
+			var eb := request.enemies[b]
+			var gap := ea.position.distance_to(eb.position) - ea.stats.radius - eb.stats.radius
+			if gap < 0.0:
+				violations.append("敵が重なって出現 enemy[%d]/enemy[%d] (めり込み %.3f)" % [
+					a, b, -gap
+				])
+				return
 
 
 static func _check_frames(

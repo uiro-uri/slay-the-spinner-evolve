@@ -27,6 +27,53 @@ class Plan:
 		velocity = vel
 
 
+## 乱戦(複数体)の出現を、重ならないように順に決めるための積み上げ器。
+##
+## plan()のavoid/min_gapに何を渡すかという「間隔の規則」は3経路
+## (実プレイのBattle._spawn_enemy・ボットのBattleSim・CLIのnaive_play)が
+## 踏むべきものなのに、それぞれが直接plan()を呼んでいて、実際に渡していたのは
+## 実プレイだけだった。ボット/CLIでは敵同士が縁を食い込ませた状態で湧き、
+## 発射前に勝手に潰し合う。measure_spawn_gap.gd で数えると乱戦の組の**13.1%**が
+## 重なり(段7では21.8%、最大2.44ユニットめり込み)、実プレイ経路は0.0%だった。
+## docs/playtest.md が「実プレイとずれると存在しない条件で測ることになって
+## 数字だけが嘘になる」と警告しているまさにその状態で、乱戦は「報酬は頭数ぶん
+## 増えるのに脅威は増えない部屋」として測られ続けていた(2026-08-02の
+## コールドプレイでも、段2の3体戦で2体が0.25秒で自壊して報酬3枚が転がり込んだ)。
+##
+## 規則をここに1つだけ置いて、3経路が同じものを通るようにする。
+class Group:
+	extends RefCounted
+
+	## 縁同士に空けたい距離。Battle.gdのspawn_clearance既定値と同じ。
+	const DEFAULT_CLEARANCE := 0.6
+
+	var clearance: float
+
+	var _placed: Array[Vector2] = []
+	var _widest := 0.0
+
+	func _init(clearance_: float = DEFAULT_CLEARANCE) -> void:
+		clearance = clearance_
+
+	## 既に決まっている出現位置。plan()のavoidにそのまま渡す。
+	func avoid() -> Array[Vector2]:
+		return _placed
+
+	## 半径radiusのコマを次に置くときのmin_gap。相手半径は既出の最大で見積もる
+	## (どの相手とも縁がclearanceだけ空く)。まだ誰も居なければ制約なし＝0.0を返し、
+	## plan()の速い道(1回引くだけ)がそのまま通る＝単体戦は従来と厳密に同じ。
+	func min_gap(radius: float) -> float:
+		if _placed.is_empty():
+			return 0.0
+		return _widest + radius + clearance
+
+	## 決まった位置を控える。次の1体はここを避ける。
+	## 敵だけでなく、発射前のプレイヤーの位置を先に入れてもよい(実プレイがそうする)。
+	func add(position: Vector2, radius: float) -> void:
+		_placed.append(position)
+		_widest = maxf(_widest, radius)
+
+
 ## 中心からring_radiusだけ離れた円周上のランダムな一点に出現し、
 ## 中心方向 ± spread_deg の範囲へ speed で発射する。
 ##

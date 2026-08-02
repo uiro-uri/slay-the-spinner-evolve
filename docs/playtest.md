@@ -29,14 +29,25 @@ godotプロセスを起こしてnproc並列でばら撒く。
   intercept(予告を読み切る上界寄り)。**ボットは人間ではない**ので、
   勝率は1点ではなく方針の幅で読むこと。
 - `godot/playtest/invariants.gd` — 全戦闘に掛ける検査(nan、アリーナ脱出、
-  rps増加、時刻の整合)。違反レコードには`request`のJSONが丸ごと入っていて、
-  `BattleRequest.from_dict()`に食わせればその場で再現できる。
+  rps増加、時刻の整合、**敵が重なって出現していないこと**)。違反レコードには
+  `request`のJSONが丸ごと入っていて、`BattleRequest.from_dict()`に食わせれば
+  その場で再現できる。
 - `godot/playtest/battle_sim.gd` / `run_sim.gd` — 戦闘1回/ラン1本。
   Battle.gd・Main.gdと同じ手順を踏む(段→敵グループと土俵→出現→発射→resolve、
   勝利→報酬3枚から1枚)。**本体側の進行を変えたらrun_sim.gdも見ること。**
   敵の頭数(`pick_group_for_step`)と土俵(`FieldRoster.pick_for_step`)は
   実プレイと同じく段ごとに抽選する。ここが実プレイとずれると、存在しない
   条件で測ることになって数字だけが嘘になる。
+  出現の間隔も同じで、**乱戦で敵同士を離す規則は`EnemySpawn.Group`に1つだけ置き**、
+  実プレイ(Battle)・ボット(BattleSim)・CLI(naive_play)の3経路がそれを通る。
+  かつてボット/CLIだけが渡し忘れていて、乱戦の組の13.1%(段7では21.8%、最大
+  2.44ユニット)が縁を食い込ませて湧いていた。ずれは上の検査器が拾う。
+- `godot/playtest/measure_spawn_gap.gd` — その出現間隔を数える計測器。
+  間隔の規則あり/なしを同じ抽選で並べ、重なり率と、同じ乱戦を解いた勝敗を出す。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_spawn_gap.gd -- --samples=6000
+  ```
 - `godot/tests/test_playtest.gd` — 検査器が壊れた結果を本当に拾うかの常設テスト。
 
 ## アラート

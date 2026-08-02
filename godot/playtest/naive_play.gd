@@ -431,12 +431,18 @@ func _giveup(state: Dictionary, path: String) -> void:
 
 # ---- 計算ヘルパ ----
 
-func _enemy_plans(enemies: Array, field: FieldData, bseed: int) -> Array:
+## 敵の出現を決める。enter と launch が同じ --bseed で同じ予告を再現するため、
+## 状態は持たず引数だけで決まる(staticなのはテストから直接呼ぶため)。
+static func _enemy_plans(enemies: Array, field: FieldData, bseed: int) -> Array:
 	var rng := RandomNumberGenerator.new(); rng.seed = bseed
 	var plans := []
+	# 実ゲーム(Battle._spawn_enemy)と同じく柱(障害物)を除け、乱戦では敵同士も
+	# 重ならない間隔(EnemySpawn.Group)で出現させる。
+	var group := EnemySpawn.Group.new()
 	for e in enemies:
-		# 実ゲーム(Battle._spawn_enemy)と同じく柱(障害物)を除けて出現させる。
-		plans.append(EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng, e.stats.radius), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius(), [], 0.0, field.obstacles))
+		var plan := EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng, e.stats.radius), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius(), group.avoid(), group.min_gap(e.stats.radius), field.obstacles)
+		group.add(plan.position, e.stats.radius)
+		plans.append(plan)
 	return plans
 
 func _ring_pos(field: FieldData, prad: float, from_deg: float) -> Vector2:

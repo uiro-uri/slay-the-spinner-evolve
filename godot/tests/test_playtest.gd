@@ -13,6 +13,7 @@ func run(check: Callable) -> void:
 	_test_invariants_catch_bad_results(check)
 	_test_invariants_pass_healthy_result(check)
 	_test_battle_sim_deterministic(check)
+	_test_battle_sim_spaces_group(check)
 	_test_policies_stay_legal(check)
 	_test_field_reaches_battle(check)
 	_test_overrides_beat_field(check)
@@ -41,6 +42,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_defeat_prompt(check)
 	_test_naive_play_bseed_pin(check)
 	_test_naive_play_group_persistence(check)
+	_test_naive_play_spaces_group(check)
 
 
 func _request() -> BattleRequest:
@@ -110,6 +112,16 @@ func _test_invariants_catch_bad_results(check: Callable) -> void:
 		"検査器: フレーム数の不一致を拾う"
 	)
 
+	# 敵同士が重なった出現。EnemySpawn.Group を通し忘れた経路の症状そのもの。
+	var overlapped := _request()
+	var second := EnemyRoster.of_level(1)[1]
+	var near := overlapped.enemies[0].position + Vector2(0.1, 0.0)
+	overlapped.enemies.append(BattleRequest.Launch.new(second.stats, near, Vector2(2, -2)))
+	check.call(
+		not PlaytestInvariants.check(overlapped, _healthy_result(overlapped)).is_empty(),
+		"検査器: 敵が重なった出現を拾う"
+	)
+
 
 func _test_invariants_pass_healthy_result(check: Callable) -> void:
 	var request := _request()
@@ -117,6 +129,36 @@ func _test_invariants_pass_healthy_result(check: Callable) -> void:
 	check.call(
 		violations.is_empty(),
 		"検査器: 健全な結果は素通しする (%s)" % [violations]
+	)
+
+
+## ボットの乱戦が、実プレイと同じ間隔規則(EnemySpawn.Group)を通っていること。
+##
+## BattleSim は Battle._spawn_enemy と同じ手順を踏むと謳いながら avoid/min_gap だけを
+## 渡しておらず、乱戦の組の13.1%が重なって湧いていた。統計の土台が実プレイと違う
+## 条件になるので、検査器の常設違反(敵が重なって出現)を全戦闘に掛けたうえで、
+## ここでも実ロスターの乱戦を回して0件であることを直接確かめる。
+func _test_battle_sim_spaces_group(check: Callable) -> void:
+	var stats := SpinnerStats.default_player()
+	var violations := 0
+	var battles := 0
+	for i in 120:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 5000 + i
+		var step := 1 + (i % 8)
+		var enemies := EnemyRoster.pick_group_for_step(step, rng)
+		if enemies.size() < 2:
+			continue
+		battles += 1
+		var record := BattleSim.play_one(
+			9000 + i, enemies, LaunchPolicy.Kind.INTERCEPT, stats,
+			null, FieldRoster.pick_for_step(step, rng)
+		)
+		if record.has("violations"):
+			violations += 1
+	check.call(
+		battles > 0 and violations == 0,
+		"ボットの乱戦: 出現が重ならない (%d戦中 違反%d件)" % [battles, violations]
 	)
 
 
@@ -445,6 +487,35 @@ func _test_naive_play_card_text(check: Callable) -> void:
 ## 実ゲーム(LaunchController)は full pull で LaunchSpeed.MAX を出す。発見の経緯:
 ## CLIに旧仕様(0〜20)の上限20.0が残り、実ゲームでは出せない1.67倍速の発射で全戦を
 ## 戦えていた(bot統計は正しく12で走っており、コールドプレイの実感だけが緩く汚れる)。
+## CLI(naive_play)の乱戦も、実プレイと同じ間隔規則を通っていること。
+##
+## 自己改善サイクルのコールドプレイはこのCLIが唯一の遊ぶ手段なので、ここが実プレイと
+## ずれると「一次証拠」そのものが嘘になる。実際2026-08-02のコールドプレイでは、
+## 段2の3体戦で2体が0.25〜0.27秒で自壊して報酬3枚が転がり込んだ。
+func _test_naive_play_spaces_group(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var worst := INF
+	var pairs := 0
+	for i in 200:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 3300 + i
+		var step := 1 + (i % 8)
+		var enemies := EnemyRoster.pick_group_for_step(step, rng)
+		if enemies.size() < 2:
+			continue
+		var field := FieldRoster.pick_for_step(step, rng)
+		var plans: Array = NaivePlay._enemy_plans(enemies, field, 4400 + i)
+		for a in plans.size():
+			for b in range(a + 1, plans.size()):
+				worst = minf(worst, plans[a].position.distance_to(plans[b].position)
+					- enemies[a].stats.radius - enemies[b].stats.radius)
+				pairs += 1
+	check.call(
+		pairs > 0 and worst >= 0.0,
+		"naive_play: 乱戦の出現が重ならない (%d組の最小すきま %.3f)" % [pairs, worst]
+	)
+
+
 func _test_naive_play_launch_speed(check: Callable) -> void:
 	var NaivePlay = load("res://playtest/naive_play.gd")
 	var pos := Vector2(8.0, 2.0)

@@ -462,20 +462,19 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	var speed := LaunchSpeed.random(rng, disc.stats.radius)
 
 	# 発射前の表示が重ならないよう、プレイヤーの初期位置と既に決めた敵の位置を
-	# 除け所として渡す。min_gapはコマの縁同士がspawn_clearanceだけ空く距離。
-	# 相手半径はプレイヤー・既出の敵で違うので、一番大きい相手半径で見積もる。
-	var avoid: Array[Vector2] = [_player.position]
-	var opponent_radius := _player.stats.radius
+	# 除け所として渡す。間隔の規則はEnemySpawn.Groupが持っていて、ボット(BattleSim)と
+	# CLI(naive_play)も同じものを通る。
+	var group := EnemySpawn.Group.new(spawn_clearance)
+	group.add(_player.position, _player.stats.radius)
 	for other in _enemies:
-		avoid.append(other.position)
-		opponent_radius = maxf(opponent_radius, other.stats.radius)
-	var min_gap := opponent_radius + disc.stats.radius + spawn_clearance
+		group.add(other.position, other.stats.radius)
 
 	# 柱(障害物)に重なった出現はめり込み拘束になるので、柱も除けて角度を選ぶ。
 	var obstacles: Array[Vector3] = _field.obstacles if _field != null else []
 	var plan := EnemySpawn.plan(
 		_center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
-		disc.stats.radius, _inradius(), avoid, min_gap, obstacles
+		disc.stats.radius, _inradius(),
+		group.avoid(), group.min_gap(disc.stats.radius), obstacles
 	)
 	disc.position = plan.position
 	disc.velocity = Vector2.ZERO
