@@ -170,6 +170,27 @@ static func sharpened_spin_drain(drain: float, edge: float, pierce_drain: float 
 	return drain + maxf(edge, 0.0) * maxf(drain, pierce_drain)
 
 
+## 1回の衝突で奪えるrpsの天井。相手の回転ゲージ(=初期rps)に対する割合で切る。
+##
+## 素の削りは相手の硬さ(質量×半径²)に反比例するため、柔らかい相手には
+## 1撃でゲージ全部を上回る削りが出る。実測(ボット500戦)でLv1戦の勝ちの
+## **99.2%が衝突1回**で終わっており、レポートのアラートも段2を
+## 「勝率99.7% ほぼ全勝。何をしても勝つので、そこに選択がない」と名指ししている。
+## 導入が「ほぼ負けない」のは設計どおりだが、衝突1回では削り・弾き・壁という
+## このゲームの噛み合いを1つも見せないまま終わる。
+##
+## cap_share=0.5 なら「ゲージ満タンの相手を倒すには最低2回噛み合う必要がある」
+## が保証される。天井は割合なので、硬い相手(1撃の削りがゲージのごく一部)には
+## 一切触れない=Lv3以降の難易度は動かさず、柔らかい相手の即死だけを消す。
+##
+## 天井は削り(とそれに比例するspin_kick)にだけ効き、弾性衝突の速度交換は素のまま。
+## cap_share<=0 で天井なし=旧挙動と厳密一致(古い保存データの再現用)。
+static func capped_spin_drain(drain: float, max_rps: float, cap_share: float) -> float:
+	if cap_share <= 0.0:
+		return drain
+	return minf(drain, maxf(max_rps, 0.0) * cap_share)
+
+
 ## 攻め手のdrill(0..)のぶんだけ、相手の硬さに依存しない追加削りを上乗せする。
 ## 追加量は drill × pierce_drain(相手が攻め手自身と同じ硬さだったときの素の削り)。
 ##

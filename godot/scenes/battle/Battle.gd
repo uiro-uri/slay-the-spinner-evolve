@@ -100,6 +100,13 @@ const BAR_ROW_H := 60.0
 ## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
 @export_range(0.0, 1.0, 0.05) var enemy_mutual_drain_scale: float = 0.5
 
+## 1回の衝突で奪えるrpsの天井を、受け手の回転ゲージ(初期rps)に対する割合で決める。
+## 0.5で「満タンの相手を倒すには最低2回噛み合う」。0で天井なし(旧挙動)。
+## 柔らかい相手の一撃即死(Lv1戦の勝ちの99.2%が衝突1回だった)を消すためのもので、
+## 硬い相手には割合が届かないので触れない。詳細はSpinnerPhysics.capped_spin_drain。
+## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
+@export_range(0.0, 1.0, 0.01) var drain_cap_share: float = 0.5
+
 ## これを下回ったら負け。
 @export_range(0.0, 1.0, 0.01) var lose_threshold: float = 0.03
 
@@ -633,6 +640,7 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 	request.wall_absolute_share = wall_absolute_share
 	request.wall_violence = wall_violence
 	request.enemy_mutual_drain_scale = enemy_mutual_drain_scale
+	request.drain_cap_share = drain_cap_share
 	request.lose_threshold = lose_threshold
 	# 取得済みのゴースト札から無敵時間を決める。単体調整時は取得0で0秒になり従来どおり。
 	request.ghost_duration = CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)

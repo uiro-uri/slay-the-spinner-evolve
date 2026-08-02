@@ -28,6 +28,8 @@ func _mismatch_request() -> BattleRequest:
 	# 筋書きなので、削り/減衰の比を既定値の調整に委ねずこの場で固定する。
 	r.violence = 0.07
 	r.natural_damping = 0.75
+	# 同じ理由で1撃の削りを切る天井も外す(「強打で大半を削る」が筋書きの前提)。
+	r.drain_cap_share = 0.0
 	var estats := SpinnerStats.new()
 	estats.mass = 1.0
 	estats.radius = 0.5

@@ -165,6 +165,9 @@ func _test_mutual_drain_no_contact(check: Callable) -> void:
 	var r := BattleRequest.new()
 	r.natural_damping = 0.0
 	r.stage_strength = 0.0
+	# 敵2体が正面衝突の削り合いで相討ちになる筋書きそのものが検証対象なので、1撃の
+	# 削りを切る天井は外す(天井が入ると削り合いきれず、死因の帳簿を見る前に話が変わる)。
+	r.drain_cap_share = 0.0
 	r.player = BattleRequest.Launch.new(SpinnerStats.default_player(), Vector2(1, 5), Vector2.ZERO)
 	r.enemies = [
 		BattleRequest.Launch.new(_enemy_stats(0.2), Vector2(6, 5), Vector2(3, 0)),
@@ -291,6 +294,8 @@ func _test_dominant_drain_over_final_decay(check: Callable) -> void:
 	# 筋書きなので、削り/減衰の比を既定値の調整に委ねずこの場で固定する。
 	r.violence = 0.07
 	r.natural_damping = 0.75
+	# 同じ理由で1撃の削りを切る天井も外す(「強打で大半を削る」が筋書きの前提)。
+	r.drain_cap_share = 0.0
 	var pstats := SpinnerStats.default_player()
 	var estats := _enemy_stats(3.0)
 	estats.friction = 3.0

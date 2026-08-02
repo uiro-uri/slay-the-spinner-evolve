@@ -322,6 +322,13 @@ static func _resolve_disc_collision(
 	a_drain *= drain_scale
 	b_drain *= drain_scale
 
+	# 最後に「1回の衝突で奪えるrps」の天井で切る。受け手の回転ゲージ(初期rps)に
+	# 対する割合なので、硬い相手(1撃がゲージのごく一部)には触れず、柔らかい相手の
+	# 即死だけが消える。天井は削りと、削り比例のspin_kickにだけ効かせるため、
+	# spin_kickより前に掛ける(弾性衝突の速度交換は既に済んでいて素のまま)。
+	a_drain = SpinnerPhysics.capped_spin_drain(a_drain, a.stats.rps, req.drain_cap_share)
+	b_drain = SpinnerPhysics.capped_spin_drain(b_drain, b.stats.rps, req.drain_cap_share)
+
 	a.velocity += SpinnerPhysics.spin_kick(
 		a.position, b.position, a.stats.radius, a_drain, req.spin_kick_scale
 	)

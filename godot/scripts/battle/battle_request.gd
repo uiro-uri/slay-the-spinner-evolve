@@ -129,6 +129,22 @@ var wall_violence: float = 0.35
 ## 98%残で導入の優しさを保った。0.25も測ったがLv3 3体が16.4%まで落ちて
 ## 「選べる賭け」でなく死の部屋になるため見送り。
 var enemy_mutual_drain_scale: float = 0.5
+
+## 1回の衝突で奪えるrpsの天井を、受け手の回転ゲージ(初期rps)に対する割合で決める。
+## 0.5なら「満タンの相手を倒すには最低2回噛み合う」。0以下で天井なし(旧挙動)。
+## 詳細はSpinnerPhysics.capped_spin_drain。
+##
+## 採用の経緯(2026-08-02): 削りは相手の硬さに反比例するので、柔らかいLv1相手には
+## 1撃でゲージ全部を超える削りが出ていた(ボット500戦でLv1の勝ちの99.2%が衝突1回、
+## コールドプレイでも段1が0.42秒・衝突1回。レポートのアラートも段2を
+## 「勝率99.7% 何をしても勝つので、そこに選択がない」と名指ししていた)。
+##
+## 0.5の採用: 0.34(最低3回)も測ったが、敵が2回目の弾きを生き延びるぶん壁で死ぬ
+## ようになり、Lv1の死因が 削り82.5%/壁17.5% → 36.9%/63.1% と壁へ倒れた
+## (「壁支配の是正」2026-08-01 で削りを主死因に戻した方向への逆行)。0.5なら
+## Lv1の即死だけが消えて(1衝突決着 72.4%→13.2%)死因の内訳はほぼ据え置き、
+## Lv2〜5は決着中央値まで完全に不変、クリア率も48.0%のまま動かない。
+var drain_cap_share: float = 0.5
 var lose_threshold: float = 0.03
 
 ## ゴーストの無敵時間(秒)。開始からこの時刻までプレイヤーと敵の衝突判定を切る。
@@ -164,6 +180,7 @@ func to_dict() -> Dictionary:
 		"wall_absolute_share": wall_absolute_share,
 		"wall_violence": wall_violence,
 		"enemy_mutual_drain_scale": enemy_mutual_drain_scale,
+		"drain_cap_share": drain_cap_share,
 		"lose_threshold": lose_threshold,
 		"ghost_duration": ghost_duration,
 		"time_step": time_step,
@@ -200,6 +217,8 @@ static func from_dict(d: Dictionary) -> BattleRequest:
 	r.wall_violence = d.get("wall_violence", 0.0)
 	# 同上: 旧い保存データはスケール無効(1.0=対等)で補い、当時の結果を再現する。
 	r.enemy_mutual_drain_scale = d.get("enemy_mutual_drain_scale", 1.0)
+	# 同上: 旧い保存データは天井なし(0)で補い、当時の結果をそのまま再現する。
+	r.drain_cap_share = d.get("drain_cap_share", 0.0)
 	r.lose_threshold = d["lose_threshold"]
 	# 旧い保存データにキーが無くても壊れないよう既定0で補う。
 	r.ghost_duration = d.get("ghost_duration", 0.0)
