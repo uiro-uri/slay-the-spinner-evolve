@@ -156,7 +156,13 @@ func goto_reward() -> void:
 		GameState.player_stats, GameState.continues_left,
 		GameState.last_rejected_ids, node.enemy_count()
 	)
-	reward.setup(_reward_offer)
+	# 今のビルドを渡す。カードごとの「取ると硬さ・寿命がどう動くか」(PartPreview)の
+	# 基準になる。残機とゴーストの合計秒は、コマの性能を変えない札(残機・無敵)でも
+	# 見積もりが空にならないよう添える。
+	reward.setup(
+		_reward_offer, GameState.player_stats, GameState.continues_left,
+		CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)
+	)
 
 
 func _on_part_chosen(part: CustomPart) -> void:

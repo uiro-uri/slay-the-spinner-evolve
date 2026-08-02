@@ -29,6 +29,13 @@ theme_override_font_sizes/font_size = 32
 text = "REWARD_HEADING"
 horizontal_alignment = 1
 
+[node name="PreviewHint" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "REWARD_PREVIEW_HINT"
+horizontal_alignment = 1
+autowrap_mode = 2
+
 [node name="Cards" type="HBoxContainer" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 24

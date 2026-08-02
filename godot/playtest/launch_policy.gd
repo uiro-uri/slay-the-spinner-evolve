@@ -58,19 +58,25 @@ static func by_name(name: String) -> Kind:
 ##
 ## 実UI(Battle)と同じく、位置を決めて間合いへ寄せてから向きを計算する。
 ## 逆順にすると「間合いで動かされた位置から古い向きで撃つ」ズレが出る。
+##
+## force_scaleは引き量(=実UIのフォース)に相当する初速の倍率。既定1.0で満引き
+## (=従来と厳密一致)。ボットの狙う方針はどれも満引き固定なので、これを振らないと
+## 「フォースをいくつで撃つか」という実プレイヤーの選択が統計に現れない。
 static func decide(
 	kind: Kind,
 	field: FieldData,
 	player_radius: float,
 	plans: Array[EnemySpawn.Plan],
 	enemy_radii: PackedFloat32Array,
-	rng: RandomNumberGenerator
+	rng: RandomNumberGenerator,
+	force_scale: float = 1.0
 ) -> Launch:
 	var center := field.center()
 	var target: EnemySpawn.Plan = plans[0]
 	var spawn_points := PackedVector2Array()
 	for plan in plans:
 		spawn_points.append(plan.position)
+	var speed := MAX_SPEED * clampf(force_scale, 0.0, 1.0)
 
 	match kind:
 		Kind.RANDOM:
@@ -80,25 +86,29 @@ static func decide(
 				rng.randf_range(bounds.position.y, bounds.end.y)
 			), spawn_points, enemy_radii, player_radius)
 			var dir := Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
-			return Launch.new(pos, dir * rng.randf_range(0.0, MAX_SPEED))
+			# RANDOMは引き量もランダムなので、force_scaleは抽選の上限を動かす。
+			return Launch.new(pos, dir * rng.randf_range(0.0, speed))
 
 		Kind.AIM_CENTER:
 			var pos := _ring_position(field, player_radius, spawn_points, enemy_radii, rng)
-			return Launch.new(pos, (center - pos).normalized() * MAX_SPEED)
+			return Launch.new(pos, (center - pos).normalized() * speed)
 
 		Kind.AIM_SPAWN:
 			var pos := _ring_position(field, player_radius, spawn_points, enemy_radii, rng)
-			return Launch.new(pos, (target.position - pos).normalized() * MAX_SPEED)
+			return Launch.new(pos, (target.position - pos).normalized() * speed)
 
 		_:
 			var pos := _ring_position(field, player_radius, spawn_points, enemy_radii, rng)
 			# 敵の未来位置を単純な等速仮定で先読みする。傾斜で曲がるので
 			# 完璧ではないが、序盤の交差には十分当たる。
+			# 先読みは実際に出す速度(speed)で合わせる。満引き固定のままだと
+			# 弱く撃ったときに到達時刻がずれて、狙いが下手になったぶんまで
+			# フォースの効果として測ってしまう。
 			var to_enemy := target.position.distance_to(pos)
-			var closing_speed := MAX_SPEED + target.velocity.length()
+			var closing_speed := speed + target.velocity.length()
 			var t := to_enemy / maxf(closing_speed, 0.01)
 			var predicted := target.position + target.velocity * t
-			return Launch.new(pos, (predicted - pos).normalized() * MAX_SPEED)
+			return Launch.new(pos, (predicted - pos).normalized() * speed)
 
 
 ## 外周寄りのランダムな一点。実プレイヤーも大抵は縁から撃つ。

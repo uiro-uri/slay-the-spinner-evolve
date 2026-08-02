@@ -48,6 +48,16 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_spawn_gap.gd -- --samples=6000
   ```
+- `godot/playtest/measure_launch_force.gd` — 発射の**フォース(引き量)**を振って、
+  段別の勝率と自機のrps喪失内訳を出す計測器。`LaunchPolicy`の狙う方針
+  (aim_center/aim_spawn/intercept)はどれも満引き固定なので、これを振らないと
+  「どれくらいの力で撃つか」という実プレイヤーの選択が統計に一度も現れない。
+  同じ倍率は`playtest_main.gd --launch-force=<0..1>`でラン全体にも掛けられる
+  (既定1.0＝満引き＝従来と厳密に同じ結果)。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_launch_force.gd -- --count=400
+  ```
 - `godot/tests/test_playtest.gd` — 検査器が壊れた結果を本当に拾うかの常設テスト。
 
 ## アラート

@@ -75,6 +75,12 @@ const TEXT_ON_LIGHT := Color("241a00")
 ## 戦闘メッセージの縁取りの太さ(px)。
 const MESSAGE_OUTLINE_SIZE := 6
 
+## 報酬カードのステータス見積もりで「良くなる」側の値に付ける色。
+const STAT_UP := Color("5bff9a")
+
+## 同じく「悪くなる」側。ENEMY(ff3b5c)より明るくして暗い地でも読ませる。
+const STAT_DOWN := Color("ff7a90")
+
 # --- マップ(暗い背景の上のネオン) ---
 
 const MAP_LINE := Color("6e6aa8", 0.55)
