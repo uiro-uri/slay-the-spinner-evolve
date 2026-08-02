@@ -14,6 +14,7 @@ SOUNDTEST_CAT_UI,UI,UI
 SOUNDTEST_CAT_FANFARE,Fanfare,ファンファーレ
 SOUNDTEST_CLEAR_FANFARE,Game Clear,ゲームクリア
 BATTLE_DRAG_TO_SHOOT,Drag to Shoot!,引っ張って発射!
+BATTLE_FINAL_DRAG_TO_SHOOT,Final Bout — Drag to Shoot!,決戦 — 引っ張って発射!
 BATTLE_WIN,You Win!,勝利!
 BATTLE_LOSE,You Lose...,敗北...
 BATTLE_DRAW,Draw,引き分け

@@ -30,6 +30,7 @@ func run(check: Callable) -> void:
 	_test_map_nodes(check)
 	_test_threat_meter_colors(check)
 	_test_obstacle_mark_colors(check)
+	_test_boss_mark_colors(check)
 
 
 ## 元凶。戦闘メッセージ(明色文字＋暗色縁取り)が床の上でも縁取りの上でも読める。
@@ -161,3 +162,38 @@ func _test_obstacle_mark_colors(check: Callable) -> void:
 			r >= ColorContrast.AA_LARGE,
 			"柱の印 %s = %.2f (>= %.1f)" % [name, r, ColorContrast.AA_LARGE]
 		)
+
+
+## 決戦の星が読めること。星はノード半径の78%まで広がる大きな図形だが、地(ノード塗り)は
+## 進める先の明るい緑〜未到達の暗い灰と幅広く、橙の星は明るい緑に対して色だけでは
+## 3:1 を取れない(実測 1.57)。柱の印と同じく読めるかは**縁取り**が担うので、そこを
+## 確かめる。加えて、星の上にはレベルの数字が重なるので、数字 vs 星も見る
+## ——数字は大きめ(20px)なので大文字基準。
+func _test_boss_mark_colors(check: Callable) -> void:
+	var pairs := {
+		"縁 vs 決戦の星": [Palette.MAP_OUTLINE, Palette.MAP_BOSS],
+		"縁 vs 進める先のノード": [Palette.MAP_OUTLINE, Palette.MAP_NEXT],
+		"レベルの数字 vs 決戦の星": [Palette.TEXT_OUTLINE, Palette.MAP_BOSS],
+	}
+	for name in pairs:
+		var r := ColorContrast.ratio(pairs[name][0], pairs[name][1])
+		check.call(
+			r >= ColorContrast.AA_LARGE,
+			"決戦の星 %s = %.2f (>= %.1f)" % [name, r, ColorContrast.AA_LARGE]
+		)
+
+	# 星が既存のマップの色と紛れないこと。報酬ピップの金と敵数ピップの赤は
+	# 同じ画面に並ぶので、星がどちらとも見分けられる必要がある。
+	var neighbours := {
+		"決戦の星 vs 報酬ピップの金": [Palette.MAP_BOSS, Palette.GOLD_CARD],
+		"決戦の星 vs 敵数ピップの赤": [Palette.MAP_BOSS, Palette.ENEMY],
+	}
+	for name in neighbours:
+		var d := _hue_distance(neighbours[name][0], neighbours[name][1])
+		check.call(d >= 15.0, "%s の色相差 = %.1f度 (>= 15)" % [name, d])
+
+
+## 2色の色相の隔たり(度、0〜180)。
+func _hue_distance(a: Color, b: Color) -> float:
+	var d: float = absf(a.h - b.h) * 360.0
+	return minf(d, 360.0 - d)

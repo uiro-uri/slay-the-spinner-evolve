@@ -75,6 +75,14 @@ const COLOR_THREAT_TICK := Palette.MAP_THREAT_TICK
 const COLOR_OBSTACLE := Palette.NEON_VIOLET
 const OBSTACLE_OUTLINE_WIDTH := 1.0
 
+## 決戦(段9のゴール)の星。分岐マップの終着点が道中のどのノードより地味だった
+## (報酬ピップが出ない唯一のノードなので、むしろ情報量が少ない)。幾何は
+## BossMark の純粋関数側で、ここは色を付けて描くだけ。柱の印と同じく
+## 塗り＋縁取りの組で、明るい地(進める先の緑)にも暗い地にも輪郭が出る。
+## レベルの数字より先に描くので、数字は常に星の上に乗って読める。
+const COLOR_BOSS := Palette.MAP_BOSS
+const BOSS_OUTLINE_WIDTH := 1.5
+
 ## 選択不能を表す番兵。どのノード座標(段0〜9)とも一致しない。
 const NO_HOVER := Vector2i(-1, -1)
 
@@ -270,6 +278,10 @@ func _draw() -> void:
 		# 数字は常に印の上に乗って読める。
 		_draw_obstacle_marks(center, radius, node, e)
 
+		# 決戦のノードには星。柱の印と同じ理由でレベルの数字より先に描く。
+		if BossMark.is_boss(coord):
+			_draw_boss_mark(center, radius, e)
+
 		# マウスオーバー中のマスは明るい太リングで強調する（形状問わず円で囲う）。
 		if coord == _hovered_coord:
 			draw_arc(
@@ -378,6 +390,17 @@ func _draw_obstacle_marks(
 		var at := Vector2(mark.x, mark.y)
 		draw_circle(at, mark.z, _faded(COLOR_OBSTACLE, e))
 		draw_arc(at, mark.z, 0, TAU, 16, outline, width, true)
+
+
+## 決戦(ゴール)のノードに星を描く。ノード半径に比例するので、ホバーで膨らんだ
+## 半径や縦画面の拡大がそのまま乗る。塗ってから縁取りを重ねるのは柱の印と同じ流儀
+## ——星の橙は進める先の明るい緑に対して色だけでは 3:1 を取れないため。
+func _draw_boss_mark(center: Vector2, radius: float, e: float) -> void:
+	var pts := BossMark.points(center, radius)
+	if pts.is_empty():
+		return
+	draw_colored_polygon(pts, _faded(COLOR_BOSS, e))
+	_draw_closed_polyline(pts, _faded(COLOR_OUTLINE, e), BOSS_OUTLINE_WIDTH * _draw_scale)
 
 
 ## 相手の硬さの取り分メーターを描く。空きの上に埋まりを重ね、最後に互角の目盛りを
