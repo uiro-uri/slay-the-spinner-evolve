@@ -40,6 +40,10 @@ const LIFETIME_MAX := 45.0
 ## 無敵時間の上端。ゴースト2枚(合計4秒)で満タン。
 const GHOST_MAX := 4.0
 
+## 敵の行(enemy_rows)で「互角」になる埋まり具合。取り分なので必ずちょうど半分。
+## StatPanelがこの位置に目盛りを描く。
+const PARITY := 0.5
+
 
 ## 表示する行(上から順)。ラベルの翻訳キーと、バーの埋まり具合(0〜1)。
 ##
@@ -64,6 +68,66 @@ static func rows(stats: SpinnerStats, ghost_seconds: float = 0.0) -> Array[Dicti
 	if ghost_seconds > 0.0:
 		r.append({"label_key": "STAT_GHOST", "fraction": _fraction(ghost_seconds, GHOST_MAX)})
 	return r
+
+
+## これから戦う相手の硬さ・寿命を、**自分と比べた取り分**で出す行。
+##
+## 動機: マップは「Lv3 2体」としか言わないので、その部屋が自分より硬いのかどうかが
+## 発射前にどこにも出ていない。実測で敵の硬さは Lv1 0.12 → Lv5 12.5 と100倍動くのに、
+## 自分の硬さはラン全体でも 0.73 → 1.7 しか動かない。**同じ絶対レンジのバーで並べても
+## 意味を成さない**(TOUGHNESS_MAX=1.5 では Lv3 以上が全部満タンに張り付く)ので、
+## 上端を決め打たずに済む取り分 敵/(自分+敵) にする。ちょうど互角で PARITY、
+## 目盛りを越えていれば「相手の方が硬い/長生き」と読める。
+##
+## 乱戦は**いちばん硬い個体・いちばん寿命が長い個体**を代表にする(部屋の難度は
+## 一番きつい相手で決まる。平均だと弱い個体が数で薄めてしまう)。硬さと寿命は
+## 別々に最大を取る——硬い個体と長生きな個体が同一とは限らず、部屋の脅威は
+## 「いちばん硬い奴」と「いちばん粘る奴」の両方だから。
+##
+## これは**予告(EnemyTelegraph)の揺らぎを損なわない**。揺らして隠しているのは
+## 出現位置と向き=この一戦の計画で、硬さ・寿命は個体の静的な性能。どこへ飛ぶかは
+## 相変わらず読み切れない。
+##
+## なお、コールドプレイCLI(playtest/naive_play.gd)は敵1体ごとに硬さ・寿命を
+## 最初から印字していた。自分のビルド側は 2026-08-02 のサイクルで塞いだが、
+## 敵側は残っていた=**エージェントだけが「この部屋は硬い」を知って札を選べる**
+## 状態だった。同型のズレ(発射初速1.67倍・出現間隔・自分の硬さ表示)に続く4件目。
+##
+## enemies が空(相手が居ない画面)なら行を出さない。StatPanelはそのまま何も足さない。
+static func enemy_rows(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> Array[Dictionary]:
+	if stats == null or enemies.is_empty():
+		return []
+	var toughest := 0.0
+	var longest := 0.0
+	var found := false
+	for enemy in enemies:
+		if enemy == null:
+			continue
+		found = true
+		toughest = maxf(toughest, PartPreview.toughness(enemy))
+		longest = maxf(longest, PartPreview.lifetime(enemy))
+	if not found:
+		return []
+	return [
+		{
+			"label_key": "STAT_ENEMY_TOUGHNESS",
+			"fraction": _share(toughest, PartPreview.toughness(stats)),
+		},
+		{
+			"label_key": "STAT_ENEMY_LIFETIME",
+			"fraction": _share(longest, PartPreview.lifetime(stats)),
+		},
+	]
+
+
+## 相手の取り分。互角(両者が同じ値)でちょうど PARITY、相手が上回るほど1へ寄る。
+## 上端を決め打たずに済むので、100倍のレンジ差があっても頭打ちにならない。
+## 両方0(値が取れない)なら互角扱いにする——0埋めだと「相手が弱い」という嘘になる。
+static func _share(enemy_value: float, player_value: float) -> float:
+	var total := enemy_value + player_value
+	if total <= 0.0:
+		return PARITY
+	return clampf(enemy_value / total, 0.0, 1.0)
 
 
 ## 値を 0〜max で 0〜1 に正規化する。範囲外は端で頭打ち(バーが溢れない/負にならない)。

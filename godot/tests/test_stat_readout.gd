@@ -21,6 +21,8 @@ func run(check: Callable) -> void:
 	_test_fraction_range(check)
 	_test_ghost_row(check)
 	_test_composite_rows(check)
+	_test_enemy_rows(check)
+	_test_enemy_rows_wiring(check)
 
 
 func _test_rows(check: Callable) -> void:
@@ -166,3 +168,221 @@ func _test_composite_rows(check: Callable) -> void:
 	for row in StatReadout.rows(monster):
 		var f: float = row["fraction"]
 		check.call(f >= 0.0 and f <= 1.0, "%s の割合が0〜1: %f" % [row["label_key"], f])
+
+
+## 敵の硬さ・寿命を「自分との取り分」で見せる行(StatReadout.enemy_rows)。
+##
+## 動機は「マップは Lv3 2体 としか言わず、その部屋が自分より硬いかが発射前に
+## 分からない」。要点は**上端を決め打たないこと**——敵の硬さはLv1 0.12→Lv5 12.5と
+## 100倍動くので、自分用の絶対レンジ(TOUGHNESS_MAX=1.5)で並べるとLv3以上が全部
+## 満タンに張り付いて情報が消える。ここでは互角=PARITY・単調性・代表個体の取り方と、
+## 「絶対レンジで頭打ちにならない」ことを固定する。
+func _test_enemy_rows(check: Callable) -> void:
+	var player := SpinnerStats.default_player()
+
+	# 相手が居ない画面では行を出さない(StatPanelが何も足さない)。
+	check.call(
+		StatReadout.enemy_rows(player, []).is_empty(),
+		"敵が空なら行を出さない"
+	)
+	var only_null: Array[SpinnerStats] = [null]
+	check.call(
+		StatReadout.enemy_rows(player, only_null).is_empty(),
+		"中身がnullだけでも行を出さない"
+	)
+
+	# 行はちょうど2行、キーと並びを固定する。
+	var even := SpinnerStats.default_player()
+	var evens: Array[SpinnerStats] = [even]
+	var rows := StatReadout.enemy_rows(player, evens)
+	check.call(rows.size() == 2, "敵の行は2行(硬さ/寿命): %d" % rows.size())
+	check.call(
+		rows[0]["label_key"] == "STAT_ENEMY_TOUGHNESS",
+		"1行目は敵の硬さ -> %s" % rows[0]["label_key"]
+	)
+	check.call(
+		rows[1]["label_key"] == "STAT_ENEMY_LIFETIME",
+		"2行目は敵の寿命 -> %s" % rows[1]["label_key"]
+	)
+
+	# 同じ性能の相手はちょうど互角(PARITY)。目盛りの位置と一致する。
+	check.call(
+		absf(rows[0]["fraction"] - StatReadout.PARITY) < EPS,
+		"同性能の相手は硬さが互角(PARITY=%f): %f" % [StatReadout.PARITY, rows[0]["fraction"]]
+	)
+	check.call(
+		absf(rows[1]["fraction"] - StatReadout.PARITY) < EPS,
+		"同性能の相手は寿命が互角: %f" % rows[1]["fraction"]
+	)
+
+	# 相手が硬いほど取り分が伸び、必ず互角の目盛りを越える(=越えたら格上と読める)。
+	var hard := SpinnerStats.default_player()
+	hard.mass = player.mass * 4.0
+	var hards: Array[SpinnerStats] = [hard]
+	var hard_f: float = StatReadout.enemy_rows(player, hards)[0]["fraction"]
+	check.call(
+		hard_f > StatReadout.PARITY,
+		"自分より硬い相手は目盛りを越える: %f" % hard_f
+	)
+	var soft := SpinnerStats.default_player()
+	soft.mass = player.mass * 0.25
+	var softs: Array[SpinnerStats] = [soft]
+	var soft_f: float = StatReadout.enemy_rows(player, softs)[0]["fraction"]
+	check.call(
+		soft_f < StatReadout.PARITY,
+		"自分より柔らかい相手は目盛りに届かない: %f" % soft_f
+	)
+	check.call(hard_f > soft_f, "硬い相手ほど取り分が大きい(単調)")
+
+	# **上端を決め打っていないこと**。自分の絶対レンジを大きく超える相手(実測の
+	# ボス硬さ12.5相当)でも満タンに張り付かず、さらに硬い相手とちゃんと区別が付く。
+	# ここが絶対バーとの本質的な差で、落ちたら情報が消えている。
+	var boss := SpinnerStats.default_player()
+	boss.mass = StatReadout.TOUGHNESS_MAX * 20.0
+	var bosses: Array[SpinnerStats] = [boss]
+	var boss_f: float = StatReadout.enemy_rows(player, bosses)[0]["fraction"]
+	var bigger_boss := SpinnerStats.default_player()
+	bigger_boss.mass = StatReadout.TOUGHNESS_MAX * 60.0
+	var bigger_bosses: Array[SpinnerStats] = [bigger_boss]
+	var bigger_f: float = StatReadout.enemy_rows(player, bigger_bosses)[0]["fraction"]
+	check.call(boss_f < 1.0, "自分のレンジを超える相手でも満タンに張り付かない: %f" % boss_f)
+	check.call(
+		bigger_f > boss_f,
+		"レンジ外どうしでも硬さの差が残る: %f -> %f" % [boss_f, bigger_f]
+	)
+
+	# 自分が育てば同じ相手の取り分は下がる(札の効きが敵の行にも出る)。
+	var grown := SpinnerStats.default_player()
+	grown.mass = player.mass * 4.0
+	check.call(
+		StatReadout.enemy_rows(grown, hards)[0]["fraction"]
+			< StatReadout.enemy_rows(player, hards)[0]["fraction"],
+		"自分が硬くなると同じ相手の取り分は下がる"
+	)
+
+	# 乱戦の代表はいちばんきつい個体。硬さと寿命で別々に最大を取る——
+	# 硬い個体と長生きな個体が同一とは限らないので、片方だけの個体で代表させると
+	# もう片方の脅威を見落とす。
+	var tough_one := SpinnerStats.default_player()
+	tough_one.mass = player.mass * 4.0
+	var lasting_one := SpinnerStats.default_player()
+	lasting_one.rps = player.rps * 4.0
+	var mixed: Array[SpinnerStats] = [soft, tough_one, lasting_one]
+	var mixed_rows := StatReadout.enemy_rows(player, mixed)
+	var tough_only: Array[SpinnerStats] = [tough_one]
+	var lasting_only: Array[SpinnerStats] = [lasting_one]
+	check.call(
+		absf(mixed_rows[0]["fraction"] - StatReadout.enemy_rows(player, tough_only)[0]["fraction"])
+			< EPS,
+		"乱戦の硬さはいちばん硬い個体を代表にする: %f" % mixed_rows[0]["fraction"]
+	)
+	check.call(
+		absf(mixed_rows[1]["fraction"]
+			- StatReadout.enemy_rows(player, lasting_only)[1]["fraction"]) < EPS,
+		"乱戦の寿命はいちばん寿命が長い個体を代表にする: %f" % mixed_rows[1]["fraction"]
+	)
+	# 弱い個体を足しても代表は薄まらない(平均ではない)。
+	var padded: Array[SpinnerStats] = [tough_one, soft, soft, soft]
+	check.call(
+		absf(StatReadout.enemy_rows(player, padded)[0]["fraction"]
+			- StatReadout.enemy_rows(player, tough_only)[0]["fraction"]) < EPS,
+		"弱い個体を足しても代表(最大)は薄まらない"
+	)
+	# nullが混じっても生きている個体で決まる(落ちない)。
+	var with_null: Array[SpinnerStats] = [null, tough_one]
+	check.call(
+		absf(StatReadout.enemy_rows(player, with_null)[0]["fraction"]
+			- StatReadout.enemy_rows(player, tough_only)[0]["fraction"]) < EPS,
+		"nullが混じっても生きている個体で決まる"
+	)
+
+	# 定義の共有: 報酬カード/自分のビルド表示と同じ PartPreview を通していること。
+	# 別実装になって片方だけ直されると、カードの予告と敵の行が食い違う。
+	var expected := PartPreview.toughness(tough_one) / (
+		PartPreview.toughness(tough_one) + PartPreview.toughness(player)
+	)
+	check.call(
+		absf(StatReadout.enemy_rows(player, tough_only)[0]["fraction"] - expected) < EPS,
+		"敵の硬さは PartPreview.toughness と同じ定義: %f" % expected
+	)
+	var expected_life := PartPreview.lifetime(lasting_one) / (
+		PartPreview.lifetime(lasting_one) + PartPreview.lifetime(player)
+	)
+	check.call(
+		absf(StatReadout.enemy_rows(player, lasting_only)[1]["fraction"] - expected_life) < EPS,
+		"敵の寿命は PartPreview.lifetime と同じ定義: %f" % expected_life
+	)
+
+	# どの行も 0〜1 に収まる(バーが溢れない)。極端な相手でも。
+	for row in StatReadout.enemy_rows(player, bigger_bosses):
+		var f: float = row["fraction"]
+		check.call(f >= 0.0 and f <= 1.0, "%s の取り分が0〜1: %f" % [row["label_key"], f])
+
+
+## 敵の行の配線。純粋関数が正しくても、呼ばれていなければ画面には何も出ない。
+##
+## StatPanelはCanvasLayerで@onreadyとレイアウトのフレームを要求するので、この
+## ランナー(SceneTreeの_init中)では実体化して中身を見られない。test_part_preview.gd
+## と同じくスクリプトの形を読んで押さえる。**呼び出しの存在だけを見ると、条件を殺して
+## 到達しなくしたサボタージュを素通しする**(前サイクルが `if false:` で踏んだ穴)ので、
+## 受け取り・呼び出し(引数ごと)・見た目の3点を揃って見る。
+func _test_enemy_rows_wiring(check: Callable) -> void:
+	var panel := FileAccess.get_file_as_string("res://scripts/ui/stat_panel.gd")
+	check.call(
+		panel.contains("func refresh(enemy_stats: Array[SpinnerStats] = []) -> void:"),
+		"StatPanel.refresh()が相手のstatsを受け取る"
+	)
+	# 受け取った引数をそのまま渡していること。GameStateを直接見る実装だと、
+	# マップ画面に前の戦闘の相手が残る(pending_enemiesは次の戦闘まで消えない)。
+	check.call(
+		panel.contains("StatReadout.enemy_rows(GameState.player_stats, enemy_stats)"),
+		"StatPanelが受け取った相手で enemy_rows を呼ぶ"
+	)
+	check.call(
+		panel.contains("_bar(fraction, Palette.ENEMY)"),
+		"敵の行のバーは敵色で描く(自分の行と見分けが付く)"
+	)
+	check.call(
+		panel.contains("_parity_tick()"),
+		"敵の行に互角の目盛りを立てる(越えたら格上と読める)"
+	)
+	check.call(
+		panel.contains("_flash(bar, Palette.ENEMY)"),
+		"敵の行のフラッシュは敵色へ戻す(自分の色に化けない)"
+	)
+	# 目盛りの位置は取り分の定義(PARITY)から引くこと。0.5をベタ書きすると、
+	# 取り分の定義を変えたときに目盛りだけ置き去りになって嘘の基準線になる。
+	check.call(
+		panel.contains("StatReadout.PARITY"),
+		"目盛りの位置は StatReadout.PARITY から引く(ベタ書きしない)"
+	)
+
+	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
+	check.call(
+		main.contains("_swap_screen(BATTLE_SCENE, true, _pending_enemy_stats())"),
+		"Mainが戦闘画面へ入るときに相手のstatsを渡す"
+	)
+	check.call(
+		main.contains("_stat_panel.refresh(enemy_stats)"),
+		"_swap_screenが受け取った相手をStatPanelへ素通しする"
+	)
+	check.call(
+		main.contains("GameState.pending_enemies") and main.contains("enemy.stats"),
+		"Mainが相手のstatsを pending_enemies から集める"
+	)
+	# 戦闘画面**だけ**に出すこと。ほかの画面にも渡すと、マップに前の相手が残る。
+	# 呼び出し側だけを数える(定義 `func _pending_enemy_stats()` は末尾が `:` なので
+	# `, ...())` の形には一致しない)。
+	var call_sites := main.count(", _pending_enemy_stats())")
+	check.call(
+		call_sites == 1,
+		"相手を渡すのは戦闘画面へ入るときだけ: %d 箇所" % call_sites
+	)
+
+	# 翻訳(キーがそのまま出る=訳の抜けはこれで気付く)。
+	for key in ["STAT_ENEMY_TOUGHNESS", "STAT_ENEMY_LIFETIME"]:
+		for locale in ["en", "ja"]:
+			TranslationServer.set_locale(locale)
+			var text := tr(key)
+			check.call(text != key and text != "", "%s: %s の訳がある (%s)" % [locale, key, text])
+	TranslationServer.set_locale("ja")

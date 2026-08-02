@@ -108,6 +108,8 @@ STAT_GHOST,Invincibility,無敵時間
 STAT_LIVES,Lives,残機
 STAT_TOUGHNESS,Toughness,硬さ
 STAT_LIFETIME,Spin Time,寿命
+STAT_ENEMY_TOUGHNESS,vs Toughness,硬さ 相手
+STAT_ENEMY_LIFETIME,vs Spin Time,寿命 相手
 REWARD_PREVIEW_HEADING,If you take it,取ると
 REWARD_PREVIEW_HINT,"Toughness resists drain; Spin Time is how long you keep spinning",硬さ＝削られにくさ／寿命＝回り続ける秒数
 PART_GIANT_GROWTH,Giant Growth,ジャイアントグロース
