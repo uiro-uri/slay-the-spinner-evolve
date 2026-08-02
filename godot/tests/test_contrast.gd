@@ -28,6 +28,7 @@ func run(check: Callable) -> void:
 	_test_menu_text(check)
 	_test_neon_actors_on_floor(check)
 	_test_map_nodes(check)
+	_test_threat_meter_colors(check)
 
 
 ## 元凶。戦闘メッセージ(明色文字＋暗色縁取り)が床の上でも縁取りの上でも読める。
@@ -120,3 +121,24 @@ func _test_map_nodes(check: Callable) -> void:
 			r >= ColorContrast.AA_LARGE,
 			"%s vs 背景 = %.2f (>= %.1f)" % [name, r, ColorContrast.AA_LARGE]
 		)
+
+
+## マップの脅威メーターが読めること。長さが主たる符号化で色は補助だが、
+## 「どこまで埋まっているか」と「互角の目盛りがどこか」が見えないと長さも読めない。
+## 埋まり(敵色)と空き(トラック)、目盛りと両者を、非テキスト図形の 3:1 で確かめる。
+## トラック自体は背景に沈まなければよいので 3:1 は課さない(意図的に控えめな色)。
+func _test_threat_meter_colors(check: Callable) -> void:
+	var pairs := {
+		"埋まり vs 空き": [Palette.ENEMY, Palette.MAP_THREAT_TRACK],
+		"目盛り vs 空き": [Palette.MAP_THREAT_TICK, Palette.MAP_THREAT_TRACK],
+		"目盛り vs 埋まり": [Palette.MAP_THREAT_TICK, Palette.ENEMY],
+	}
+	for name in pairs:
+		var r := ColorContrast.ratio(pairs[name][0], pairs[name][1])
+		check.call(
+			r >= ColorContrast.AA_LARGE,
+			"脅威メーター %s = %.2f (>= %.1f)" % [name, r, ColorContrast.AA_LARGE]
+		)
+
+	var vs_bg := ColorContrast.ratio(Palette.MAP_THREAT_TRACK, Palette.BG)
+	check.call(vs_bg >= 1.5, "脅威メーターの空き vs 背景 = %.2f (>= 1.5)" % vs_bg)

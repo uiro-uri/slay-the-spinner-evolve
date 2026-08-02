@@ -56,7 +56,9 @@ func _on_start_requested() -> void:
 func goto_map() -> void:
 	var map := _swap_screen(MAP_SCENE)
 	map.node_chosen.connect(_on_map_node_chosen)
-	map.setup(GameState.map_tree)
+	# 画面には状態を渡す(画面がGameStateを直接見ない)。マップは今のビルドを
+	# 進める先の「相手の硬さの取り分」メーターと取得一覧の両方に使う。
+	map.setup(GameState.map_tree, GameState.player_stats, GameState.acquired_part_ids)
 
 
 ## 進む先を選んだら、そのノードに確定済みの敵グループ(1〜3体)と土俵を戦闘へ渡す。

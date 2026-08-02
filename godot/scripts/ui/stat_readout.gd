@@ -97,27 +97,50 @@ static func rows(stats: SpinnerStats, ghost_seconds: float = 0.0) -> Array[Dicti
 static func enemy_rows(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> Array[Dictionary]:
 	if stats == null or enemies.is_empty():
 		return []
-	var toughest := 0.0
-	var longest := 0.0
-	var found := false
-	for enemy in enemies:
-		if enemy == null:
-			continue
-		found = true
-		toughest = maxf(toughest, PartPreview.toughness(enemy))
-		longest = maxf(longest, PartPreview.lifetime(enemy))
-	if not found:
+	var longest := _peak(enemies, false)
+	if longest < 0.0:
 		return []
 	return [
-		{
-			"label_key": "STAT_ENEMY_TOUGHNESS",
-			"fraction": _share(toughest, PartPreview.toughness(stats)),
-		},
+		{"label_key": "STAT_ENEMY_TOUGHNESS", "fraction": toughness_share(stats, enemies)},
 		{
 			"label_key": "STAT_ENEMY_LIFETIME",
 			"fraction": _share(longest, PartPreview.lifetime(stats)),
 		},
 	]
+
+
+## 相手のいちばん硬い個体と自分との、硬さの取り分。enemy_rows の1行目そのもの。
+##
+## 公開してあるのは、**マップのノードに出す脅威メーター(ThreatMeter)がこれを呼ぶ**
+## から。部屋の硬さの定義が2箇所にあると、マップと対戦画面で違う脅威を出すことになる
+## (片方だけ直されたときに食い違う。硬さ・寿命の定義を PartPreview から借りているのと
+## 同じ理由)。
+##
+## 相手が居ない・値が取れないときは互角(PARITY)を返す。0埋めにすると
+## 「相手が居ないので安全」ではなく「相手が弱い」という別の嘘になる。
+static func toughness_share(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> float:
+	if stats == null:
+		return PARITY
+	var toughest := _peak(enemies, true)
+	if toughest < 0.0:
+		return PARITY
+	return _share(toughest, PartPreview.toughness(stats))
+
+
+## 群のうち最大の硬さ(use_toughness=true)または最大の寿命。有効な相手が1体も
+## 居なければ -1.0 を返す(硬さ0の相手と「相手が居ない」を取り違えないため)。
+##
+## 乱戦の代表を最大にするのは、部屋の難度がいちばんきつい相手で決まるから
+## (平均だと弱い個体が数で薄めてしまう)。硬さと寿命で別々に最大を取るのは、
+## 硬い個体と長生きな個体が同一とは限らないから。
+static func _peak(enemies: Array[SpinnerStats], use_toughness: bool) -> float:
+	var peak := -1.0
+	for enemy in enemies:
+		if enemy == null:
+			continue
+		var value := PartPreview.toughness(enemy) if use_toughness else PartPreview.lifetime(enemy)
+		peak = maxf(peak, value)
+	return peak
 
 
 ## 相手の取り分。互角(両者が同じ値)でちょうど PARITY、相手が上回るほど1へ寄る。

@@ -93,3 +93,12 @@ const MAP_GLOW := Color("3bff88")
 const MAP_HOVER_RING := Color("cfffe0")
 const MAP_CURRENT_RING := Color("6ed8ff", 0.9)
 const MAP_OUTLINE := Color("0b0818", 0.85)
+
+## 進める先のノードに出す「相手の硬さの取り分」メーター。埋まりは敵色(ENEMY)を
+## そのまま使う——敵数ピップも対戦画面の「硬さ 相手」のバーも同じ赤なので、
+## 「赤＝相手」の読み方をマップと対戦画面で揃える。α を持たせないのは、
+## コントラスト比の検査が α を無視する(=検査を嘘にしない)ため。入場フェードは
+## 描画側で掛ける。
+const MAP_THREAT_TRACK := Color("35305c")
+## 互角の目盛り。埋まり(赤)の上にも空き(紫)の上にも乗るので白。
+const MAP_THREAT_TICK := Color(1, 1, 1)

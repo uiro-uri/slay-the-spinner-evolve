@@ -121,7 +121,7 @@ func _new(seed_value: int, path: String) -> void:
 	var tree := _tree_at(state)
 	print("=== NEW RUN seed=%d 残機=%d ===" % [seed_value, state["continues"]])
 	_print_tree(tree)
-	_print_reachable(tree)
+	_print_reachable(tree, stats_from(state["stats"]))
 
 func _status(state: Dictionary, path: String) -> void:
 	var tree := _tree_at(state)
@@ -131,7 +131,7 @@ func _status(state: Dictionary, path: String) -> void:
 	_print_parts(state)
 	print("現在段=%d 交戦中col=%s" % [tree.current_step(), str(state["pending"])])
 	_print_tree(tree)
-	_print_reachable(tree)
+	_print_reachable(tree, stats_from(state["stats"]))
 
 func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
 	var block := enter_block_reason(state)
@@ -417,7 +417,7 @@ func _pick(state: Dictionary, path: String, id: int) -> void:
 		print("！！！全段突破・ラン完了！！！")
 	else:
 		var t2 := _tree_at(state)
-		_print_reachable(t2)
+		_print_reachable(t2, stats_from(state["stats"]))
 
 func _giveup(state: Dictionary, path: String) -> void:
 	state["dead"] = true
@@ -518,11 +518,11 @@ func _print_tree(tree: MapTree) -> void:
 		if not row.is_empty():
 			print("  段%d: %s" % [step, "  ".join(row)])
 
-func _print_reachable(tree: MapTree) -> void:
+func _print_reachable(tree: MapTree, player: SpinnerStats = null) -> void:
 	print("進める先(段%d→):" % (tree.current_step() + 1))
 	for c in tree.next_coords():
 		var n: MapTree.MapNode = tree.nodes[c]
-		print("  ", route_text(c.y, n))
+		print("  ", route_text(c.y, n, player))
 
 ## カードの効果を実効果と一致する日本語で出す(CustomPart.describe()のCLI版)。
 ## 以前はRAGE/MOMENTUMもSTAT_MULTIPLY用の分岐に落ち、statの既定値MASSを読んで
@@ -615,17 +615,35 @@ static func rewards_for_group(group_size: int) -> int:
 ## 初見プレイヤーには乱戦が「リスクだけの部屋」に読めて、全戦で最少体数ノードを
 ## 選んでいた(コールドプレイの一次証拠)。ゴール(ボス)は報酬選択が無い(勝てば即クリア)
 ## ので報酬枚数の代わりにそれを明示する。
-static func route_text(col: int, n: MapTree.MapNode) -> String:
+static func route_text(col: int, n: MapTree.MapNode, player: SpinnerStats = null) -> String:
+	var threat := threat_text(n, player)
 	if n.reward_count() <= 0:
-		return "col%+d : Lv%d %d体 %s 撃破でクリア(報酬なし)" % [
-			col, n.level(), n.enemy_count(), n.field.title_key]
+		return "col%+d : Lv%d %d体%s %s 撃破でクリア(報酬なし)" % [
+			col, n.level(), n.enemy_count(), threat, n.field.title_key]
 	# 乱戦は枚数だけでなく質も上がる(RARE重みが頭数倍)。リターンが読めないと
 	# 乱戦がリスクだけの部屋に見えるので、選択の時点で両方を明示する。
 	if n.enemy_count() > 1:
-		return "col%+d : Lv%d %d体→報酬%d枚(レア出やすさ×%d) %s" % [
-			col, n.level(), n.enemy_count(), n.reward_count(), n.enemy_count(), n.field.title_key]
-	return "col%+d : Lv%d %d体→報酬%d枚 %s" % [
-		col, n.level(), n.enemy_count(), n.reward_count(), n.field.title_key]
+		return "col%+d : Lv%d %d体%s→報酬%d枚(レア出やすさ×%d) %s" % [
+			col, n.level(), n.enemy_count(), threat, n.reward_count(), n.enemy_count(),
+			n.field.title_key]
+	return "col%+d : Lv%d %d体%s→報酬%d枚 %s" % [
+		col, n.level(), n.enemy_count(), threat, n.reward_count(), n.field.title_key]
+
+
+## 進める先1件ぶんの脅威表示。実UIのマップが出す「相手の硬さの取り分」メーターの
+## CLI版で、値は ThreatMeter.share をそのまま呼ぶ。
+##
+## **ハーネスと実ゲームのズレを作らないため**に足してある。従来ここは「Lv3 2体」しか
+## 言わず、実UIのマップも同じだった(=対等)。実UI側に取り分メーターが載った以上、
+## CLIに無いままだとコールドプレイのエージェントだけが実プレイヤーより少ない情報で
+## 部屋を選ぶことになり、この工程が「もう直した穴」を毎回見つけ直す。
+## 互角(0.50)より大きければ格上。player が無ければ何も足さない。
+static func threat_text(n: MapTree.MapNode, player: SpinnerStats) -> String:
+	if player == null or not n.has_encounter():
+		return ""
+	var share := ThreatMeter.share(player, n.enemies)
+	var mark := "格上" if share > StatReadout.PARITY else "格下"
+	return "(硬さ取り分%.2f %s)" % [share, mark]
 
 
 ## pickが取れるのは直前のrewardで提示された札だけ。JSON経由でidがfloatに

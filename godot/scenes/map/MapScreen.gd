@@ -60,6 +60,14 @@ const PIP_OFFSET := 6.0
 const COLOR_PIP := Palette.ENEMY
 const COLOR_REWARD_PIP := Palette.GOLD_CARD
 
+## 脅威メーター。進める先の戦闘ノードの下に、相手の硬さの取り分を横バーで出す。
+## ピップ(敵数・報酬枚数)が「いくつ居るか/いくつ貰えるか」なのに対して、これは
+## 「自分と比べてどれだけ硬いか」——レベルの数字だけでは読めない量。規則も幾何も
+## ThreatMeter の純粋関数側にあり、ここは色を付けて描くだけ。
+const COLOR_THREAT := Palette.ENEMY
+const COLOR_THREAT_TRACK := Palette.MAP_THREAT_TRACK
+const COLOR_THREAT_TICK := Palette.MAP_THREAT_TICK
+
 ## 選択不能を表す番兵。どのノード座標(段0〜9)とも一致しない。
 const NO_HOVER := Vector2i(-1, -1)
 
@@ -80,6 +88,12 @@ var _node_radius := NODE_RADIUS
 var _draw_scale := 1.0
 
 var _tree: MapTree
+## 今のビルド。脅威メーターの「取り分」の分母で、取得一覧の中身でもある。
+## **GameState を直接見ない**——画面はMainから渡された状態だけを描く(対戦画面の
+## StatPanel が同じ理由で引数渡しになっている)。ヘッドレステストからこの
+## スクリプトを preload できるのも、autoload を参照していないからこそ。
+var _player_stats: SpinnerStats = null
+var _acquired_ids: Array[int] = []
 var _buttons: Dictionary = {}
 
 var _time := 0.0
@@ -95,10 +109,14 @@ func _ready() -> void:
 	_recompute_layout()
 
 
-func setup(tree: MapTree) -> void:
+func setup(
+	tree: MapTree, player_stats: SpinnerStats = null, acquired_ids: Array[int] = []
+) -> void:
 	# 先にレイアウトを確定させてからノードを組む(ボタンが正しい大きさで並ぶ)。
 	_recompute_layout()
 	_tree = tree
+	_player_stats = player_stats
+	_acquired_ids = acquired_ids
 	_rebuild()
 	_rebuild_acquired()
 
@@ -166,7 +184,7 @@ func _on_node_unhover(coord: Vector2i) -> void:
 ## 効果説明は省いて名前だけでコンパクトに並べる(show_description=false)。ステータスの
 ## 中身は左上の常時オーバーレイ(StatPanel)がバーで見せるので、ここは取得の一覧に徹する。
 func _rebuild_acquired() -> void:
-	AcquiredUpgradeList.populate(_acquired_list, GameState.acquired_part_ids, false)
+	AcquiredUpgradeList.populate(_acquired_list, _acquired_ids, false)
 
 
 func _to_pixel(coord: Vector2i) -> Vector2:
@@ -186,6 +204,10 @@ func _draw() -> void:
 	var reachable := _tree.next_coords()
 	var e := MapGlow.entrance(_entrance, ENTRANCE_DURATION)
 	var g := MapGlow.pulse(_time)
+	# 進める先の相手が今の自分よりどれだけ硬いか。キャッシュせず毎フレーム引く
+	# ——ノード列を3周する既存の描画に比べれば無視できる量で、そのぶん
+	# 「報酬で育ったのに古い取り分が残る」という古典的な壊れ方をしない。
+	var threats := ThreatMeter.reachable_shares(_tree, _player_stats)
 
 	# --- 辺 ---
 	for coord in _tree.nodes:
@@ -246,6 +268,10 @@ func _draw() -> void:
 		# 実レベルの数字と敵数ピップ（戦闘ノードのみ）。
 		if node.has_encounter():
 			_draw_encounter_info(center, radius, node, e)
+
+		# 相手の硬さの取り分（進める先の戦闘ノードのみ）。
+		if threats.has(coord):
+			_draw_threat_meter(center, radius, threats[coord], e)
 
 	# --- 現在地マーカー(常時・明滅させない) ---
 	if _tree.nodes.has(_tree.current_coord):
@@ -324,6 +350,18 @@ func _draw_encounter_info(center: Vector2, radius: float, node: MapTree.MapNode,
 		var rx0 := center.x - (rewards - 1) * gap * 0.5
 		for i in rewards:
 			draw_circle(Vector2(rx0 + i * gap, ry), pip_r, _faded(COLOR_REWARD_PIP, e))
+
+
+## 相手の硬さの取り分メーターを描く。空きの上に埋まりを重ね、最後に互角の目盛りを
+## 立てる（目盛りは埋まりの上にも乗るので最後）。ホバーで膨らんだ半径をそのまま使う
+## ので、ピップと同じようにノードと一緒に動く。
+func _draw_threat_meter(center: Vector2, radius: float, share_value: float, e: float) -> void:
+	var track := ThreatMeter.track_rect(center, radius, _draw_scale)
+	draw_rect(track, _faded(COLOR_THREAT_TRACK, e), true)
+	var fill := ThreatMeter.fill_rect(track, share_value)
+	if fill.size.x > 0.0:
+		draw_rect(fill, _faded(COLOR_THREAT, e), true)
+	draw_rect(ThreatMeter.parity_rect(track, _draw_scale), _faded(COLOR_THREAT_TICK, e), true)
 
 
 ## 画面比に応じてノードの大きさ・間隔・位置を決める。横画面(設計比16:9)は設計値のまま。
