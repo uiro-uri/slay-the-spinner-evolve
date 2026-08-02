@@ -83,6 +83,9 @@ func _one_hit_request(player_edge: float, enemy_guard: float = 0.0) -> BattleReq
 	var r := BattleRequest.new()
 	r.natural_damping = 0.0
 	r.stage_strength = 0.0
+	# 「1回の衝突の削りがちょうど(1+edge)倍」を見る理想化なので、1撃の削りを切る
+	# 天井(drain_cap_share)は外す。天井そのものは test_drain_cap.gd が見る。
+	r.drain_cap_share = 0.0
 	# 1回だけ衝突させる窓。既定のviolenceを上げると弾き返された後に再接近して
 	# 2回目が入り、「ちょうど(1+edge)倍」が崩れるので、初撃だけを見る長さに切る
 	# (4ユニット離れて相対速度8で接近、縁が触れるのは約0.35秒)。
@@ -134,6 +137,9 @@ func _giant_request(player_edge: float, enemy_mass: float) -> BattleRequest:
 	var r := BattleRequest.new()
 	r.natural_damping = 0.0
 	r.stage_strength = 0.0
+	# 「1回の衝突の削りがちょうど(1+edge)倍」を見る理想化なので、1撃の削りを切る
+	# 天井(drain_cap_share)は外す。天井そのものは test_drain_cap.gd が見る。
+	r.drain_cap_share = 0.0
 	# 1回だけ衝突させる窓。既定のviolenceを上げると弾き返された後に再接近して
 	# 2回目が入り、「ちょうど(1+edge)倍」が崩れるので、初撃だけを見る長さに切る
 	# (4ユニット離れて相対速度8で接近、縁が触れるのは約0.35秒)。

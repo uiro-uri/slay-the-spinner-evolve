@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter"
 ]
 
 
@@ -154,6 +154,9 @@ func _init() -> void:
 
 	print("== mutualdrain ==")
 	_test_enemy_mutual_drain()
+
+	print("== draincap ==")
+	_test_drain_cap()
 
 	print("== sparkscale ==")
 	_test_spark_scale()
@@ -517,6 +520,12 @@ func _test_enemy_mutual_drain() -> void:
 	var suite = load("res://tests/test_enemy_mutual_drain.gd").new()
 	suite.run(_check)
 	_done("mutualdrain")
+
+
+func _test_drain_cap() -> void:
+	var suite = load("res://tests/test_drain_cap.gd").new()
+	suite.run(_check)
+	_done("draincap")
 
 
 func _test_spark_scale() -> void:
