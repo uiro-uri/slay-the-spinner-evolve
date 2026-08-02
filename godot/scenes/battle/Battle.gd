@@ -292,7 +292,9 @@ func _ready() -> void:
 
 	# メッセージは暗紫の床の上に出るので、明色文字＋暗色縁取りで読ませる。
 	# 下を明るいネオンのコマやスパークが通っても縁取りで浮く。色はPaletteが唯一の出所。
-	_message.text = "BATTLE_DRAG_TO_SHOOT"
+	# 決戦(段9)だけ言い回しを変える。マップを閉じた瞬間に「どの部屋か」は消えるので、
+	# 最後の一戦であることは対戦画面が自分で言う(規則は BossMark の純粋関数側)。
+	_message.text = BossMark.prompt_key(_is_goal_battle())
 	_message.add_theme_color_override("font_color", Palette.TEXT_PRIMARY)
 	_message.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
 	_message.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
