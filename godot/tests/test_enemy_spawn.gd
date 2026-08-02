@@ -23,6 +23,8 @@ func run(check: Callable) -> void:
 	_test_fits_inside_arena(check)
 	_test_avoids_keepout(check)
 	_test_avoids_obstacles(check)
+	_test_group_spacing(check)
+	_test_battle_wires_group(check)
 
 
 ## 発射前の初期表示が重ならないよう、avoidに渡した点からmin_gap以上離れて出ること。
@@ -56,6 +58,71 @@ func _test_avoids_keepout(check: Callable) -> void:
 	check.call(
 		plain.position.is_equal_approx(empty.position),
 		"敵の出現: 除け所が無ければ従来と同じ結果(後方互換)"
+	)
+
+
+## EnemySpawn.Group を通して湧かせた乱戦は、敵同士が重ならないこと。
+##
+## 間隔の規則を3経路(Battle・BattleSim・naive_play)で1つにまとめた本体。
+## かつてはボット/CLIがavoid/min_gapを渡しておらず、乱戦の組の13.1%が縁を
+## 食い込ませて湧いて、発射前に勝手に潰し合っていた。
+##
+## 実ロスターの実寸(Lv1〜4の半径・最大3体)で回して、縁がclearanceぶん空くことを見る。
+func _test_group_spacing(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var clearance := EnemySpawn.Group.DEFAULT_CLEARANCE
+	var worst := INF
+	var trials := 0
+	for trial in TRIALS:
+		rng.seed = 1000 + trial
+		var level := 1 + (trial % 4)
+		var pool := EnemyRoster.of_level(level)
+		var count := 2 + (trial % 2)
+		var group := EnemySpawn.Group.new(clearance)
+		var placed: Array[Vector2] = []
+		var radii: Array[float] = []
+		for i in count:
+			var enemy: EnemyData = pool[rng.randi_range(0, pool.size() - 1)]
+			var r: float = enemy.stats.radius
+			var plan := EnemySpawn.plan(
+				CENTER, RING, SPEED, 30.0, rng, r, 5.0,
+				group.avoid(), group.min_gap(r), []
+			)
+			group.add(plan.position, r)
+			placed.append(plan.position)
+			radii.append(r)
+		for a in placed.size():
+			for b in range(a + 1, placed.size()):
+				worst = minf(worst, placed[a].distance_to(placed[b]) - radii[a] - radii[b])
+				trials += 1
+	check.call(
+		worst >= clearance - EPS,
+		"乱戦の出現: 敵同士の縁が%.2f以上空く (%d組の最小 %.3f)" % [clearance, trials, worst]
+	)
+
+	# 1体目には制約が無い＝単体戦はplan()の速い道(1回引くだけ)を従来どおり通る。
+	var solo := EnemySpawn.Group.new(clearance)
+	check.call(
+		solo.min_gap(1.0) == 0.0 and solo.avoid().is_empty(),
+		"乱戦の出現: 1体目は無制約(単体戦の決定性が変わらない)"
+	)
+
+
+## 実プレイ(Battle.gd)が出現を EnemySpawn.Group で配線していること(退行検知)。
+##
+## Battle.gd はシーンスクリプトでヘッドレスから直接は回せないので、ボット/CLIのように
+## 出現を回して確かめられない。実際に間隔規則を渡し忘れて何サイクルも気づかれなかった
+## のがボット/CLI側だったので、**3経路のうち唯一テストの目が届かない実プレイ側**にも
+## 同じ穴が開かないよう、ソースの配線を見る。
+func _test_battle_wires_group(check: Callable) -> void:
+	var source := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
+	check.call(
+		source.contains("EnemySpawn.Group.new("),
+		"Battle.gdが出現の間隔をEnemySpawn.Groupで組む"
+	)
+	check.call(
+		source.contains("group.avoid()") and source.contains("group.min_gap("),
+		"Battle.gdが間隔をEnemySpawn.plan()へ渡す"
 	)
 
 
