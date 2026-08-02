@@ -13,6 +13,20 @@ extends RefCounted
 ##
 ## rps は「初期回転数」として出す。ライブに減っていく回転数は画面下のHPバーで
 ## 既に見えているので、こちらはビルドの基準値(＝開始時rps)を見せる。
+##
+## 先頭2行は勝敗をほぼ決める複合量の**硬さ**と**寿命**(PartPreviewと同じ定義を
+## 共有する)。生の4本(重さ/大きさ/反発/初期回転)はその材料でしかなく、
+## 「重さ×半径²」「rps÷(半径×回転減衰)」がどちらへ動いたかは4本を眺めても読めない。
+## 報酬画面は2026-08-02のサイクルでこの2つを見せるようになったが、ビルド表示は
+## 生の4本のままだったので、**カードで「硬さ 0.73 → 1.32」と約束された値が、
+## 取った後どこにも出ない**という切れ方をしていた。11枚積んで硬さが初期値のまま
+## だったことに最後まで気付かなかった、というコールドプレイが2サイクル続いている。
+## StatPanelは動いた行を光らせるので、札の効きがそのまま目に入るようになる。
+##
+## なお、コールドプレイCLI(playtest/naive_play.gd)は最初からこの2つを毎回
+## 印字していた=**自己改善サイクルのエージェントだけが実プレイヤーより多くの情報で
+## 札を選んでいた**。ハーネスと実ゲームのズレ(発射初速1.67倍・出現間隔)を2度踏んだ
+## 系譜と同型なので、実UI側を合わせて塞ぐ。
 
 ## バーが満タンになる値(下端は0)。初期ビルド(重さ1.5/大きさ0.7/反発0.75/回転15)が
 ## ほぼ中央に来るよう、既定値の約2倍を上端にしている。
@@ -20,6 +34,9 @@ const MASS_MAX := 3.0
 const RADIUS_MAX := 1.4
 const RESTITUTION_MAX := 1.5
 const RPS_MAX := 30.0
+## 硬さ・寿命も同じ規則。初期ビルドは硬さ 1.5×0.7²=0.735、寿命 15÷(0.7×1.0)≒21.4。
+const TOUGHNESS_MAX := 1.5
+const LIFETIME_MAX := 45.0
 ## 無敵時間の上端。ゴースト2枚(合計4秒)で満タン。
 const GHOST_MAX := 4.0
 
@@ -31,6 +48,14 @@ const GHOST_MAX := 4.0
 ## CustomPartCatalog.total_ghost_seconds が出したものを Battle が渡す。
 static func rows(stats: SpinnerStats, ghost_seconds: float = 0.0) -> Array[Dictionary]:
 	var r: Array[Dictionary] = [
+		{
+			"label_key": "STAT_TOUGHNESS",
+			"fraction": _fraction(PartPreview.toughness(stats), TOUGHNESS_MAX),
+		},
+		{
+			"label_key": "STAT_LIFETIME",
+			"fraction": _fraction(PartPreview.lifetime(stats), LIFETIME_MAX),
+		},
 		{"label_key": "STAT_MASS", "fraction": _fraction(stats.mass, MASS_MAX)},
 		{"label_key": "STAT_RADIUS", "fraction": _fraction(stats.radius, RADIUS_MAX)},
 		{"label_key": "STAT_RESTITUTION", "fraction": _fraction(stats.restitution, RESTITUTION_MAX)},
