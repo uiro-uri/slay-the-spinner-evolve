@@ -68,6 +68,13 @@ const COLOR_THREAT := Palette.ENEMY
 const COLOR_THREAT_TRACK := Palette.MAP_THREAT_TRACK
 const COLOR_THREAT_TICK := Palette.MAP_THREAT_TICK
 
+## 柱の印。ノードの輪郭が土俵の外周形状なのに対して、こちらは土俵の中身。
+## 色は対戦画面の柱(Arena.OBSTACLE_COLOR)と同じ紫で、入場した先の土俵と印が
+## 見た目でも一致する。地(ノード塗り)が明るい緑〜暗い灰と幅広いので、読めるかは
+## ノード本体と同じく縁取りが担う(塗り＋縁の組は_draw_node_bodyと同じ流儀)。
+const COLOR_OBSTACLE := Palette.NEON_VIOLET
+const OBSTACLE_OUTLINE_WIDTH := 1.0
+
 ## 選択不能を表す番兵。どのノード座標(段0〜9)とも一致しない。
 const NO_HOVER := Vector2i(-1, -1)
 
@@ -258,6 +265,11 @@ func _draw() -> void:
 			shape = node.wall_shape()
 		_draw_node_body(center, radius, shape, _faded(color, e), e)
 
+		# 土俵に柱が立っているなら、その位置に印を打つ。輪郭が土俵の外周なら
+		# こちらは中身で、対になっている。レベルの数字より先に描くので、
+		# 数字は常に印の上に乗って読める。
+		_draw_obstacle_marks(center, radius, node, e)
+
 		# マウスオーバー中のマスは明るい太リングで強調する（形状問わず円で囲う）。
 		if coord == _hovered_coord:
 			draw_arc(
@@ -350,6 +362,22 @@ func _draw_encounter_info(center: Vector2, radius: float, node: MapTree.MapNode,
 		var rx0 := center.x - (rewards - 1) * gap * 0.5
 		for i in rewards:
 			draw_circle(Vector2(rx0 + i * gap, ry), pip_r, _faded(COLOR_REWARD_PIP, e))
+
+
+## 土俵の柱をノードの中に描く。位置も大きさも土俵の実座標を縮めたものなので
+## (幾何は ObstacleMarks の純粋関数側)、入場した先の柱の配置がそのまま出る。
+## 柱の無い土俵とスタート(遭遇なし)では印が0個＝何も描かない。
+## 塗り＋縁取りの組は _draw_node_body と同じで、明るいノードにも暗いノードにも
+## 縁が効いて輪郭が出る。
+func _draw_obstacle_marks(
+	center: Vector2, radius: float, node: MapTree.MapNode, e: float
+) -> void:
+	var outline := _faded(COLOR_OUTLINE, e)
+	var width := OBSTACLE_OUTLINE_WIDTH * _draw_scale
+	for mark in ObstacleMarks.marks(center, radius, node.field):
+		var at := Vector2(mark.x, mark.y)
+		draw_circle(at, mark.z, _faded(COLOR_OBSTACLE, e))
+		draw_arc(at, mark.z, 0, TAU, 16, outline, width, true)
 
 
 ## 相手の硬さの取り分メーターを描く。空きの上に埋まりを重ね、最後に互角の目盛りを

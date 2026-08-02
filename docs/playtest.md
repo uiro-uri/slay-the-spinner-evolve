@@ -58,6 +58,14 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_launch_force.gd -- --count=400
   ```
+- `godot/playtest/measure_field.gd` — **土俵**(FIELD_*)を振って、土俵×敵レベルの
+  勝率と自機のrps喪失内訳を出す計測器。run_sim は土俵を毎戦ランダムに選ぶので、
+  統計はいつも6つの土俵の平均になっていて「どの土俵が難しいか」が出ていなかった。
+  敵とシードを揃えて土俵だけ差し替えるので、行の差は土俵の差だけになる。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_field.gd -- --count=500
+  ```
 - `godot/tests/test_playtest.gd` — 検査器が壊れた結果を本当に拾うかの常設テスト。
 
 ## アラート

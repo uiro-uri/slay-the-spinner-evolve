@@ -29,6 +29,7 @@ func run(check: Callable) -> void:
 	_test_neon_actors_on_floor(check)
 	_test_map_nodes(check)
 	_test_threat_meter_colors(check)
+	_test_obstacle_mark_colors(check)
 
 
 ## 元凶。戦闘メッセージ(明色文字＋暗色縁取り)が床の上でも縁取りの上でも読める。
@@ -142,3 +143,21 @@ func _test_threat_meter_colors(check: Callable) -> void:
 
 	var vs_bg := ColorContrast.ratio(Palette.MAP_THREAT_TRACK, Palette.BG)
 	check.call(vs_bg >= 1.5, "脅威メーターの空き vs 背景 = %.2f (>= 1.5)" % vs_bg)
+
+
+## マップの柱の印が読めること。印は最大でもノード半径の12%(実測 直径4.3px)の小さな
+## 円なので、地(ノード塗り)が明るい緑〜暗い灰と幅広い以上、色だけでは全部の地に
+## 対して 3:1 を取れない。読めるかは**縁取り**が担うので、そこを確かめる:
+## 縁 vs 印(紫)と、縁 vs 進める先のノード塗り——決断に関わるのは進める先だけ。
+## 印の紫は対戦画面の柱と同じ色で、入場した先の土俵と見た目が一致する。
+func _test_obstacle_mark_colors(check: Callable) -> void:
+	var pairs := {
+		"縁 vs 柱の印": [Palette.MAP_OUTLINE, Palette.NEON_VIOLET],
+		"縁 vs 進める先のノード": [Palette.MAP_OUTLINE, Palette.MAP_NEXT],
+	}
+	for name in pairs:
+		var r := ColorContrast.ratio(pairs[name][0], pairs[name][1])
+		check.call(
+			r >= ColorContrast.AA_LARGE,
+			"柱の印 %s = %.2f (>= %.1f)" % [name, r, ColorContrast.AA_LARGE]
+		)
