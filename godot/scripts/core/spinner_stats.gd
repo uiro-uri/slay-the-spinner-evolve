@@ -51,6 +51,12 @@ extends Resource
 ## 相手の硬さと無関係に一定量が食い込む、という住み分け。
 @export_range(0.0, 2.0, 0.01) var drill: float = 0.0
 
+## 土俵の傾斜に自分だけ余分に引かれる度合い(低重心)。1.0で従来どおり。
+## 大きいほど中心へ強く引き戻されるので、壁まで届きにくく・届いても遅くなる。
+## 壁のwall_keep(当たった時の軽減)と対になる「そもそも当たらない」側の軸で、
+## Low Center(低重心)が上げる。実効の傾斜はSpinnerPhysics.gripped_slope_strength。
+@export_range(0.1, 3.0, 0.01) var slope_grip: float = 1.0
+
 ## 回転数の上限。「RPSの最大値を40にし、ゲージに反映」というコミットで決まった値。
 ## SPIN_ENGINE札の上限(CustomPartCatalog.RPS_CAP)も勝利成長もこれを参照する。
 const RPS_CAP := 40.0
@@ -125,6 +131,7 @@ func duplicate_stats() -> SpinnerStats:
 	copy.hit_guard = hit_guard
 	copy.edge = edge
 	copy.drill = drill
+	copy.slope_grip = slope_grip
 	return copy
 
 

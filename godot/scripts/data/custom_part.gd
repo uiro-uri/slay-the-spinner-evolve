@@ -59,7 +59,16 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ## 構造的に詰んでいた(edge0.60でボスに与0.6/hit vs 被1.5/hitで6連敗、が一次証拠)。
 ## 追加量は自分基準(pierce)×drillなので相手がどれだけ硬くても減らない=対巨体の攻め軸。
 ## 柔らかい相手には素の削りが支配的で相対的にほぼ効かない(序盤を歪めない)。
-enum Effect { STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH, EDGE, SPIN_UP, DRILL }
+## GRIP: 土俵の傾斜に自分だけ余分に引かれるようにする(slope_gripを grip_step ぶん
+## 加算、上限grip_max)。壁での喪失は「進入速度に比例」(impact_scaled_wall_damping)
+## するので、中心へ強く引き戻されるコマは壁へ届く距離も届いたときの速さも落ちる。
+## RAGE(wall_keep=当たった時に軽くする)と対になる「そもそも当たらない」側の壁対策で、
+## 壁の軸に札が1枚しか無かった穴を埋める(コールドプレイ2026-08-03: 決戦4連敗の
+## 喪失内訳が 壁9.6〜19.1 対 削り20.5〜30.2 と壁が半分近くを占めるのに、
+## 壁へ効く札は14回の提示中RAGEが2回だけ、が一次証拠)。
+enum Effect {
+	STAT_MULTIPLY, SET_LIVES, GHOST, MOMENTUM, RAGE, GUARD, GROWTH, EDGE, SPIN_UP, DRILL, GRIP
+}
 
 ## レアカードの見た目。報酬選択とマップの取得済み一覧で同じ強調を使うため、
 ## パーツ側に置いて共有する。地が明るい金色なので文字は暗くしないと読めない。
@@ -136,6 +145,13 @@ const _STAT_NAMES := {
 
 ## DRILL札のdrill上限。重ねがけで貫通削りが青天井にならないよう頭打ちにする。
 @export var drill_max: float = 1.0
+
+## GRIP札が1枚あたり加算する傾斜の効き(slope_gripへ加算)。0.4で中心へ引く力+40%。
+@export var grip_step: float = 0.0
+
+## GRIP札のslope_grip上限。青天井にすると中心に貼り付いて壁に一切触れなくなる
+## (壁のwall_keep=1.0が無敵化するのと同じ壊れ方)ので頭打ちにする。
+@export var grip_max: float = 1.0
 
 ## GROWTH札が質量に掛ける倍率。直径側の倍率は multiplier / 上限は cap を使う。
 @export var mass_multiplier: float = 1.0
@@ -274,6 +290,22 @@ static func make_drill(
 	return part
 
 
+## 低重心札を作る。土俵の傾斜の効き(slope_grip)を step_ ぶん上げる。
+## max_ は重ねがけの上限(中心に貼り付いて壁に触れなくなる無敵化を防ぐ)。
+static func make_grip(
+	id_: int, title_key_: String, rarity_: Rarity,
+	step_: float, max_: float
+) -> CustomPart:
+	var part := CustomPart.new()
+	part.id = id_
+	part.title_key = title_key_
+	part.rarity = rarity_
+	part.effect = Effect.GRIP
+	part.grip_step = step_
+	part.grip_max = max_
+	return part
+
+
 ## 衝撃吸収札を作る。衝突で受けるrps削りの軽減(hit_guard)を step_ ぶん上げる。
 ## max_ は重ねがけの上限(1.0=削り無効の無敵化を防ぐためRAGEと同様1未満)。
 static func make_guard(
@@ -329,6 +361,11 @@ func apply_to(stats: SpinnerStats) -> void:
 	# EDGEと同じく上限で頭打ちにする。
 	if effect == Effect.DRILL:
 		stats.drill = minf(stats.drill + drill_step, drill_max)
+		return
+	# 低重心(GRIP): 土俵の傾斜の効きを上げる(slope_grip加算)。DRILLと同じく上限で
+	# 頭打ちにする(青天井だと中心に貼り付いて壁に一切触れなくなる)。
+	if effect == Effect.GRIP:
+		stats.slope_grip = minf(stats.slope_grip + grip_step, grip_max)
 		return
 	# 巨大化(GROWTH): 直径と質量の両方を倍にする。それぞれ上限でクランプ
 	# (直径はアリーナを埋め尽くさないよう、質量は青天井の複利を防ぐよう)。
@@ -421,6 +458,7 @@ static func _stats_equal(a: SpinnerStats, b: SpinnerStats) -> bool:
 		and _nearly_same(a.hit_guard, b.hit_guard)
 		and _nearly_same(a.edge, b.edge)
 		and _nearly_same(a.drill, b.drill)
+		and _nearly_same(a.slope_grip, b.slope_grip)
 	)
 
 
@@ -494,6 +532,17 @@ func describe() -> String:
 				[_trim(drill_step * 100.0), _trim(drill_max * 100.0)]
 			)
 			+ "\n" + tr("PART_NOTE_DRILL")
+		)
+	# 低重心も%表記(GUARD/EDGE/DRILLと同じ読みやすさの判断)。挙動注記を必ず添える——
+	# 「傾斜の効き+30%」だけでは何が嬉しいのか読めない。効くのは壁で、しかも
+	# 「軽くする」のではなく「そもそも壁まで届きにくくなる」という別の機構なので、
+	# RAGEとの違いが分かる言葉で書く。
+	if effect == Effect.GRIP:
+		return (
+			tr("PART_EFFECT_GRIP").format(
+				[_trim((grip_step) * 100.0), _trim((grip_max - 1.0) * 100.0)]
+			)
+			+ "\n" + tr("PART_NOTE_GRIP")
 		)
 	# 回転加算は「+2（上限 40）」の加算表記。挙動注記はRPS上昇の既存文を使い回す
 	# (倍率でも加算でも起きることは同じ: 開始回転が増え寿命が延びる)。

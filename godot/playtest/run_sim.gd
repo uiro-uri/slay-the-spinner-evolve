@@ -196,9 +196,17 @@ static func play_one(
 ## 統計に現れない)で、同じ控えめな線形(1+edge)で織り込む。
 ## drill(Drill Bit札)も同じ攻めの値。価値は相手が硬いほど相対的に大きいが、
 ## toughnessは1戦の文脈を持たないので、edgeと同じ控えめな線形で織り込む。
+## slope_grip(Low Center札)は壁での喪失を減らす守りの値。ここも織り込まないと
+## greedyが絶対に選ばず統計に現れないが、効くのは3つの喪失機構のうち壁だけで、
+## しかも「当たった時に軽くする」のではなく「届きにくくする」間接効果なので、
+## 加算幅(+0.3/枚)をそのまま足すとGUARD(+0.17/枚)の倍の値踏みになって過大。
+## 半分に割ってGUARDと同格(+0.15/枚)に置く。
+const GRIP_VALUE_SHARE := 0.5
+
 static func toughness(stats: SpinnerStats) -> float:
 	return stats.rps * stats.mass * stats.radius * stats.radius \
-		* (1.0 + stats.hit_guard) * (1.0 + stats.edge) * (1.0 + stats.drill)
+		* (1.0 + stats.hit_guard) * (1.0 + stats.edge) * (1.0 + stats.drill) \
+		* (1.0 + (stats.slope_grip - 1.0) * GRIP_VALUE_SHARE)
 
 
 static func _choose_part(

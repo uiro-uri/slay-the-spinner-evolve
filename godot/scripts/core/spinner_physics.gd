@@ -46,6 +46,21 @@ static func stage_slope_accel(
 	return strength * toward_center
 
 
+## 土俵の傾斜の効き目を、コマ側の低重心(slope_grip)で強めた実効の強さ。
+## grip=1.0で従来どおり、1.5なら中心へ引き戻す力が1.5倍になる。
+##
+## 傾斜は「土俵の性質」なので本来コマごとに違うのは嘘だが、この物理は
+## 元から嘘物理(冒頭のコメント参照)で、低重心のコマほど斜面をよく捉える、
+## という手触りの側を採る。壁対策の軸をここに置くのは、壁での喪失が
+## 進入速度に比例する(impact_scaled_wall_damping)ため:
+## 中心へ強く引かれるコマは壁へ届く距離も届いたときの速さも落ちる
+## ——「当たっても軽くする」wall_keep(Rage Reflection)とは別の機構になる。
+## 負のgripは中心から遠ざかる向きに反転してしまうので0でクランプする
+## (デバフ札を置かないカタログの原則と同じ向き)。
+static func gripped_slope_strength(base: float, slope_grip: float) -> float:
+	return base * maxf(slope_grip, 0.0)
+
+
 ## 進行方向と逆向きの一定減速度。
 ## 停止時はゼロが返る。GodotのVector2.normalized()はゼロベクトルに対して
 ## ゼロを返すので、プロトタイプのnumpyのように0除算でnanにはならない。

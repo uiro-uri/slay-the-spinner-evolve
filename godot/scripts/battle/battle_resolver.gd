@@ -239,8 +239,11 @@ static func _record_decisive_enemy(enemies: Array[State], result: BattleResult) 
 static func _integrate(s: State, center: Vector2, req: BattleRequest, dt: float) -> void:
 	s.position += s.velocity * dt
 	var accel := SpinnerPhysics.friction_accel(s.velocity, s.stats.friction)
+	# 傾斜の強さはコマの低重心(slope_grip)で割り増しする。既定1.0で従来と厳密一致。
 	accel += SpinnerPhysics.stage_slope_accel(
-		s.position, center, req.stage_strength, req.stage_shape
+		s.position, center,
+		SpinnerPhysics.gripped_slope_strength(req.stage_strength, s.stats.slope_grip),
+		req.stage_shape
 	)
 	s.velocity += accel * dt
 
