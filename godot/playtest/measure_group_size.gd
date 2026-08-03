@@ -75,7 +75,9 @@ func _row(level: int, size: int, count: int, policy: LaunchPolicy.Kind, build: S
 		rng.seed = i
 		var enemies: Array[EnemyData] = []
 		for _k in size:
-			enemies.append(pool[rng.randi_range(0, pool.size() - 1)])
+			# 乱戦の質量倍率(EnemyRoster.melee_mass_scale)を通す。素の表から組むと
+			# 実プレイに存在しない相手を測ることになり、数字だけが嘘になる。
+			enemies.append(EnemyRoster.melee_member(pool[rng.randi_range(0, pool.size() - 1)], size))
 		var record := BattleSim.play_one(i, enemies, policy, player)
 		if record["win"]:
 			wins += 1

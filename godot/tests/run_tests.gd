@@ -662,8 +662,9 @@ func _test_enemies() -> void:
 			boss_always_single = false
 	_check(boss_always_single, "グループ: ボス段(段%d)は常に単体" % MapTree.STEP_GOAL)
 
-	# グループ抽選が共有Resourceを壊さないこと。乱戦メンバーは弱めず据え置きだが、
-	# 何度取り出しても元のall()のrpsは変わらない(all()が毎回新しい実体を作る)。
+	# グループ抽選が共有Resourceを壊さないこと。乱戦メンバーは質量に倍率が掛かるが、
+	# 掛けるのは複製の側なので(EnemyRoster.melee_member)、何度取り出しても元のall()の
+	# 性能は変わらない。ここが動くと倍率が抽選のたびに積み重なる。
 	var lvl1_rps_before: float = EnemyRoster.of_level(1)[0].stats.rps
 	var scale_rng := RandomNumberGenerator.new()
 	scale_rng.seed = 9

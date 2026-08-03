@@ -178,6 +178,9 @@ static func find_by_name(display_name: String) -> EnemyData:
 ## 徒労感が強かった(コールドプレイで段5 ENEMY_3_1と3連戦・段8 同型ペアに4連敗、
 ## 喪失内訳までほぼ同一)。同レベルは硬さをほぼ揃え形で個性を出す設計なので、
 ## 個体の入れ替えは難易度を保ったまま接触トレードの手触りだけを変える。
+##
+## 入れ替えた個体にも乱戦の質量倍率(melee_member)を掛け直す。素の表から引くと
+## リトライしただけで乱戦が元の手強さに戻ってしまう(予告に出る硬さも嘘になる)。
 static func reroll_group(
 	group: Array[EnemyData], rng: RandomNumberGenerator = null
 ) -> Array[EnemyData]:
@@ -193,7 +196,9 @@ static func reroll_group(
 		if others.is_empty():
 			result.append(enemy)
 		else:
-			result.append(others[rng.randi_range(0, others.size() - 1)])
+			result.append(
+				melee_member(others[rng.randi_range(0, others.size() - 1)], group.size())
+			)
 	return result
 
 
@@ -219,10 +224,78 @@ static func vanguard_level_for_step(step: int) -> int:
 const VANGUARD_CHANCE := 0.2
 
 
+## 乱戦(複数体)メンバーの**質量**に掛ける倍率の指数。倍率 = 頭数^-MELEE_MASS_EXP
+## で、1体なら必ず1.00＝単体戦は従来と厳密に同じ数値になる(2体0.84・3体0.76)。
+##
+## 動機: 乱戦は「倒した頭数だけ報酬が選べる(レアの重みも頭数倍)」代わりに手強い、
+## という**選べるリスク**の設計なのに、期待値(報酬枚数×勝率)で見ると
+## どの段でも選ぶ意味が無かった(measure_group_size.gd・中盤ビルド):
+##   Lv2: 1.00 / 2.00 / 2.96 —— 勝率が 100 / 100 / 98.8% で**取らない理由が無い**
+##   Lv3: 0.91 / 0.48 / 0.27 —— 勝率が 91 / 24 / 9% で**取る理由が無い**
+## 「頭数ぶんきつい」が Lv2 では床、Lv3 では崖に張り付いており、選択の帯が無い。
+## コールドプレイ(2026-08-03)でも段1〜4の乱戦4部屋を無傷で抜けたあと、段5の
+## 2体部屋で6連敗して残機5を全部溶かしている(前サイクルも同じ段で5連敗)。
+##
+## 質量を選ぶ理由。頭数を増やすと「殴られる回数」が増えるので、**1回あたりの重み**を
+## 落として釣り合わせる:
+##  - 被削りは相手の質量に**比例**し(spin_drain)、与削りは相手の硬さ(質量×半径²)に
+##    **反比例**する。質量だけを下げると接触トレードの両側が同時に緩む。
+##  - **寿命(rps÷(半径×spin_decay))は質量を含まない**。かつて撤廃された
+##    「rpsの頭数割り」と違い、強敵ほど短命=待てば勝てるという受け身支配を戻さない。
+##  - 一撃死も戻らない。与削りには capped_spin_drain(相手ゲージの50%)の天井があり、
+##    質量を下げても1衝突では倒せない——頭数割りが下限を張って凌いでいた問題は起きない。
+##  - レベルは動かさない。ノードのLv表示・報酬のレア重み(実レベル基準)はそのまま。
+##
+## 指数の決め方は measure_melee_scale.gd の掃引(Lv3・中盤ビルド・各300戦):
+##   exp 0.00 → 91 / 24 / 9%   (現行。罠)
+##   exp 0.25 → 91 / 59 / 44%  ← 採用
+##   exp 0.35 → 91 / 72 / 63%
+##   exp 0.50 → 91 / 84 / 89%  (頭数が増えるほど楽になる=逆転)
+## 0.25 は「報酬2倍のために4割の敗北を買う」帯で、期待値は 0.91 / 1.18 / 1.31 と
+## リスク側をわずかに上に置く。真横に揃えると誰も乱戦を選ばず、頭数ぶんの報酬で
+## 回っているパーツ経済(_ensure_single_escapeの注釈参照)が痩せてしまう。
+## いじったら measure_melee_scale.gd と scripts/playtest.sh で測り直すこと。
+const MELEE_MASS_EXP := 0.25
+
+
+## 頭数countの乱戦メンバーの質量倍率。1体は必ず1.0(単体戦は従来と厳密に同じ)。
+static func melee_mass_scale(count: int) -> float:
+	if count <= 1:
+		return 1.0
+	return pow(float(count), -MELEE_MASS_EXP)
+
+
+## 敵1体を、頭数countの乱戦メンバーとして質量だけ落とした**複製**にする。
+## 1体なら複製せずそのまま返す。複製するのは、同じ個体が群に2度入りうるためで、
+## 素の実体を書き換えると倍率が二重に掛かる(all()は毎回新しい実体を作るが、
+## 1回の抽選の中では同じ実体が2度appendされうる)。
+## 名前とレベルは保つ——マップのLv表示・報酬の実レベル・CLIの名前復元が依存している。
+static func melee_member(data: EnemyData, count: int) -> EnemyData:
+	if data == null or count <= 1:
+		return data
+	var stats := data.stats.duplicate_stats()
+	stats.mass *= melee_mass_scale(count)
+	return EnemyData.make(data.level, data.display_name, stats)
+
+
+## レベルlevelの敵をcount体、乱戦の規則(melee_member)を通して引く。
+## 乱戦グループを組む場所をここ1つにするための入り口で、マップ生成の
+## 昇格補償(MapTree._promote_compensation)も同じ規則を踏む。
+static func group_of(level: int, count: int, rng: RandomNumberGenerator) -> Array[EnemyData]:
+	var candidates := of_level(level)
+	var group: Array[EnemyData] = []
+	if candidates.is_empty():
+		return group
+	for _i in maxi(count, 1):
+		group.append(melee_member(candidates[rng.randi_range(0, candidates.size() - 1)], count))
+	return group
+
+
 ## その段の出現グループ(1〜3体)を選ぶ。乱戦パターンの入り口。
 ##
 ## ほとんどは1体。たまに2〜3体の乱戦になる。複数体でも**単体と同じ、その段の
-## レベル**から選ぶ(各体は据え置きで、頭数でrpsを弱めない)。
+## レベル**から選ぶ(レベルは下げない。下げると表示レベルが変わり、報酬の実レベルも
+## 動く)。手強さの調整は質量倍率(MELEE_MASS_EXP)だけで行う。
 ## ボス(レベル5)は演出上つねに単体。
 ##
 ## 斥候段(is_vanguard_step)では、まれに(VANGUARD_CHANCE)次レベルの敵が**単体で**
@@ -233,11 +306,9 @@ const VANGUARD_CHANCE := 0.2
 ##
 ## かつては複数体を1段下のレベルから選び、さらに総回転量を一定に保つため各体の
 ## rpsを頭数で割っていた。だが割ると「衝突1回で終わる」コマになり一撃死が多発
-## (3体Lv1で12.7%)、下限を張って凌ぐ始末だった。頭数割りも1段下げも撤廃し、
-## 乱戦は頭数ぶん純粋に手強くなるが、その見返りに**倒した頭数だけ報酬を選べる**
-## (Main.gdが pending_enemies.size()回だけ報酬画面を回す)。rpsを触らないので
-## 抽選した敵をそのまま返す(pick_for_stepと同じく all()が毎回新しい実体を作るので
-## 共有Resourceを壊す心配もない)。
+## (3体Lv1で12.7%)、下限を張って凌ぐ始末だった。**その2つは今も採らない**
+## (rpsは寿命に効いて受け身支配を戻し、1段下げは表示レベルを変える)。
+## 代わりに質量だけを頭数で緩める——理由と実測は MELEE_MASS_EXP の注釈に書いた。
 static func pick_group_for_step(
 	step: int, rng: RandomNumberGenerator = null, allow_vanguard: bool = true
 ) -> Array[EnemyData]:
@@ -266,13 +337,9 @@ static func pick_group_for_step(
 	if count == 1:
 		return [pick_for_step(step, rng)]
 
-	# 複数体も単体と同じ、その段のレベルから選ぶ。各体は据え置き(頭数で弱めない)。
-	var candidates := of_level(level_for_step(step))
-	if candidates.is_empty():
+	var group := group_of(level_for_step(step), count, rng)
+	if group.is_empty():
 		return [pick_for_step(step, rng)]
-	var group: Array[EnemyData] = []
-	for _i in count:
-		group.append(candidates[rng.randi_range(0, candidates.size() - 1)])
 	return group
 
 

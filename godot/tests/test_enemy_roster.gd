@@ -3,9 +3,10 @@ extends RefCounted
 ## EnemyRoster の強さに関するテスト。数値そのものではなく、チューニングで値が
 ## 変わっても崩れてはいけない性質を固定する。
 ##
-##  - 乱戦メンバーが弱められないこと: 頭数でrpsを割らず、各体を1段下のレベルの
-##    まま戦わせる(手強さの見返りは頭数ぶんの報酬。pick_group_for_step参照)。
-##    ここが1未満に落ちたら、どこかで頭数割りが復活している。
+##  - 乱戦メンバーの緩め方が質量だけであること: 頭数ぶんの報酬に見合うよう質量に
+##    倍率(EnemyRoster.MELEE_MASS_EXP)を掛けるが、rps・半径・spin_decayは素のまま。
+##    ここが崩れると、かつて撤廃された「rpsの頭数割り」(寿命が縮んで受け身支配が
+##    戻る)や「1段下げ」(表示レベルと報酬の実レベルが動く)が復活している。
 ##  - 寿命の床と梯子: 寿命目安(rps÷(半径×spin_decay))がLv3以上でプレイヤー初期を
 ##    明確に上回り、レベル間で逆転しないこと。逆転すると「待てば自滅」が強敵ほど
 ##    有効になる(受け身支配)。
@@ -20,7 +21,8 @@ const EPS := 1e-4
 
 
 func run(check: Callable) -> void:
-	_test_swarm_members_unweakened(check)
+	_test_melee_mass_scale(check)
+	_test_melee_room_still_harder(check)
 	_test_toughness_ladder(check)
 	_test_lifetime_sane_decay(check)
 	_test_lifetime_floor(check)
@@ -33,39 +35,98 @@ func run(check: Callable) -> void:
 	_test_find_by_name(check)
 
 
-## 乱戦メンバーはどれも頭数で弱められていないこと。各体の耐久(=rps×質量×半径²)が、
-## 同名の元(フルrps)の耐久とちょうど一致する(比が1.0)。頭数割りを復活させると
-## rpsが下がって比が1未満になり、ここが落ちる。
-func _test_swarm_members_unweakened(check: Callable) -> void:
+## 乱戦メンバーの緩め方は**質量だけ**であること。実際に生成したグループの各体を
+## 同名の素の個体と突き合わせ、
+##  - 単体戦(1体)は素と厳密に一致する(質量倍率が漏れていない)
+##  - 乱戦(2〜3体)は質量がちょうど melee_mass_scale(頭数)倍
+##  - rps・半径・spin_decay は頭数によらず素のまま(=**寿命 rps÷(半径×spin_decay)が不変**)
+##  - レベルが下がらない(表示レベルと報酬の実レベルを動かさない)
+## を固定する。rps割りや1段下げを復活させるとここが落ちる。
+func _test_melee_mass_scale(check: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20240718
-	var worst_ratio := INF   # (メンバー耐久 / 元のフルrps耐久) の最小。1未満なら弱められている。
 	var seen_swarm := false
+	var seen_solo := false
+	var violations: Array[String] = []
 	for _iter in 2000:
 		for step in range(1, MapTree.STEP_GOAL + 1):
 			var group := EnemyRoster.pick_group_for_step(step, rng)
-			if group.size() <= 1:
-				continue
-			seen_swarm = true
+			if group.size() > 1:
+				seen_swarm = true
+			else:
+				seen_solo = true
+			var expected_scale := EnemyRoster.melee_mass_scale(group.size())
 			for member in group:
-				var solo := _solo_toughness(member)
-				if solo <= 0.0:
+				var base := _solo_of(member)
+				if base == null:
+					violations.append("素の個体が引けない: %s" % member.display_name)
 					continue
-				worst_ratio = minf(worst_ratio, RunSim.toughness(member.stats) / solo)
+				if not is_equal_approx(member.stats.mass, base.stats.mass * expected_scale):
+					violations.append("%d体の%s: 質量%.4f (素%.4f×%.4f を期待)" % [
+						group.size(), member.display_name,
+						member.stats.mass, base.stats.mass, expected_scale])
+				if not is_equal_approx(member.stats.rps, base.stats.rps):
+					violations.append("%d体の%s: rpsが動いた(頭数割りの復活)" % [
+						group.size(), member.display_name])
+				if not is_equal_approx(member.stats.radius, base.stats.radius):
+					violations.append("%d体の%s: 半径が動いた" % [
+						group.size(), member.display_name])
+				if not is_equal_approx(member.stats.spin_decay, base.stats.spin_decay):
+					violations.append("%d体の%s: spin_decayが動いた(寿命が変わる)" % [
+						group.size(), member.display_name])
+				if member.level < base.level:
+					violations.append("%d体の%s: レベルが下がった" % [
+						group.size(), member.display_name])
 	check.call(seen_swarm, "乱戦(複数体)グループが実際に生成された")
+	check.call(seen_solo, "単体グループも生成された(1体の一致を実際に見ている)")
 	check.call(
-		worst_ratio >= 1.0 - EPS,
-		"乱戦メンバーが頭数で弱められていない (最悪比 %.3f、1.0であるべき)" % worst_ratio
+		violations.is_empty(),
+		"乱戦の緩めは質量だけ・単体は素のまま%s" % (
+			"" if violations.is_empty() else " / 例: " + violations[0])
 	)
 
 
-## 同レベルの敵の中で、そのメンバーの元(フルrps)の耐久を引く。メンバーは
-## display_name で元をたどれる。見つからなければ0を返す(判定を飛ばすだけ)。
-func _solo_toughness(member: EnemyData) -> float:
+## 質量を緩めても、**部屋としては頭数ぶん手強いまま**であること。
+## 群の質量和は 頭数×頭数^-exp = 頭数^(1-exp) なので、exp<1 である限り頭数に対して
+## 真に増える。ここが単調でなくなると「頭数が多いほど楽な部屋」になり、
+## 頭数ぶんの報酬(MapNode.reward_count)がただの上振れになってしまう。
+## 併せて倍率そのものの性質(1体はちょうど1.0・頭数に対して単調減少・正)も見る。
+func _test_melee_room_still_harder(check: Callable) -> void:
+	var scale_one := EnemyRoster.melee_mass_scale(1)
+	check.call(
+		is_equal_approx(scale_one, 1.0),
+		"melee_mass_scale(1)=1.0 (単体戦は従来と厳密に同じ) 実際=%.4f" % scale_one
+	)
+	var monotone_down := true
+	var positive := true
+	var room_monotone_up := true
+	var prev_scale := scale_one
+	var prev_room := scale_one
+	for count in range(2, 6):
+		var scale := EnemyRoster.melee_mass_scale(count)
+		if scale >= prev_scale:
+			monotone_down = false
+		if scale <= 0.0:
+			positive = false
+		var room := count * scale
+		if room <= prev_room + EPS:
+			room_monotone_up = false
+		prev_scale = scale
+		prev_room = room
+	check.call(monotone_down and positive, "melee_mass_scale: 頭数が増えるほど小さく、常に正")
+	check.call(
+		room_monotone_up,
+		"乱戦の部屋は頭数ぶん手強いまま (群の質量和が頭数に対して真に増える=倍率の指数<1)"
+	)
+
+
+## 同レベルの敵の中から、そのメンバーの素の個体を display_name で引く。
+## 見つからなければ null。
+func _solo_of(member: EnemyData) -> EnemyData:
 	for base in EnemyRoster.of_level(member.level):
 		if base.display_name == member.display_name:
-			return RunSim.toughness(base.stats)
-	return 0.0
+			return base
+	return null
 
 
 ## 耐久がレベル間で単調増(あるレベルの最大 < 次のレベルの最小)であること。
@@ -271,6 +332,8 @@ func _test_vanguard_group_rules(check: Callable) -> void:
 ##  - 頭数と各スロットのレベルが保たれる(マップ表示のLv[体数]と報酬の実レベルを
 ##    嘘にしない。斥候ノードのLv+1もそのまま)
 ##  - 各スロットは必ず別個体になる(同レベルに他の個体がいる限り。現状全レベル5種)
+##  - **乱戦の質量倍率が掛かり直す**(素の表から引き直すと、リトライしただけで
+##    乱戦が元の手強さに戻り、予告に出る硬さも嘘になる)
 ##  - シード付きRNGで決定的(CLIがbseedから予告と同じ相手を復元する前提)
 func _test_reroll_group(check: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
@@ -278,6 +341,8 @@ func _test_reroll_group(check: Callable) -> void:
 	var count_ok := true
 	var level_ok := true
 	var changed_ok := true
+	var scale_ok := true
+	var seen_swarm_reroll := false
 	for _i in 300:
 		var step := rng.randi_range(1, 9)
 		var group := EnemyRoster.pick_group_for_step(step, rng)
@@ -285,15 +350,25 @@ func _test_reroll_group(check: Callable) -> void:
 		if rerolled.size() != group.size():
 			count_ok = false
 			continue
+		if group.size() > 1:
+			seen_swarm_reroll = true
+		var expected_scale := EnemyRoster.melee_mass_scale(group.size())
 		for i in group.size():
 			if rerolled[i].level != group[i].level:
 				level_ok = false
 			var alternatives := EnemyRoster.of_level(group[i].level).size() > 1
 			if alternatives and rerolled[i].display_name == group[i].display_name:
 				changed_ok = false
+			var base := _solo_of(rerolled[i])
+			if base == null or not is_equal_approx(
+				rerolled[i].stats.mass, base.stats.mass * expected_scale
+			):
+				scale_ok = false
 	check.call(count_ok, "reroll_group: 頭数が保たれる")
 	check.call(level_ok, "reroll_group: 各スロットのレベルが保たれる(表示と報酬を嘘にしない)")
 	check.call(changed_ok, "reroll_group: 各スロットは必ず別個体になる(同じ負けの繰り返し防止)")
+	check.call(seen_swarm_reroll, "reroll_group: 乱戦の入れ替えを実際に見ている")
+	check.call(scale_ok, "reroll_group: 入れ替えた個体にも乱戦の質量倍率が掛かり直す")
 
 	# 決定性: 同じシードなら同じ入れ替え(CLIのretryがbseedから引く前提)。
 	var base_rng := RandomNumberGenerator.new()

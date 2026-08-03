@@ -22,6 +22,7 @@ func run(check: Callable) -> void:
 	_test_vanguard_choice_guarantee(check)
 	_test_node_level_is_max(check)
 	_test_reward_count(check)
+	_test_melee_scale_on_every_node(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -492,6 +493,44 @@ func _test_reward_count(check: Callable) -> void:
 		mismatches.is_empty(),
 		"戦闘ノードの報酬枚数=倒す体数 (%s)" % ", ".join(mismatches))
 	check.call(found_group, "前提: 乱戦(2体以上)ノードが標本に含まれる")
+
+
+## **生成済みマップの全ノード**が乱戦の質量倍率(EnemyRoster.melee_mass_scale)を
+## 踏んでいること。抽選の入り口(pick_group_for_step)だけを見ていると、マップ生成が
+## 独自に組み直すノードが規則から外れても気付けない——実際、1体部屋保証の
+## 引き直しを埋め合わせる `_promote_compensation` は素の表から群を組んでおり、
+## そこだけ倍率の掛からない乱戦になっていた(この検査を書くまで通っていた)。
+## 昇格ノードは「保証が働いたマップ」にしか現れないので、多数のシードを回して拾う。
+func _test_melee_scale_on_every_node(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var mismatches: Array[String] = []
+	var swarms := 0
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if not node.has_encounter():
+				continue
+			var expected := EnemyRoster.melee_mass_scale(node.enemy_count())
+			if node.enemy_count() >= 2:
+				swarms += 1
+			for member in node.enemies:
+				var base := EnemyRoster.find_by_name(member.display_name)
+				if base == null:
+					mismatches.append("seed=%d %s: 素の個体が引けない(%s)" % [
+						trial, str(coord), member.display_name])
+					continue
+				if not is_equal_approx(member.stats.mass, base.stats.mass * expected):
+					mismatches.append("seed=%d %s(%d体) %s: 質量%.4f (素%.4f×%.4f を期待)" % [
+						trial, str(coord), node.enemy_count(), member.display_name,
+						member.stats.mass, base.stats.mass, expected])
+	check.call(swarms > 0, "前提: 乱戦ノードを実際に見ている (%d件)" % swarms)
+	check.call(
+		mismatches.is_empty(),
+		"マップの全ノードが乱戦の質量倍率を踏む (昇格補償も含む)%s" % (
+			"" if mismatches.is_empty() else " / 例: " + mismatches[0])
+	)
 
 
 ## そのノードにまだ合法に足せる矢印があれば名前を返す。なければ空文字。
