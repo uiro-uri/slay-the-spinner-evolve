@@ -7,7 +7,7 @@ extends RefCounted
 ## 「調整で数値を動かしても生き残る性質」だけ:
 ##   - 取り分が対戦画面の「硬さ 相手」の行と**同じ値**であること(定義の二重化を防ぐ)
 ##   - 互角でちょうど PARITY、格上で越える、格下で下回る(向き)
-##   - 乱戦の代表は最大であって平均ではない
+##   - 乱戦の硬さは頭数ぶんの和で、頭数が増えれば取り分も上がる
 ##   - 出すのは**進める先の戦闘ノードだけ**(遠いノードにもスタートにも出さない)
 ##   - バーはノードの下・ノードの直径ぶんの幅で、目盛りは必ず幅の中央
 
@@ -21,7 +21,7 @@ const MapScreenScript := preload("res://scenes/map/MapScreen.gd")
 func run(check: Callable) -> void:
 	_test_share_direction(check)
 	_test_share_matches_stat_readout(check)
-	_test_group_uses_toughest(check)
+	_test_group_counts_heads(check)
 	_test_share_degenerate(check)
 	_test_levels_are_ordered(check)
 	_test_reachable_only(check)
@@ -73,9 +73,11 @@ func _test_share_matches_stat_readout(check: Callable) -> void:
 		)
 
 
-## 乱戦の代表は**いちばん硬い個体**。平均だと弱い個体が数で薄めてしまい、
-## 「柔らかいのを2体足したら部屋が安全になった」という嘘になる。
-func _test_group_uses_toughest(check: Callable) -> void:
+## 乱戦の硬さは**頭数ぶんの和**。最大にしていた頃は、同じレベルなら1体でも3体でも
+## メーターが同じ長さになり、部屋を選ぶ材料として頭数が完全に抜け落ちていた
+## (コールドプレイ 2026-08-03: 段5の「Lv3 2体」と隣の「Lv3 1体」がどちらも0.6台で、
+## 実測の勝率は 24.8% と 91.2%)。
+func _test_group_counts_heads(check: Callable) -> void:
 	var player := SpinnerStats.default_player()
 	var strong := _enemy(3.0, 1.0)
 	var weak := _enemy(0.2, 0.3)
@@ -83,14 +85,44 @@ func _test_group_uses_toughest(check: Callable) -> void:
 	var alone: Array[EnemyData] = [strong]
 	var mixed: Array[EnemyData] = [weak, strong, weak]
 	check.call(
-		absf(ThreatMeter.share(player, alone) - ThreatMeter.share(player, mixed)) < EPS,
-		"弱い個体を足しても取り分は変わらない(代表は最大)"
+		ThreatMeter.share(player, mixed) > ThreatMeter.share(player, alone),
+		"弱い個体でも足せば取り分は上がる(頭数はそれ自体が脅威)"
 	)
 
 	var only_weak: Array[EnemyData] = [weak, weak, weak]
 	check.call(
 		ThreatMeter.share(player, only_weak) < ThreatMeter.share(player, mixed),
 		"硬い個体が混ざれば取り分は上がる"
+	)
+
+	# 同じ個体を並べたときの単調性。ここが「1体でも3体でも同じ長さ」を潰している。
+	var two: Array[EnemyData] = [strong, strong]
+	var three: Array[EnemyData] = [strong, strong, strong]
+	var s1 := ThreatMeter.share(player, alone)
+	var s2 := ThreatMeter.share(player, two)
+	var s3 := ThreatMeter.share(player, three)
+	check.call(s1 < s2 and s2 < s3, "同じ相手でも頭数で取り分が上がる: %.3f/%.3f/%.3f" % [s1, s2, s3])
+
+	# 実ロスターで、コールドプレイが読み違えた並びを直接押さえる。
+	# 「Lv3 2体」は「Lv3 1体」より上で、「Lv3 3体」は「Lv4 1体」を越える
+	# (実測勝率は Lv3×3体 8.2% / Lv4×1体 5.2% でほぼ同じきつさ)。
+	var lv3 := EnemyRoster.of_level(3)[0]
+	var lv4 := EnemyRoster.of_level(4)[0]
+	var lv3_one: Array[EnemyData] = [lv3]
+	var lv3_two: Array[EnemyData] = [lv3, lv3]
+	var lv3_three: Array[EnemyData] = [lv3, lv3, lv3]
+	var lv4_one: Array[EnemyData] = [lv4]
+	check.call(
+		ThreatMeter.share(player, lv3_two) > ThreatMeter.share(player, lv3_one) + 0.05,
+		"Lv3の2体は1体よりはっきり上: %.3f vs %.3f" % [
+			ThreatMeter.share(player, lv3_two), ThreatMeter.share(player, lv3_one)
+		]
+	)
+	check.call(
+		ThreatMeter.share(player, lv3_three) > ThreatMeter.share(player, lv4_one),
+		"Lv3の3体はLv4単体を越える: %.3f vs %.3f" % [
+			ThreatMeter.share(player, lv3_three), ThreatMeter.share(player, lv4_one)
+		]
 	)
 
 
@@ -121,8 +153,10 @@ func _test_levels_are_ordered(check: Callable) -> void:
 	var player := SpinnerStats.default_player()
 	var shares: Array[float] = []
 	for level in range(1, 6):
-		# そのレベルの全個体を1部屋として渡す＝代表はレベル内で最も硬い個体。
-		shares.append(ThreatMeter.share(player, EnemyRoster.of_level(level)))
+		# **1体だけ**渡す。部屋の硬さは頭数ぶんの和なので、レベル内の全個体を
+		# 1部屋にすると「レベルの差」ではなく「そのレベルの個体数」を測ってしまう。
+		var one: Array[EnemyData] = [EnemyRoster.of_level(level)[0]]
+		shares.append(ThreatMeter.share(player, one))
 
 	var ordered := true
 	for i in range(1, shares.size()):

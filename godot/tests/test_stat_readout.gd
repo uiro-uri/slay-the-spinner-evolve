@@ -260,39 +260,58 @@ func _test_enemy_rows(check: Callable) -> void:
 		"自分が硬くなると同じ相手の取り分は下がる"
 	)
 
-	# 乱戦の代表はいちばんきつい個体。硬さと寿命で別々に最大を取る——
-	# 硬い個体と長生きな個体が同一とは限らないので、片方だけの個体で代表させると
-	# もう片方の脅威を見落とす。
+	# 乱戦の集約は硬さと寿命で**別**。硬さは頭数ぶんの和(部屋を片付ける仕事も、
+	# 飛んでくる衝突も頭数ぶんある)、寿命は最大(自滅で終わるのは最後の1体)。
 	var tough_one := SpinnerStats.default_player()
 	tough_one.mass = player.mass * 4.0
 	var lasting_one := SpinnerStats.default_player()
 	lasting_one.rps = player.rps * 4.0
-	var mixed: Array[SpinnerStats] = [soft, tough_one, lasting_one]
-	var mixed_rows := StatReadout.enemy_rows(player, mixed)
 	var tough_only: Array[SpinnerStats] = [tough_one]
 	var lasting_only: Array[SpinnerStats] = [lasting_one]
+
+	# 硬さ: 和なので、同じ個体を並べるほど取り分が上がる。ここが「1体でも3体でも
+	# 同じ長さのメーター」を潰している検査。
+	var two_tough: Array[SpinnerStats] = [tough_one, tough_one]
+	var three_tough: Array[SpinnerStats] = [tough_one, tough_one, tough_one]
+	var f1: float = StatReadout.enemy_rows(player, tough_only)[0]["fraction"]
+	var f2: float = StatReadout.enemy_rows(player, two_tough)[0]["fraction"]
+	var f3: float = StatReadout.enemy_rows(player, three_tough)[0]["fraction"]
+	check.call(f1 < f2 and f2 < f3, "硬さの取り分は頭数で単調に上がる: %f/%f/%f" % [f1, f2, f3])
+	# 単体の部屋は和＝その個体の硬さ。乱戦以外で値が動いていないことの錨。
 	check.call(
-		absf(mixed_rows[0]["fraction"] - StatReadout.enemy_rows(player, tough_only)[0]["fraction"])
-			< EPS,
-		"乱戦の硬さはいちばん硬い個体を代表にする: %f" % mixed_rows[0]["fraction"]
+		absf(StatReadout.room_toughness(tough_only) - PartPreview.toughness(tough_one)) < EPS,
+		"単体の部屋の硬さはその個体の硬さそのもの"
 	)
+	check.call(
+		absf(StatReadout.room_toughness(two_tough)
+			- 2.0 * PartPreview.toughness(tough_one)) < EPS,
+		"2体の部屋の硬さは和"
+	)
+	# 弱い個体でも足せば脅威は上がる(頭数はそれ自体が脅威)。以前は最大だったので
+	# ここは「変わらない」だった。
+	var padded: Array[SpinnerStats] = [tough_one, soft, soft, soft]
+	check.call(
+		StatReadout.enemy_rows(player, padded)[0]["fraction"] > f1,
+		"弱い個体でも足せば取り分は上がる(頭数は薄めない)"
+	)
+	# 寿命だけは最大のまま。頭数が増えても待ち時間は伸びない(同時に回っている)。
+	var mixed: Array[SpinnerStats] = [soft, tough_one, lasting_one]
+	var mixed_rows := StatReadout.enemy_rows(player, mixed)
 	check.call(
 		absf(mixed_rows[1]["fraction"]
 			- StatReadout.enemy_rows(player, lasting_only)[1]["fraction"]) < EPS,
 		"乱戦の寿命はいちばん寿命が長い個体を代表にする: %f" % mixed_rows[1]["fraction"]
 	)
-	# 弱い個体を足しても代表は薄まらない(平均ではない)。
-	var padded: Array[SpinnerStats] = [tough_one, soft, soft, soft]
+	var two_lasting: Array[SpinnerStats] = [lasting_one, lasting_one]
 	check.call(
-		absf(StatReadout.enemy_rows(player, padded)[0]["fraction"]
-			- StatReadout.enemy_rows(player, tough_only)[0]["fraction"]) < EPS,
-		"弱い個体を足しても代表(最大)は薄まらない"
+		absf(StatReadout.enemy_rows(player, two_lasting)[1]["fraction"]
+			- StatReadout.enemy_rows(player, lasting_only)[1]["fraction"]) < EPS,
+		"寿命の取り分は頭数では増えない(和にしていない)"
 	)
 	# nullが混じっても生きている個体で決まる(落ちない)。
 	var with_null: Array[SpinnerStats] = [null, tough_one]
 	check.call(
-		absf(StatReadout.enemy_rows(player, with_null)[0]["fraction"]
-			- StatReadout.enemy_rows(player, tough_only)[0]["fraction"]) < EPS,
+		absf(StatReadout.enemy_rows(player, with_null)[0]["fraction"] - f1) < EPS,
 		"nullが混じっても生きている個体で決まる"
 	)
 

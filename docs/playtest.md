@@ -66,6 +66,16 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_field.gd -- --count=500
   ```
+- `godot/playtest/measure_group_size.gd` — **乱戦の頭数**を振って、レベル×頭数の
+  勝率と、マップの脅威メーターがその部屋に出す取り分を並べて出す計測器。
+  run_sim は頭数を毎戦抽選するので、統計はいつも1〜3体の平均になっていて
+  「頭数がどれだけ効くか」が出ていなかった。敵レベル・自機・シードを揃えて頭数だけ
+  振るので、行の差は頭数の差だけになる。`--build=mid` は素の自機だとLv3以降が
+  全滅(0%)して頭数の差が床に潰れるため、中盤で実際に組めるビルドで測る。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_group_size.gd -- --count=400 --build=mid
+  ```
 - `godot/tests/test_playtest.gd` — 検査器が壊れた結果を本当に拾うかの常設テスト。
 
 ## アラート
