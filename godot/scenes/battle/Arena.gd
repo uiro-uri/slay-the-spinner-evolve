@@ -21,20 +21,26 @@ var _bounds: Rect2 = BOUNDS
 var _wall_shape: ArenaWall.WallShape = ArenaWall.WallShape.RECT
 var _obstacles: Array[Vector3] = []
 
+## 床に描く等高線の半径。土俵ごとに一度だけ積んで持っておく(_drawは毎再描画で
+## 走るが、傾斜はsetupの間ずっと動かない)。
+var _contour_radii: PackedFloat32Array = PackedFloat32Array()
+
 var walls: Array[ArenaWall] = ArenaWall.from_rect(BOUNDS)
 
 
-## 土俵をフィールドに合わせて設定する。nullなら既定(矩形10x10)のまま。
+## 土俵をフィールドに合わせて設定する。
+##
+## nullは FieldData の既定値(矩形10x10・すり鉢4.9・柱なし=Arena.BOUNDSと同じ土俵)で
+## 代用する。既定値をここに書き写さないのは、傾斜まで描くようになった以上
+## 「絵の既定」と「解決の既定」がずれると床が嘘をつくため。Battle は @export の
+## 傾斜を載せた FieldData を渡してくるので、ここへ来る null はテスト等だけ。
 func setup(field: FieldData) -> void:
-	if field != null:
-		_bounds = field.arena_bounds
-		_wall_shape = field.wall_shape
-		_obstacles = field.obstacles
-	else:
-		_bounds = BOUNDS
-		_wall_shape = ArenaWall.WallShape.RECT
-		_obstacles = []
+	var resolved := field if field != null else FieldData.new()
+	_bounds = resolved.arena_bounds
+	_wall_shape = resolved.wall_shape
+	_obstacles = resolved.obstacles
 	walls = ArenaWall.build(_wall_shape, _bounds)
+	_contour_radii = SlopeContour.radii(resolved)
 	queue_redraw()
 
 
@@ -49,11 +55,11 @@ func _draw() -> void:
 	else:
 		draw_colored_polygon(ArenaWall.outline_points(_wall_shape, _bounds), FLOOR_COLOR)
 
-	# 中央が低いことを示す同心円。すり鉢の底が見た目で分かるように。
-	# 内接円半径に合わせるので、土俵の大きさ・形が変わっても縁からはみ出ない。
-	var max_r := ArenaWall.inradius_for(_wall_shape, _bounds)
-	for i in range(1, 5):
-		var r := max_r * (float(i) / 4.0)
+	# 中央が低いことを示す等高線。従来はどの土俵でも半径を4等分した同心円で、
+	# 傾斜の急さも形も描いていなかった(すり鉢8.0と円錐3.0が同じ絵)。
+	# SlopeContourは等しい高さで割るので、急な区間ほど輪が詰まる=線の混み方が
+	# そのまま傾斜になり、本数はマップのノードのケバと一致する。
+	for r in _contour_radii:
 		draw_arc(center(), r, 0, TAU, 64, CENTER_MARK_COLOR, 0.03)
 
 	# 壁の輪郭。矩形は枠線、非矩形は閉じた多角形。
