@@ -320,11 +320,11 @@ func _promote_compensation(
 		return
 	candidates.sort()  # 決定性: Dictionaryの列挙順に依存しない
 	var chosen: Vector2i = candidates[rng.randi_range(0, candidates.size() - 1)]
-	var members := EnemyRoster.of_level(EnemyRoster.level_for_step(child_step))
-	var group: Array[EnemyData] = []
-	for _i in count:
-		group.append(members[rng.randi_range(0, members.size() - 1)])
-	nodes[chosen].enemies = group
+	# 乱戦の組み方は EnemyRoster.group_of に一本化してある(頭数ぶんの質量倍率も
+	# そこで掛かる)。ここで素の表から組むと、昇格した部屋だけ規則から外れる。
+	nodes[chosen].enemies = EnemyRoster.group_of(
+		EnemyRoster.level_for_step(child_step), count, rng
+	)
 
 
 ## 全ノードの進める先に「斥候でないノード」を最低1つ保証する。

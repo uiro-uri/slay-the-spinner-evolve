@@ -76,6 +76,16 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_group_size.gd -- --count=400 --build=mid
   ```
+- `godot/playtest/measure_melee_scale.gd` — 乱戦メンバーの**質量倍率**
+  (`EnemyRoster.MELEE_MASS_EXP`)を掃引して、頭数別の勝率と**期待値(報酬枚数×勝率)**を
+  並べて出す計測器。乱戦は「頭数ぶんの報酬」と引き換えの選べるリスクなので、
+  勝率だけ見ても釣り合っているか分からない。期待値が頭数を跨いでほぼ横並びなら
+  「選べる」、片側へ倒れていれば上位互換か罠になっている。倍率を変えたらここと
+  `scripts/playtest.sh` の両方で測り直すこと。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_melee_scale.gd -- --count=300
+  ```
 - `godot/tests/test_playtest.gd` — 検査器が壊れた結果を本当に拾うかの常設テスト。
 
 ## アラート

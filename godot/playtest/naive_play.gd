@@ -766,15 +766,19 @@ static func node_group(state: Dictionary, node: MapTree.MapNode) -> Array[EnemyD
 
 ## 名前列からEnemyDataの列を復元する。名前でない/知らない名前が混ざっていたら
 ## (手で書き換えた・ロスターから消えた等)、部分的に混ぜず丸ごとfallbackへ戻す。
+## 復元にも乱戦の質量倍率(melee_member)を掛ける。名前が指すのは素の表の個体なので、
+## 掛け直さないとリトライした乱戦だけ元の手強さに戻る(実プレイのreroll_groupと
+## 挙動がずれ、CLIで測った数字が嘘になる)。
 static func group_from_names(names, fallback: Array[EnemyData]) -> Array[EnemyData]:
 	if not (names is Array) or (names as Array).is_empty():
 		return fallback
+	var count: int = (names as Array).size()
 	var result: Array[EnemyData] = []
 	for name_value in names:
 		var enemy := EnemyRoster.find_by_name(str(name_value))
 		if enemy == null:
 			return fallback
-		result.append(enemy)
+		result.append(EnemyRoster.melee_member(enemy, count))
 	return result
 
 
