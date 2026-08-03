@@ -79,10 +79,20 @@ static func rows(stats: SpinnerStats, ghost_seconds: float = 0.0) -> Array[Dicti
 ## 上端を決め打たずに済む取り分 敵/(自分+敵) にする。ちょうど互角で PARITY、
 ## 目盛りを越えていれば「相手の方が硬い/長生き」と読める。
 ##
-## 乱戦は**いちばん硬い個体・いちばん寿命が長い個体**を代表にする(部屋の難度は
-## 一番きつい相手で決まる。平均だと弱い個体が数で薄めてしまう)。硬さと寿命は
-## 別々に最大を取る——硬い個体と長生きな個体が同一とは限らず、部屋の脅威は
-## 「いちばん硬い奴」と「いちばん粘る奴」の両方だから。
+## 乱戦の集約は硬さと寿命で**別**にする。硬さは**頭数ぶんの和**、寿命は
+## **いちばん粘る個体**。理由は問いが違うから: 硬さの行が答えるのは「この部屋を
+## 片付けるのにどれだけの仕事が要るか/どれだけ殴られるか」で、どちらも敵ごとの
+## 和になる(削り切るべき回転も、飛んでくる衝突も頭数ぶんある)。寿命の行が
+## 答えるのは「待ったら何秒で自滅するか」で、これは最後の1体が力尽きるまで＝最大。
+## 硬い個体と長生きな個体が同一とは限らないので、集約は別々に取る。
+##
+## 硬さを最大にしていた頃は、**同じレベルなら1体でも3体でもメーターが同じ値**を
+## 出していた。実測(playtest/measure_group_size.gd, 中盤ビルド・各400戦)では
+## Lv3の勝率が **1体91.2% → 2体24.8% → 3体8.2%** と動くのに、取り分は
+## **0.63 / 0.64 / 0.64** で見分けが付かなかった。和にすると 0.63 / 0.78 / 0.84 に
+## なり、12セル(Lv1〜4 × 1〜3体)を取り分の昇順に並べたとき勝率がほぼ単調に下がる
+## (逆転はLv4×1体 5.2% と Lv3×3体 8.2% の1組・3pt差だけ)。単体の部屋では和＝最大
+## なので値は1つも変わらない——変わるのは乱戦だけ。
 ##
 ## これは**予告(EnemyTelegraph)の揺らぎを損なわない**。揺らして隠しているのは
 ## 出現位置と向き=この一戦の計画で、硬さ・寿命は個体の静的な性能。どこへ飛ぶかは
@@ -97,7 +107,7 @@ static func rows(stats: SpinnerStats, ghost_seconds: float = 0.0) -> Array[Dicti
 static func enemy_rows(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> Array[Dictionary]:
 	if stats == null or enemies.is_empty():
 		return []
-	var longest := _peak(enemies, false)
+	var longest := _longest_lifetime(enemies)
 	if longest < 0.0:
 		return []
 	return [
@@ -109,7 +119,7 @@ static func enemy_rows(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> Arr
 	]
 
 
-## 相手のいちばん硬い個体と自分との、硬さの取り分。enemy_rows の1行目そのもの。
+## 部屋ぜんぶの硬さ(頭数ぶんの和)と自分との、硬さの取り分。enemy_rows の1行目そのもの。
 ##
 ## 公開してあるのは、**マップのノードに出す脅威メーター(ThreatMeter)がこれを呼ぶ**
 ## から。部屋の硬さの定義が2箇所にあると、マップと対戦画面で違う脅威を出すことになる
@@ -121,25 +131,39 @@ static func enemy_rows(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> Arr
 static func toughness_share(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> float:
 	if stats == null:
 		return PARITY
-	var toughest := _peak(enemies, true)
-	if toughest < 0.0:
+	var room := room_toughness(enemies)
+	if room < 0.0:
 		return PARITY
-	return _share(toughest, PartPreview.toughness(stats))
+	return _share(room, PartPreview.toughness(stats))
 
 
-## 群のうち最大の硬さ(use_toughness=true)または最大の寿命。有効な相手が1体も
-## 居なければ -1.0 を返す(硬さ0の相手と「相手が居ない」を取り違えないため)。
+## 部屋の硬さ＝有効な相手の硬さの**和**。有効な相手が1体も居なければ -1.0 を返す
+## (硬さ0の相手と「相手が居ない」を取り違えないため)。
 ##
-## 乱戦の代表を最大にするのは、部屋の難度がいちばんきつい相手で決まるから
-## (平均だと弱い個体が数で薄めてしまう)。硬さと寿命で別々に最大を取るのは、
-## 硬い個体と長生きな個体が同一とは限らないから。
-static func _peak(enemies: Array[SpinnerStats], use_toughness: bool) -> float:
+## 和にする理由は enemy_rows の説明のとおり。単体なら和は個体の硬さそのものなので、
+## 乱戦以外では従来の「最大」と1つも値が変わらない。
+static func room_toughness(enemies: Array[SpinnerStats]) -> float:
+	var total := -1.0
+	for enemy in enemies:
+		if enemy == null:
+			continue
+		if total < 0.0:
+			total = 0.0
+		total += PartPreview.toughness(enemy)
+	return total
+
+
+## 群のうち最大の寿命。有効な相手が1体も居なければ -1.0 を返す(寿命0の相手と
+## 「相手が居ない」を取り違えないため)。
+##
+## 寿命だけ最大なのは、部屋が自滅で終わるのは**最後の1体**が力尽きたときだから。
+## 頭数が増えても「待ち時間」は伸びない(同時に回っている)ので、和にすると嘘になる。
+static func _longest_lifetime(enemies: Array[SpinnerStats]) -> float:
 	var peak := -1.0
 	for enemy in enemies:
 		if enemy == null:
 			continue
-		var value := PartPreview.toughness(enemy) if use_toughness else PartPreview.lifetime(enemy)
-		peak = maxf(peak, value)
+		peak = maxf(peak, PartPreview.lifetime(enemy))
 	return peak
 
 
