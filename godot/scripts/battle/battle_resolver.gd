@@ -12,6 +12,13 @@ extends RefCounted
 ## ここへ移したことで、ヘッドレスで即座に何百戦でも回せる。
 
 
+## 「面に接したまま」と見なす余白(アリーナ座標)。めり込みを解いた直後のコマは
+## 面のちょうど上(めり込み0)に居るので、厳密な不等号だと「離れた」と読めてしまう。
+## 面から本当に離れるコマは1ステップで速度×dt(実測で0.05〜0.2)動くため、この
+## 桁の余白なら「乗っているだけ」と「離れた」を取り違えない。
+const SURFACE_CONTACT_SKIN := 1e-3
+
+
 ## 計算中の1体。Discノードの代わり。
 class State:
 	extends RefCounted
@@ -53,6 +60,16 @@ class State:
 	## resolve()のプレイヤー対敵ループが衝突を解いた瞬間に記録する
 	## (ゴースト窓で解かなかった衝突は接触していないので記録されない)。
 	var hit_by_player: bool = false
+
+	## 前のステップの終わりに、壁か柱のどれかへめり込んだままだったか。
+	## 「離れずに続いている1回の接触」を毎ステップの衝突として課金しないための掛け金。
+	##
+	## 反発0.75は法線方向の勢いをほとんど残すので、コマの直径より狭い隙間
+	## (柱と壁の隅)に入ると、進む距離がゼロのまま毎フレーム衝突が成立する
+	## ＝衝突の回数がフレームレートで決まる。実測では敵1体が柱(7,7)と右壁の間で
+	## xを8.75↔8.85と往復しながら0.27秒で27.2→15.7rpsを失った。1回ぶんの代償が
+	## おかしいのではなく、1回の接触を30回に数えていたのが事実の側の誤り。
+	var touching_surface: bool = false
 
 	func _init(launch: BattleRequest.Launch) -> void:
 		stats = launch.stats
@@ -376,15 +393,49 @@ static func _resolve_body_field(
 	s: State, walls: Array[ArenaWall], req: BattleRequest, dt: float, t: float, result: BattleResult
 ) -> void:
 	if s.alive:
-		_resolve_walls(s, walls, req, t, result)
-		_resolve_obstacles(s, req, t, result)
+		# 面から一度も離れないまま続く接触は、ステップ数によらず「1回の接触」。
+		# 課金の可否はステップの頭で固定し、このステップ中に増えた接触では変えない
+		# (壁と柱を同じステップで踏んでも二重取りにしない)。
+		var billable := not s.touching_surface
+		var hit_wall := _resolve_walls(s, walls, req, t, result, billable)
+		var hit_obstacle := _resolve_obstacles(s, req, t, result, billable)
+		# 接触を掛けるのは実際に衝突を解いたときだけ。面のそばに居るだけでは掛けない
+		# ——押し出しでコマは面のちょうど上に乗るので、「近い」を接触と読むと
+		# 到達した次のステップの本物の衝突まで「続き」に見えて課金が消える。
+		# 外すのは面から本当に離れたときだけで、乗ったまま滑っている間は保つ。
+		if hit_wall or hit_obstacle:
+			s.touching_surface = true
+		elif not _touching_any_surface(s, walls, req):
+			s.touching_surface = false
 	_apply_natural_decay(s, req, dt)
 	_mark_if_dead(s, "decay", req, t)
 
 
+## 壁・柱のどれか1つにでも接しているか。向きは問わない。
+## 「離れずに続いている接触」の判定に使う(接触の継続はどの面かを問わない——
+## 柱と壁の隅は、2つの面を交互に踏み続ける形で現れるため)。
+static func _touching_any_surface(
+	s: State, walls: Array[ArenaWall], req: BattleRequest
+) -> bool:
+	for wall in walls:
+		if SpinnerPhysics.wall_gap(
+			wall.point, wall.normal, s.position, s.stats.radius
+		) > -SURFACE_CONTACT_SKIN:
+			return true
+	for o in req.obstacles:
+		if SpinnerPhysics.obstacle_gap(
+			Vector2(o.x, o.y), o.z, s.position, s.stats.radius
+		) > -SURFACE_CONTACT_SKIN:
+			return true
+	return false
+
+
+## 衝突を1つでも解いたらtrue(接触の掛け金を掛ける側が使う)。
 static func _resolve_walls(
-	s: State, walls: Array[ArenaWall], req: BattleRequest, t: float, result: BattleResult
-) -> void:
+	s: State, walls: Array[ArenaWall], req: BattleRequest, t: float, result: BattleResult,
+	billable: bool
+) -> bool:
+	var hit_any := false
 	for wall in walls:
 		if not SpinnerPhysics.wall_hit(
 			wall.point, wall.normal, s.position, s.velocity, s.stats.radius
@@ -393,25 +444,40 @@ static func _resolve_walls(
 		# 進入速度(法線方向)は反射前に測る。wall_hitが通った時点で必ず正。
 		var normal_speed := -wall.normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, wall.normal, s.stats.restitution)
+		# めり込みを解いて、面のちょうど外側へ戻す。反射は速度しか変えないので、
+		# これが無いとコマは面へ食い込んだまま次のステップへ進む(wall_penetration参照)。
+		# 課金より先に戻すのは、下の接触点をこの位置から出すため——衝撃波を
+		# 壁面のちょうど上に置ける(BattleMetricsもこの距離で衝撃波の持ち主を引く)。
+		s.position += wall.normal * SpinnerPhysics.wall_penetration(
+			wall.point, wall.normal, s.position, s.stats.radius
+		)
+		hit_any = true
+		# 反射とめり込み解消は続きの接触でも要る(でないと面をすり抜ける)。
+		# 課金と衝撃波だけを、接触の始まりの1回に絞る。
+		if not billable:
+			continue
 		var before := s.rps
 		s.rps = _wall_damaged_rps(s, normal_speed, req)
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
 		# 接触点。法線は内向きなので、中心から壁側へ半径分ずらすとコマの縁＝
-		# 壁面上の当たった点になる。位置は反射で変わらない(変わるのは速度だけ)。
+		# 壁面上の当たった点になる。
 		# 強度=この1回で実際に失ったrps。壁の喪失は進入速度比例なので、擦り接触の
 		# 波は小さく・激突の波は大きく再生される。
 		result.wall_impacts.append(
 			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius, before - s.rps)
 		)
 		_mark_if_dead(s, "wall", req, t)
+	return hit_any
 
 
 ## 障害物(固定円)との衝突。壁と同型で、法線が中心からの放射方向になるだけ。
 ## 衝撃波は壁と同じwall_impactsチャンネルに載せる（見た目も壁と同じ控えめな波）。
+## 壁と同じく、衝突を1つでも解いたらtrue。
 static func _resolve_obstacles(
-	s: State, req: BattleRequest, t: float, result: BattleResult
-) -> void:
+	s: State, req: BattleRequest, t: float, result: BattleResult, billable: bool
+) -> bool:
+	var hit_any := false
 	for o in req.obstacles:
 		var obstacle_center := Vector2(o.x, o.y)
 		var obstacle_radius := o.z
@@ -423,6 +489,14 @@ static func _resolve_obstacles(
 		# 壁と同じく、反射前の法線方向進入速度で損失をスケールする。
 		var normal_speed := -normal.dot(s.velocity)
 		s.velocity = SpinnerPhysics.wall_bounce(s.velocity, normal, s.stats.restitution)
+		# 壁と同じくめり込みを解いてから課金する。柱と壁の隅ではこの2つが同時に効く。
+		# 押し出しは法線方向なので中心からの向き(normal)は変わらない。
+		s.position += normal * SpinnerPhysics.obstacle_penetration(
+			obstacle_center, obstacle_radius, s.position, s.stats.radius
+		)
+		hit_any = true
+		if not billable:
+			continue
 		var before := s.rps
 		s.rps = _wall_damaged_rps(s, normal_speed, req)
 		s.lost_wall += before - s.rps
@@ -432,6 +506,7 @@ static func _resolve_obstacles(
 			BattleResult.Impact.new(t, s.position - normal * s.stats.radius, before - s.rps)
 		)
 		_mark_if_dead(s, "wall", req, t)
+	return hit_any
 
 
 ## 壁・障害物に1回ぶつかった後のrps。壁と柱で同じ規則を使う。

@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark"
 ]
 
 
@@ -148,6 +148,9 @@ func _init() -> void:
 
 	print("== wallabsolute ==")
 	_test_wall_absolute()
+
+	print("== wallwedge ==")
+	_test_wall_wedge()
 
 	print("== bitefloor ==")
 	_test_bite_floor()
@@ -529,6 +532,12 @@ func _test_wall_absolute() -> void:
 	var suite = load("res://tests/test_wall_absolute.gd").new()
 	suite.run(_check)
 	_done("wallabsolute")
+
+
+func _test_wall_wedge() -> void:
+	var suite = load("res://tests/test_wall_wedge.gd").new()
+	suite.run(_check)
+	_done("wallwedge")
 
 
 func _test_bite_floor() -> void:
