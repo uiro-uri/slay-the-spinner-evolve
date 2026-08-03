@@ -66,6 +66,16 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_field.gd -- --count=500
   ```
+- `godot/playtest/measure_boss_arena.gd` — **決戦の土俵の広さ**を振って、段別の
+  「触れずにいられる隙間」(内接半径 − 相手の半径 − 自機の半径)と、実際に解いた
+  ボス戦の勝率・被弾/秒を並べる計測器。段別勝率だけを見ていると「決戦は難しい」で
+  止まるが、決戦だけ**最大の敵を最小の土俵で戦っていた**のはこの幾何の列で見える。
+  自機はコールドプレイが決戦まで持ち込んだ実ビルドで固定する(素の自機だと決戦は
+  ほぼ0%で潰れる)。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_boss_arena.gd -- --count=300
+  ```
 - `godot/playtest/measure_group_size.gd` — **乱戦の頭数**を振って、レベル×頭数の
   勝率と、マップの脅威メーターがその部屋に出す取り分を並べて出す計測器。
   run_sim は頭数を毎戦抽選するので、統計はいつも1〜3体の平均になっていて

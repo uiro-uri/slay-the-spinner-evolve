@@ -30,6 +30,19 @@ static func fit_scale(content: Vector2, target: Vector2) -> float:
 	return minf(target.x / content.x, target.y / content.y)
 
 
+## 土俵1ユニットあたりの表示px。土俵の広さ(ユニット)が土俵ごとに違っても、
+## 画面上の正方形は arena_px のまま動かないようにするための倍率。
+##
+## かつては「1ユニット=50px」の決め打ちで、10x10以外の土俵を渡すと画面から
+## はみ出した(FieldData.arena_boundsは土俵ごとの値なのに、描画側だけが10x10を
+## 前提にしていた)。広い土俵ほどコマが小さく映る＝広さがそのまま絵に出る。
+static func arena_unit_scale(bounds_size: Vector2, arena_px: float) -> float:
+	var span: float = maxf(bounds_size.x, bounds_size.y)
+	if span <= 0.0:
+		return 1.0
+	return arena_px / span
+
+
 ## スケール後サイズ scaled を visible 内に置くときの左上座標。
 ## h_bias/v_bias は 0.5 で中央、0.7 で右/下寄り。負の余白は 0 に丸めて画面外へ出さない。
 static func placement(scaled: Vector2, visible: Vector2, h_bias: float, v_bias: float) -> Vector2:
