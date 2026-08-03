@@ -120,6 +120,45 @@ static func wall_hit(
 	return wall_normal.dot(vel) < 0.0
 
 
+## 壁へめり込んでいる深さ。めり込んでいなければ0。
+## 法線方向にこの量だけ戻すと、コマの縁がちょうど壁面に接する。
+##
+## 反射は速度しか変えないので、めり込んだ位置はそのまま次のステップへ持ち越される。
+## それでも普通の跳ね返りは離れていくので問題にならないが、コマより狭い隙間
+## (柱と壁の隅など)では「どちらの面からも出られない位置」に居座ることになり、
+## すり鉢に押し戻されるたび衝突が再点火して毎フレームrpsを取られる。実測では
+## 敵1体が柱(7,7)と右壁の間でxを8.75↔8.85と往復しながら0.27秒で27.2→15.7rpsを
+## 失った(コールドプレイ2026-08-03: 段7で接触0回・壁54回の敗北)。
+## 深さを解いておけば、隙間より大きいコマは両面から押されて隙間の外へ絞り出される。
+static func wall_penetration(
+	wall_point: Vector2, wall_normal: Vector2, pos: Vector2, radius: float
+) -> float:
+	return maxf(wall_gap(wall_point, wall_normal, pos, radius), 0.0)
+
+
+## 壁との符号付きの深さ。正でめり込み、0でちょうど接触、負なら壁までその距離ある。
+## wall_penetrationは押し出し量なので0で切るが、「接したままか」を見る側は
+## 離れているのか乗っているのかを区別する必要があるので符号を落とさない版を使う。
+static func wall_gap(
+	wall_point: Vector2, wall_normal: Vector2, pos: Vector2, radius: float
+) -> float:
+	return radius - wall_normal.dot(pos - wall_point)
+
+
+## 柱へめり込んでいる深さ。wall_penetrationの柱版で、法線は柱の中心からの放射方向。
+static func obstacle_penetration(
+	obstacle_center: Vector2, obstacle_radius: float, pos: Vector2, radius: float
+) -> float:
+	return maxf(obstacle_gap(obstacle_center, obstacle_radius, pos, radius), 0.0)
+
+
+## 柱との符号付きの深さ。wall_gapの柱版。
+static func obstacle_gap(
+	obstacle_center: Vector2, obstacle_radius: float, pos: Vector2, radius: float
+) -> float:
+	return (obstacle_radius + radius) - pos.distance_to(obstacle_center)
+
+
 ## 壁で反射した後の速度。restitutionで勢いが変わる。
 static func wall_bounce(vel: Vector2, wall_normal: Vector2, restitution: float) -> Vector2:
 	return vel.bounce(wall_normal) * restitution
