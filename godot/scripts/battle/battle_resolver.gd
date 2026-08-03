@@ -40,6 +40,13 @@ class State:
 	var lost_decay: float = 0.0
 	var wall_hits: int = 0
 
+	## lost_drain のうち「プレイヤーとの衝突で削られた分」(敵にだけ意味を持つ。
+	## プレイヤー自身は常に0)。乱戦では敵同士の同士討ちも lost_drain に入るので、
+	## 合計をそのまま「自分が与えた削り」と読むと自分の手柄を水増しする。
+	## リザルトの「相手が失った回転」行はこちらを使う(hit_by_player と同じ考え方で、
+	## プレイヤーが絡んだ衝突だけを事実として分けて数える)。
+	var lost_drain_by_player: float = 0.0
+
 	## プレイヤーと一度でも衝突したか(敵にだけ意味を持つ。プレイヤー自身は常に偽)。
 	## 撃破ボーナスの寄与判定に使う事実: 死因がwall/drainでも、プレイヤーに一度も
 	## 触れないまま壁や同士討ちで勝手に果てた敵は「接触で仕留めた」とは呼ばない。
@@ -102,7 +109,7 @@ static func resolve(request: BattleRequest) -> BattleResult:
 				player.alive and enemies[i].alive
 				and not ghost_blocks(t, ghost_start, request.ghost_duration)
 			):
-				if _resolve_disc_collision(player, enemies[i], request, t, result):
+				if _resolve_disc_collision(player, enemies[i], request, t, result, 1.0, true):
 					enemies[i].hit_by_player = true
 					if request.ghost_duration > 0.0 and ghost_start == INF:
 						ghost_start = t
@@ -235,9 +242,14 @@ static func ghost_blocks(t: float, ghost_start: float, duration: float) -> bool:
 ## drain_scale は両者が与え合う削りの倍率。敵同士の衝突だけ
 ## req.enemy_mutual_drain_scale が渡り(同士討ちの抑制)、プレイヤーが絡む
 ## 衝突は常に1.0=従来どおり。spin_kickは削り比例なので弾き合いも一緒に弱まる。
+##
+## a_is_player は「aがプレイヤーである」ことの明示。真のとき、この衝突でbが失った
+## 分を b.lost_drain_by_player へ積む(リザルトの「自分の削り」の出どころ)。
+## drain_scale が1.0かどうかで代用しないのは、倍率は同士討ちの調整値であって
+## 「誰が殴ったか」の事実ではないため(倍率を1.0に戻した瞬間に嘘になる)。
 static func _resolve_disc_collision(
 	a: State, b: State, req: BattleRequest, t: float, result: BattleResult,
-	drain_scale: float = 1.0
+	drain_scale: float = 1.0, a_is_player: bool = false
 ) -> bool:
 	if not SpinnerPhysics.is_colliding(
 		a.position, a.stats.radius, a.velocity,
@@ -343,6 +355,9 @@ static func _resolve_disc_collision(
 	b.rps = maxf(b.rps - b_drain, 0.0)
 	a.lost_drain += a_before - a.rps
 	b.lost_drain += b_before - b.rps
+	# プレイヤーが殴った分だけを別勘定に積む(乱戦の同士討ちを自分の手柄にしない)。
+	if a_is_player:
+		b.lost_drain_by_player += b_before - b.rps
 	# 衝撃波の強度=この衝突で両者が実際に失ったrpsの合計。再生側はこれで
 	# スパークの大きさを変え、噛み合った激突と微衝突を見分けられるようにする。
 	result.impacts.append(
@@ -477,6 +492,7 @@ static func _loss_dict(s: State) -> Dictionary:
 		"wall": s.lost_wall,
 		"decay": s.lost_decay,
 		"wall_hits": s.wall_hits,
+		"drain_by_player": s.lost_drain_by_player,
 	}
 
 

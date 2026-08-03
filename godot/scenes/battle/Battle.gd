@@ -33,7 +33,9 @@ const LAND_ARENA_POS := Vector2(390.0, 110.0)
 const LAND_ARENA_SCALE := Vector2(50.0, 50.0)
 const LAND_MESSAGE_RECT := Rect2(390.0, 300.0, 500.0, 60.0)
 const LAND_LOSS_RECT := Rect2(390.0, 360.0, 500.0, 40.0)
-const LAND_GROWTH_RECT := Rect2(390.0, 400.0, 500.0, 40.0)
+## 相手側の内訳は自分の内訳のすぐ下(同じ高さの行)。成長行はその下へ1行ぶん送る。
+const LAND_DEALT_RECT := Rect2(390.0, 400.0, 500.0, 40.0)
+const LAND_GROWTH_RECT := Rect2(390.0, 440.0, 500.0, 40.0)
 const LAND_BARS_RECT := Rect2(390.0, 622.0, 500.0, 60.0)
 
 ## アリーナの1辺(10ユニット×既定スケール50=500px)。当てはめの基準。
@@ -234,6 +236,11 @@ const BAR_ROW_H := 60.0
 ## 動的生成(敵HPバーと同じ流儀)なのでtscnには居ない。
 var _loss_label: Label = null
 
+## 決着時に自分の内訳の直下へ出す、相手側の同じ内訳。自分の喪失だけでは多いのか
+## 少ないのかの基準が無く、負けても何を変えればいいのか分からない(journal 筆頭候補
+## 「ボス連敗の手がかりの無さ」)。同じ並びで真下に置き、縦に読み比べさせる。
+var _dealt_label: Label = null
+
 ## 決着時に内訳の下へ出す、勝利成長(撃破ボーナス)の行。CLIでは見えていた
 ## 「接触で仕留めた勝ちは大きく育つ」が実UIでは無言だったのを事実として見せる。
 ## 文言の組み立てはVictoryGrowthTextに委譲。こちらも動的生成なのでtscnには居ない。
@@ -310,6 +317,18 @@ func _ready() -> void:
 	_loss_label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
 	$UI.add_child(_loss_label)
 
+	# 相手側の内訳は自分の内訳の直下。自分の行と同じ書式・同じ字送りにして、
+	# 縦に並べたときに削り・壁・減衰の欄が読み比べられるようにする。
+	_dealt_label = Label.new()
+	_dealt_label.text = ""
+	_dealt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dealt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_dealt_label.add_theme_font_size_override("font_size", 20)
+	_dealt_label.add_theme_color_override("font_color", Palette.TEXT_PRIMARY)
+	_dealt_label.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
+	_dealt_label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
+	$UI.add_child(_dealt_label)
+
 	# 勝利成長の行は内訳の直下。決着までは空文字で見えない。色は決着時に
 	# 撃破ボーナスかどうかで決める(既定は通常テキスト色)。
 	_growth_label = Label.new()
@@ -373,6 +392,7 @@ func _recompute_layout() -> void:
 		_record_arena_base()
 		_set_rect(_message, LAND_MESSAGE_RECT)
 		_set_rect(_loss_label, LAND_LOSS_RECT)
+		_set_rect(_dealt_label, LAND_DEALT_RECT)
 		_set_rect(_growth_label, LAND_GROWTH_RECT)
 		_set_rect(_bars, LAND_BARS_RECT)
 		return
@@ -391,15 +411,22 @@ func _recompute_layout() -> void:
 
 	# メッセージはアリーナ幅に合わせ、アリーナの縦中央あたりへ。内訳はその直下。
 	_set_rect(_message, Rect2(top_left.x, top_left.y + arena_px * 0.4, arena_px, BAR_ROW_H))
+	var rows_top := top_left.y + arena_px * 0.4 + BAR_ROW_H
+	_set_rect(_loss_label, Rect2(top_left.x, rows_top, arena_px, LAND_LOSS_RECT.size.y))
 	_set_rect(
-		_loss_label,
-		Rect2(top_left.x, top_left.y + arena_px * 0.4 + BAR_ROW_H, arena_px, LAND_LOSS_RECT.size.y)
+		_dealt_label,
+		Rect2(
+			top_left.x,
+			rows_top + LAND_LOSS_RECT.size.y,
+			arena_px,
+			LAND_DEALT_RECT.size.y
+		)
 	)
 	_set_rect(
 		_growth_label,
 		Rect2(
 			top_left.x,
-			top_left.y + arena_px * 0.4 + BAR_ROW_H + LAND_LOSS_RECT.size.y,
+			rows_top + LAND_LOSS_RECT.size.y + LAND_DEALT_RECT.size.y,
 			arena_px,
 			LAND_GROWTH_RECT.size.y
 		)
@@ -596,6 +623,7 @@ func _begin(player_pos: Vector2, player_vel: Vector2) -> void:
 		telegraph.hide_plan()
 	_message.text = ""
 	_loss_label.text = ""
+	_dealt_label.text = ""
 	_growth_label.text = ""
 	start(player_pos, player_vel)
 
@@ -890,6 +918,10 @@ func _finish() -> void:
 	# 勝敗の下に、自分の回転をどこで失ったかの内訳を出す。組み立てた文なので
 	# 自動翻訳は素通りする(キーが無ければそのまま表示される)のが意図どおり。
 	_loss_label.text = RpsLossText.summary_line(_result.player_rps_loss)
+	# その真下に相手側の同じ内訳。自分の数字だけでは多いのか少ないのかが分からず、
+	# 連敗しても何を変えればいいのか読めない。並べて初めて「削りで負けている」のか
+	# 「壁で自滅している」のかが見える(勝ったときも出す=どう勝てたのかが分かる)。
+	_dealt_label.text = RpsLossText.dealt_line(_result.enemy_rps_loss)
 
 	# 内訳の下に、この勝ちで回転がどれだけ育つかを出す。適用はMainがfinished後に
 	# 行うが、同じgrow_rps_by_victoryを複製へ当てるので表示と適用は必ず同額。

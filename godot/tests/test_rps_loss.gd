@@ -148,3 +148,28 @@ func _test_cli_loss_text(check: Callable) -> void:
 		empty_text.contains("壁0.0"),
 		"CLI表示: キー欠落(旧結果)は0表示で落ちない (%s)" % empty_text
 	)
+
+	# 乱戦の敵行は、総削りのうちプレイヤーが殴った分を括弧で添える
+	# (同士討ちを自分の手柄に読み違えないように)。
+	var melee: String = NaivePlay.loss_text(
+		"enemy1", {"drain": 20.0, "drain_by_player": 6.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0}
+	)
+	check.call(
+		melee.contains("削り20.0") and melee.contains("(自分6.0)"),
+		"CLI表示: 敵行は総削りと自分の寄与を併記する (%s)" % melee
+	)
+	# 単体戦(=総削りと一致)では括弧を出さない。冗長なだけで読む手がかりにならない。
+	var solo: String = NaivePlay.loss_text(
+		"enemy1", {"drain": 6.0, "drain_by_player": 6.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0}
+	)
+	check.call(
+		not solo.contains("自分"), "CLI表示: 総削りと一致するなら括弧は出さない (%s)" % solo
+	)
+	# 自分の行では出さない。プレイヤーのdrain_by_playerは定義上つねに0なので、
+	# 括弧に0.0と出すと「自分の削りが0」という読めない表示になる(実際に出た)。
+	var mine: String = NaivePlay.loss_text(
+		"自分", {"drain": 7.6, "drain_by_player": 0.0, "wall": 8.5, "decay": 0.8, "wall_hits": 4}, true
+	)
+	check.call(
+		not mine.contains("自分0.0"), "CLI表示: 自分の行に(自分0.0)を出さない (%s)" % mine
+	)
