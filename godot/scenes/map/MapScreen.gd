@@ -68,6 +68,15 @@ const COLOR_THREAT := Palette.ENEMY
 const COLOR_THREAT_TRACK := Palette.MAP_THREAT_TRACK
 const COLOR_THREAT_TICK := Palette.MAP_THREAT_TICK
 
+## 傾斜の印(ケバ)。ノードの輪郭が土俵の外周形状、柱の印が土俵の中身なのに対して、
+## こちらは土俵の**すり鉢の急さ**——外周が矩形で柱の無い3つの土俵
+## (CLASSIC/BOWL/PLATE)は、これが出るまで画面上まったく同じ絵だった。
+## 幾何も目盛りも StageSlopeMark の純粋関数側にあり、ここは色を付けて引くだけ。
+## 色はノードの縁と同じ墨。ケバは縁から内側へ伸びる線＝縁の延長なので、
+## 別の色を足して読む物を増やさない(柱の紫・星の橙とも紛れない)。
+const COLOR_SLOPE := Palette.MAP_OUTLINE
+const SLOPE_WIDTH := 1.0
+
 ## 柱の印。ノードの輪郭が土俵の外周形状なのに対して、こちらは土俵の中身。
 ## 色は対戦画面の柱(Arena.OBSTACLE_COLOR)と同じ紫で、入場した先の土俵と印が
 ## 見た目でも一致する。地(ノード塗り)が明るい緑〜暗い灰と幅広いので、読めるかは
@@ -273,6 +282,10 @@ func _draw() -> void:
 			shape = node.wall_shape()
 		_draw_node_body(center, radius, shape, _faded(color, e), e)
 
+		# 土俵の傾斜をノードの縁のケバで描く。柱の印より先に引くので、柱が
+		# 壁際に立っていてもケバの上に乗って読める。
+		_draw_slope_marks(center, radius, node, e)
+
 		# 土俵に柱が立っているなら、その位置に印を打つ。輪郭が土俵の外周なら
 		# こちらは中身で、対になっている。レベルの数字より先に描くので、
 		# 数字は常に印の上に乗って読める。
@@ -374,6 +387,21 @@ func _draw_encounter_info(center: Vector2, radius: float, node: MapTree.MapNode,
 		var rx0 := center.x - (rewards - 1) * gap * 0.5
 		for i in rewards:
 			draw_circle(Vector2(rx0 + i * gap, ry), pip_r, _faded(COLOR_REWARD_PIP, e))
+
+
+## 土俵の傾斜をノードの縁のケバで描く。急な土俵ほど本数が多く・長い(幾何は
+## StageSlopeMark の純粋関数側)。土俵未設定のスタートには1本も出ない。
+## ホバーで膨らんだ半径をそのまま渡すので、柱の印と同じくノードと一緒に動く。
+func _draw_slope_marks(
+	center: Vector2, radius: float, node: MapTree.MapNode, e: float
+) -> void:
+	var points := StageSlopeMark.ticks(center, radius, node.field)
+	var color := _faded(COLOR_SLOPE, e)
+	var width := SLOPE_WIDTH * _draw_scale
+	var i := 0
+	while i + 1 < points.size():
+		draw_line(points[i], points[i + 1], color, width, true)
+		i += 2
 
 
 ## 土俵の柱をノードの中に描く。位置も大きさも土俵の実座標を縮めたものなので
