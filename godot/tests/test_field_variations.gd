@@ -10,6 +10,9 @@ const EPS := 1e-4
 ## Battle.gd の enemy_spawn_radius 既定値。障害物がこのリングと重ならないことを確かめる。
 const SPAWN_RING := 4.0
 
+## 道中の土俵の一辺(FieldRoster._BOUNDS)。決戦だけこれより広い。
+const _BOUNDS_SIDE := 10.0
+
 
 func run(check: Callable) -> void:
 	_test_obstacle_hit(check)
@@ -248,6 +251,16 @@ func _test_boss_octagon(check: Callable) -> void:
 			all_octa = false
 	check.call(all_octa, "土俵抽選: ボス段は必ず八角形闘技場")
 
+	# 形は道中のFIELD_ARENAと同じだが、広さは決戦専用。広さの縛りは
+	# tests/test_boss_arena.gd が幾何で見る。
+	rng.seed = 0
+	var boss: FieldData = FieldRoster.pick_for_step(MapTree.STEP_GOAL, rng)
+	check.call(
+		boss.arena_bounds.size.x > _BOUNDS_SIDE,
+		"土俵抽選: ボス段の土俵は道中より広い (%.1f > %.1f)" % [
+			boss.arena_bounds.size.x, _BOUNDS_SIDE]
+	)
+
 	# ボス以外(段1)は形が固定されず、複数の形が出る。
 	var shapes := {}
 	for i in range(60):
@@ -260,7 +273,10 @@ func _test_boss_octagon(check: Callable) -> void:
 func _test_localization(check: Callable) -> void:
 	TranslationServer.set_locale("ja")
 	var untranslated: Array[String] = []
-	for field in FieldRoster.all():
+	# 決戦の土俵はall()に入っていない(段9専用)ので、明示的に足して漏らさない。
+	var fields := FieldRoster.all()
+	fields.append(FieldRoster.boss_field())
+	for field in fields:
 		if tr(field.title_key) == field.title_key:
 			untranslated.append(field.title_key)
 	check.call(untranslated.is_empty(), "土俵: 名前に訳がある (未訳: %s)" % [untranslated])

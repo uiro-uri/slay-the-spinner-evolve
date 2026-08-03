@@ -30,7 +30,6 @@ const OVERLAY_Z := 1000
 
 ## 横画面(設計)でのArenaRoot/UIの既定値。縦画面から横へ戻すときここへ復元する。
 const LAND_ARENA_POS := Vector2(390.0, 110.0)
-const LAND_ARENA_SCALE := Vector2(50.0, 50.0)
 const LAND_MESSAGE_RECT := Rect2(390.0, 300.0, 500.0, 60.0)
 const LAND_LOSS_RECT := Rect2(390.0, 360.0, 500.0, 40.0)
 ## 相手側の内訳は自分の内訳のすぐ下(同じ高さの行)。成長行はその下へ1行ぶん送る。
@@ -38,7 +37,8 @@ const LAND_DEALT_RECT := Rect2(390.0, 400.0, 500.0, 40.0)
 const LAND_GROWTH_RECT := Rect2(390.0, 440.0, 500.0, 40.0)
 const LAND_BARS_RECT := Rect2(390.0, 622.0, 500.0, 60.0)
 
-## アリーナの1辺(10ユニット×既定スケール50=500px)。当てはめの基準。
+## アリーナの1辺の表示px。当てはめの基準であり、1ユニットあたりのスケールもここから
+## 割り出す(_unit_scale)。土俵が何ユニット四方でも画面上の正方形はこの大きさで動かない。
 const ARENA_PX := 500.0
 ## 予告の揺れの中心をずらす向きの散らし幅(ラジアン)。基本は中心向きだが、
 ## この範囲で回して「常に同じ方向にずれる」と読まれないようにする。約±50度。
@@ -351,11 +351,13 @@ func _ready() -> void:
 	_enemy_telegraphs_root.z_index = OVERLAY_Z
 	_launcher.z_index = OVERLAY_Z
 
+	# 土俵を先に確定させる。ArenaRootのスケールは土俵の広さから割り出す(_unit_scale)
+	# ので、_fieldが入る前にレイアウトを組むと決戦だけ縮尺が1回ぶん古くなる。
+	_apply_run_state()
+
 	# 画面比に合わせてアリーナとUIを置き直す。縦画面のときだけ効く。
 	get_viewport().size_changed.connect(_recompute_layout)
 	_recompute_layout()
-
-	_apply_run_state()
 
 	# 敵の出現をここで決めてしまい、発射前から予告しておく。毎回変わるが、
 	# プレイヤーは狙う前に相手の軌道を読める。
@@ -388,7 +390,7 @@ func _recompute_layout() -> void:
 	var visible := get_viewport().get_visible_rect().size
 	if not ScreenLayout.is_portrait(visible):
 		_arena_root.position = LAND_ARENA_POS
-		_arena_root.scale = LAND_ARENA_SCALE
+		_arena_root.scale = _unit_scale()
 		_record_arena_base()
 		_set_rect(_message, LAND_MESSAGE_RECT)
 		_set_rect(_loss_label, LAND_LOSS_RECT)
@@ -405,7 +407,7 @@ func _recompute_layout() -> void:
 	var block := Vector2(arena_px, content.y * k)
 	var top_left := ScreenLayout.placement(block, visible, 0.5, portrait_vertical_bias)
 
-	_arena_root.scale = LAND_ARENA_SCALE * k
+	_arena_root.scale = _unit_scale() * k
 	_arena_root.position = top_left
 	_record_arena_base()
 
@@ -556,6 +558,13 @@ func _apply_run_state() -> void:
 	# 渡さないと単体調整のときだけ床が嘘をつく。
 	_arena.setup(_field if _field != null else FieldData.make(
 		"", Arena.BOUNDS, ArenaWall.WallShape.RECT, stage_shape, stage_strength))
+
+
+## ArenaRootのスケール(px/ユニット)。土俵の広さは土俵ごとに違う(決戦だけ12ユニット
+## 四方)ので、決め打ちにせず毎回ここから出す。画面上の正方形はARENA_PXのままなので、
+## 広い土俵ほどコマが小さく映る＝広さがそのまま絵に出る。
+func _unit_scale() -> Vector2:
+	return Vector2.ONE * ScreenLayout.arena_unit_scale(_bounds().size, ARENA_PX)
 
 
 ## 土俵の矩形。フィールドがあればそれ、なければシーン既定のArena.BOUNDS。
