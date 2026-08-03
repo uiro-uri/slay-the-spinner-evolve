@@ -273,7 +273,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	# rps喪失の内訳(リゾルバが数えた事実)。死因ラベルは「閾値を割った最後の一撃」
 	# しか語らないので、壁で大半を削られた負けが「衝突0・死因decay」とだけ出て
 	# 敗因が読めないことがあった。機構別の内訳を必ず出す。
-	var loss_parts := [loss_text("自分", result.player_rps_loss)]
+	var loss_parts := [loss_text("自分", result.player_rps_loss, true)]
 	for i in result.enemy_rps_loss.size():
 		loss_parts.append(loss_text("enemy%d" % (i + 1), result.enemy_rps_loss[i]))
 	print("  rps喪失内訳: %s" % " / ".join(loss_parts))
@@ -799,9 +799,19 @@ static func launch_bseed(state: Dictionary, passed: int) -> int:
 
 ## rps喪失内訳の1体ぶんの表示。BattleResultのloss dict(drain/wall/decay/wall_hits)を
 ## そのまま読む。キー欠落(旧結果)は0扱いで落ちない。
-static func loss_text(label: String, loss: Dictionary) -> String:
-	return "%s 削り%.1f 壁%.1f(%d回) 減衰%.1f" % [label,
-		float(loss.get("drain", 0.0)), float(loss.get("wall", 0.0)),
+## 敵の削りは、乱戦だと同士討ちぶんが混ざる。実UIのリザルトが「自分の削り」として
+## 出すのは drain_by_player の方なので、CLIでも括弧で内訳を添えて同じ事実を見せる
+## (総削りと一致する単体戦では冗長なので出さない)。
+## is_player の行では出さない——プレイヤーの drain_by_player は定義上つねに0
+## (「自分が自分を殴った分」は無い)で、括弧に0.0と出しても意味がないため。
+static func loss_text(label: String, loss: Dictionary, is_player: bool = false) -> String:
+	var drain := float(loss.get("drain", 0.0))
+	var by_player := float(loss.get("drain_by_player", drain))
+	var share := ""
+	if not is_player and absf(by_player - drain) >= 0.05:
+		share = "(自分%.1f)" % by_player
+	return "%s 削り%.1f%s 壁%.1f(%d回) 減衰%.1f" % [label,
+		drain, share, float(loss.get("wall", 0.0)),
 		int(loss.get("wall_hits", 0)), float(loss.get("decay", 0.0))]
 
 

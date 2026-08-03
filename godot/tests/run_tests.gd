@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark"
 ]
 
 
@@ -154,6 +154,9 @@ func _init() -> void:
 
 	print("== mutualdrain ==")
 	_test_enemy_mutual_drain()
+
+	print("== drainattribution ==")
+	_test_drain_attribution()
 
 	print("== draincap ==")
 	_test_drain_cap()
@@ -538,6 +541,12 @@ func _test_enemy_mutual_drain() -> void:
 	var suite = load("res://tests/test_enemy_mutual_drain.gd").new()
 	suite.run(_check)
 	_done("mutualdrain")
+
+
+func _test_drain_attribution() -> void:
+	var suite = load("res://tests/test_drain_attribution.gd").new()
+	suite.run(_check)
+	_done("drainattribution")
 
 
 func _test_drain_cap() -> void:
