@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour"
 ]
 
 
@@ -197,6 +197,9 @@ func _init() -> void:
 	print("== stageslope ==")
 	_test_stage_slope_mark()
 
+	print("== slopecontour ==")
+	_test_slope_contour()
+
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
 			_failures.append("%s が完走しなかった（実行時エラーの可能性）" % test_name)
@@ -361,6 +364,12 @@ func _test_stage_slope_mark() -> void:
 	var suite = load("res://tests/test_stage_slope_mark.gd").new()
 	suite.run(_check)
 	_done("stageslope")
+
+
+func _test_slope_contour() -> void:
+	var suite = load("res://tests/test_slope_contour.gd").new()
+	suite.run(_check)
+	_done("slopecontour")
 
 
 func _test_roster() -> void:

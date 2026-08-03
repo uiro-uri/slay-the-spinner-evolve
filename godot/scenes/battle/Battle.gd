@@ -550,8 +550,12 @@ func _apply_run_state() -> void:
 	if GameState.player_stats != null:
 		_player.stats = GameState.player_stats
 	_field = GameState.pending_field
-	# 土俵の見た目(壁の位置・形状・障害物)を反映してから最初の描画に入る。
-	_arena.setup(_field)
+	# 土俵の見た目(壁の位置・形状・障害物・傾斜の等高線)を反映してから最初の描画に入る。
+	# 土俵が無いとき(Battle.tscn単体)は、床の傾斜だけシーンの@exportから作った
+	# FieldDataで渡す——解決(_build_request)がその値を使うので、絵にも同じ値を
+	# 渡さないと単体調整のときだけ床が嘘をつく。
+	_arena.setup(_field if _field != null else FieldData.make(
+		"", Arena.BOUNDS, ArenaWall.WallShape.RECT, stage_shape, stage_strength))
 
 
 ## 土俵の矩形。フィールドがあればそれ、なければシーン既定のArena.BOUNDS。
