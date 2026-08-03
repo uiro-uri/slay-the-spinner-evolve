@@ -150,6 +150,19 @@ const EDGE_MAX := 0.6
 const DRILL_STEP := 0.25
 const DRILL_MAX := 0.75
 
+## Low Center(低重心)が1枚あたり上げる傾斜の効き(slope_grip)と、その上限。
+## 壁でのrps喪失はプレイヤーの敗因の約半分を占めるのに(コールドプレイ2026-08-03の
+## 決戦4連敗: 壁9.6/15.1/18.5/19.1 対 削り20.5〜30.2、勝った段8でも壁19.6>削り17.1)、
+## 壁へ効く札はRAGE(wall_keep)1枚だけで、14回の提示中2回しか出なかった。
+## RAGEが「当たった時の代償を軽くする」のに対し、こちらは中心へ引き戻す力を強めて
+## 「壁まで届く距離と届いたときの速さ」を削る——壁喪失は進入速度に比例する
+## (impact_scaled_wall_damping)ので、同じ壁の軸でも機構が違う。
+## 引き換えに縁へ張り付けなくなる(狙った軌道が中央へ引かれる)ので純粋な上位互換に
+## ならない。上限は1.9(3枚で頭打ち)。青天井にすると中心に貼り付いて壁に一切
+## 触れなくなり、wall_keep=1.0と同じ壊れ方をする。
+const GRIP_STEP := 0.4
+const GRIP_MAX := 2.2
+
 ## Extra Winding(追い巻き)が1枚あたり加算する回転数。上限はRPS_CAP。
 ## 敵rpsはLv1→5で15→33まで伸びるのに、プレイヤーの回転成長は勝利成長
 ## (+0.5/+1.0)とRARE札(SPIN_ENGINE ×1.25)の引き運だけで、引けないランは
@@ -236,6 +249,11 @@ static func all() -> Array[CustomPart]:
 		# 「当てにいくプレイを報いる」向き。
 		CustomPart.make_drill(13, "PART_DRILL_BIT", CustomPart.Rarity.COMMON,
 			DRILL_STEP, DRILL_MAX),
+		# Low Center: 土俵の傾斜の効きを上げて中心へ強く引き戻される守りのCOMMON札
+		# (経緯はGRIP_STEPのコメント参照)。壁の軸がRAGE1枚しかなく、敗因の半分が
+		# 壁なのに対策が引き運任せだったのを、機構の違う2枚目で埋める。
+		CustomPart.make_grip(14, "PART_LOW_CENTER", CustomPart.Rarity.COMMON,
+			GRIP_STEP, GRIP_MAX),
 	]
 
 

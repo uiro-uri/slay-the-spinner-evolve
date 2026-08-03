@@ -229,6 +229,26 @@ func _test_description_matches_effect(check: Callable) -> void:
 			)
 			continue
 
+		# 低重心もDRILLと同型の%表記に、挙動注記が付く。効果文の「傾斜に引かれる力
+		# +30%」だけでは何が嬉しいのか読めないので、注記が壁(wall)に触れることまで
+		# 見る——RAGEと同じ壁対策でも機構が違う(届きにくくする)ことが選び分けの要。
+		if part.effect == CustomPart.Effect.GRIP:
+			check.call(
+				text.contains(CustomPart._trim(part.grip_step * 100.0))
+					and text.contains(CustomPart._trim((part.grip_max - 1.0) * 100.0)),
+				"パーツ%d(%s): 低重心の説明に効きと上限が出ている (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			check.call(
+				not text.contains("PART_NOTE") and text.contains("\n")
+					and text.to_lower().contains("wall"),
+				"パーツ%d(%s): 低重心の注記が壁(wall)に触れる (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			continue
+
 		# 巨大化は直径と質量の複合。両方の倍率と、代償(自然減衰の悪化)の注記が
 		# 出ていることを確かめる。旧版(直径のみ)は代償が読めない罠札だった。
 		if part.effect == CustomPart.Effect.GROWTH:
@@ -878,6 +898,7 @@ func _test_dead_card_filter(check: Callable) -> void:
 	maxed.hit_guard = CustomPartCatalog.GUARD_HIT_MAX
 	maxed.edge = CustomPartCatalog.EDGE_MAX
 	maxed.drill = CustomPartCatalog.DRILL_MAX
+	maxed.slope_grip = CustomPartCatalog.GRIP_MAX
 	maxed.spin_decay = CustomPartCatalog.FULL_STEAM_FLOOR
 	var only_alive_ids := true
 	var sizes_ok := true
