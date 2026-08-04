@@ -11,6 +11,10 @@ extends RefCounted
 ## 静的関数からは tr() を呼べないので、TranslationServer で現在ロケールを引く
 ## (AcquiredUpgradeList と同じ流儀)。
 
+## 同士討ちの欄を出す下限。表示は小数1桁なので、これ未満は出しても「0.0」にしか
+## ならず、単体戦の厳密な0と浮動小数の塵を同じ「出さない」に倒せる。
+const _MUTUAL_EPS := 0.05
+
 
 ## 内訳の1行テキスト。内訳が無い(旧結果や未解決)なら空文字を返し、呼び手は非表示にする。
 static func summary_line(loss: Dictionary) -> String:
@@ -39,6 +43,18 @@ static func summary_line(loss: Dictionary) -> String:
 ## enemies は BattleResult.enemy_rps_loss(敵ごとの内訳Dictionary)。乱戦では和を取る
 ## ——片付けるべき部屋の総量が答えなので、頭数ぶん積むのが正しい集約
 ## (ThreatMeter の硬さが和なのと同じ理由)。
+##
+## 乱戦では **同士討ち**(lost_drain のうちプレイヤーが絡まない分 = drain − drain_by_player)
+## を独立した欄として足す。以前は自分の手柄でないという理由でこの分を落としていたが、
+## 落とすと相手の行の数字が相手の実際の喪失に**足りなくなる**。2026-08-04 の
+## コールドプレイの実測では、段2(3体)で敵が削りで失った 50.4 のうち自分の寄与は
+## 25.6 で、**残り 24.8(49%)がリザルトのどこにも出ていなかった**。段7(2体)でも
+## 敵1体あたり 14.6 のうち 4.1(28%)が同士討ち。乱戦で一番効く手が「敵同士が
+## ぶつかる位置へ置く」ことなのに、それが起きた事実が画面に一度も出ないので
+## 学びようがない。手柄の水増しは「自分の削り」の欄を drain_by_player のまま
+## 据え置くことで防ぎ、同士討ちは別欄にして混ぜない。
+##
+## 単体戦では同士討ちは厳密に0なので欄ごと出さない(「同士討ち0.0」は無意味な雑音)。
 static func dealt_line(enemies: Array) -> String:
 	if enemies.is_empty():
 		return ""
@@ -46,6 +62,7 @@ static func dealt_line(enemies: Array) -> String:
 	# 1体も持っていなければ行ごと出さない(summary_line の空Dictionary扱いと同じ流儀)。
 	var attributed := false
 	var drain := 0.0
+	var mutual := 0.0
 	var wall := 0.0
 	var decay := 0.0
 	var wall_hits := 0
@@ -54,14 +71,21 @@ static func dealt_line(enemies: Array) -> String:
 			continue
 		if loss.has("drain_by_player"):
 			attributed = true
-		drain += float(loss.get("drain_by_player", 0.0))
+		var by_player := float(loss.get("drain_by_player", 0.0))
+		drain += by_player
+		# 総削りを持たない旧結果では by_player を総量とみなす=同士討ち0。
+		mutual += maxf(float(loss.get("drain", by_player)) - by_player, 0.0)
 		wall += float(loss.get("wall", 0.0))
 		decay += float(loss.get("decay", 0.0))
 		wall_hits += int(loss.get("wall_hits", 0))
 	if not attributed:
 		return ""
-	return TranslationServer.translate("BATTLE_RPS_DEALT_BREAKDOWN").format([
-		_fmt(drain), _fmt(wall), wall_hits, _fmt(decay),
+	if mutual < _MUTUAL_EPS:
+		return TranslationServer.translate("BATTLE_RPS_DEALT_BREAKDOWN").format([
+			_fmt(drain), _fmt(wall), wall_hits, _fmt(decay),
+		])
+	return TranslationServer.translate("BATTLE_RPS_DEALT_BREAKDOWN_MUTUAL").format([
+		_fmt(drain), _fmt(mutual), _fmt(wall), wall_hits, _fmt(decay),
 	])
 
 
