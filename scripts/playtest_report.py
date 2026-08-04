@@ -14,6 +14,18 @@ from pathlib import Path
 POLICY_ORDER = ["random", "aim_center", "aim_spawn", "intercept"]
 SHAPE_NAMES = {0: "すり鉢", 1: "円錐"}
 
+## 「現行設定」のセルを見分ける印。playtest.sh の add_battle_jobs が
+## tag=default で吐くファイル名 battle_default_<policy>_lv<N>.jsonl に対応する。
+##
+## かつてはここが `violence == 0.08 and shape == 0` という値の決め打ちだった。
+## 現行の既定(BattleRequest.violence)が 0.16 に変わった時点で条件は誰にも
+## 一致しなくなり、「戦闘単体(現行設定)」の表が全セル n/a・「1セル=0戦」の
+## まま数サイクル出続けた(2026-08-04のサイクルで発見)。データは消えておらず、
+## スイープ表の1列に紛れていただけ。**由来(ファイル名)で見分ければ、既定値を
+## いくら変えても二度と腐らない。**
+DEFAULT_PREFIX = "battle_default_"
+SWEEP_PREFIX = "sweep_"
+
 ## アラートの基準となる腕。ここを全勝/全敗するなら誰がやっても同じ。
 ALERT_POLICY = "intercept"
 ALERT_REWARD = "greedy"
@@ -138,10 +150,46 @@ def alerts(runs, out):
     return bool(problems)
 
 
-def battle_tables(battles, out):
-    default = [b for b in battles if abs(b["violence"] - 0.08) < 1e-9 and b["shape"] == 0]
+def is_default_battle(b):
+    """現行設定(スイープでも単独パーツ計測でもない)の1戦か。"""
+    return b["_src"].startswith(DEFAULT_PREFIX)
 
-    out.append("## 戦闘単体 (現行設定)\n")
+
+def default_setting(battles):
+    """現行設定セルの (shape, violence)。セルが1つも無ければ None。
+
+    値を決め打ちせずデータから読むので、既定値が変わっても表の見出しが
+    自動で追従する。混在していたら(=playtest.shが壊れている)最頻値を採る。
+    """
+    combos = defaultdict(int)
+    for b in battles:
+        if is_default_battle(b):
+            combos[(b["shape"], b["violence"])] += 1
+    if not combos:
+        return None
+    return max(combos, key=lambda k: combos[k])
+
+
+def setting_label(shape, violence):
+    return f"{SHAPE_NAMES.get(shape, shape)} v={violence}"
+
+
+def battle_tables(battles, out):
+    default = [b for b in battles if is_default_battle(b)]
+    setting = default_setting(battles)
+
+    # 由来の印が1件も無い＝集計と playtest.sh のファイル名がずれている。
+    # 黙って n/a を並べると「測れているのに全セル0戦」に見えて気づけないので、
+    # アラートとして鳴らし、終了コードにも乗せる(呼び出し側が拾う)。
+    if not default:
+        out.append("## 戦闘単体 (現行設定)\n")
+        out.append(f"⚠️ **現行設定のデータが0件。** `{DEFAULT_PREFIX}*.jsonl` が"
+                   "1つも無い。playtest.sh の add_battle_jobs のタグと"
+                   f"`DEFAULT_PREFIX` がずれていないか確認すること。\n")
+        return True
+
+    label = setting_label(*setting) if setting else "?"
+    out.append(f"## 戦闘単体 (現行設定: {label})\n")
     out.append("レベル×発射方針の勝率。1セル = "
                f"{len(default) // 20 if default else 0}戦。\n")
     out.append("| Lv | " + " | ".join(POLICY_ORDER) + " | 決着中央値 |")
@@ -163,16 +211,22 @@ def battle_tables(battles, out):
     out.append(f"- 一度もぶつからない戦闘: {pct(len(zero_impact), len(default))}"
                " (発射が当たらず自然減衰だけで決まる＝運ゲーの割合)")
     out.append("")
+    return False
 
 
 def sweep_tables(battles, out):
-    sweep = [b for b in battles if not (abs(b["violence"] - 0.08) < 1e-9 and b["shape"] == 0)]
+    sweep = [b for b in battles if b["_src"].startswith(SWEEP_PREFIX)]
     if not sweep:
         return
     out.append("## スイープ (intercept固定)\n")
-    combos = sorted({(b["shape"], b["violence"]) for b in sweep} |
-                    {(0, 0.08)})  # 現行設定も比較列に含める
-    header = " | ".join(f"{SHAPE_NAMES[s]} v={v}" for s, v in combos)
+    # 現行設定も比較列に入れる。列の (shape, violence) はデータから読むので、
+    # 既定値が変わっても「実在しない列が n/a で並ぶ」ことが起きない。
+    setting = default_setting(battles)
+    combos = {(b["shape"], b["violence"]) for b in sweep}
+    if setting is not None:
+        combos.add(setting)
+    combos = sorted(combos)
+    header = " | ".join(setting_label(s, v) for s, v in combos)
     out.append("| Lv | " + header + " |")
     out.append("|---|" + "---|" * len(combos))
     pool = battles  # 現行設定セルはdefaultデータから拾う
@@ -396,7 +450,8 @@ def main() -> int:
     # アラートは先頭に置く。末尾だと読まれない。
     alerted = alerts(std_runs, out) if std_runs else False
     if battles:
-        battle_tables(battles, out)
+        # 現行設定のデータが拾えていないこと自体もアラート扱い(集計の腐り検知)。
+        alerted = battle_tables(battles, out) or alerted
         sweep_tables(battles, out)
     if std_runs:
         run_tables(std_runs, out)
