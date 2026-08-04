@@ -17,6 +17,7 @@ extends Node2D
 signal finished(player_won: bool, knockout: bool)
 
 const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark.tscn")
+const DAMAGE_NUMBER: PackedScene = preload("res://scenes/battle/DamageNumber.tscn")
 const DISC: PackedScene = preload("res://scenes/battle/Disc.tscn")
 
 ## 敵ディスクの色。プレイヤー(青)と対になる赤。元はBattle.tscnのEnemyDiscに
@@ -212,6 +213,18 @@ const BAR_ROW_H := 60.0
 
 ## スパーク倍率の上限。激突をこれ以上大きくしない(画面を覆わない)。
 @export_range(1.0, 4.0, 0.1) var spark_scale_max: float = 2.0
+
+## 壁・柱で失った回転を、当たった場所に数字で出すか。詳細はWallDamageReadout。
+## 壁はこのゲームで最も多くrpsを奪う機構なのに、戦闘中はHPバーが減るとしか
+## 見えず「いま減ったのは壁のせい」が結び付かない、というコールドプレイの
+## 一次証拠に対する表示。
+@export var show_wall_damage: bool = true
+
+## 数字を出す足切り。その体の初期rps(ゲージ)に対する割合で、これ未満の
+## 擦り接触は出さない(数字で画面を埋めると逆に読めなくなる)。絶対量ではなく
+## 割合なのは、rps15の序盤とrps40の終盤で「痛い」の意味が変わるため。
+## 0で足切り無効＝全ヒットに出す。
+@export_range(0.0, 0.5, 0.005) var wall_damage_min_share: float = 0.03
 
 @export_group("調整用")
 
@@ -858,6 +871,7 @@ func _emit_due_wall_impacts(t: float) -> void:
 	):
 		var imp := _result.wall_impacts[_next_wall_impact]
 		_spawn_wall_spark(imp.point, imp.strength)
+		_spawn_wall_damage_number(imp)
 		AudioManager.play("wall")
 		_next_wall_impact += 1
 
@@ -897,6 +911,41 @@ func _spawn_wall_spark(at: Vector2, strength: float) -> void:
 	# 終わりは同じ色のまま透明へ抜ける。コマ同士のような色相の変化はさせない。
 	spark.end_color = Color(wall_spark_color.r, wall_spark_color.g, wall_spark_color.b, 0.0)
 	$ArenaRoot.add_child(spark)
+
+
+## 壁・柱で失った回転を、当たった場所へ数字で出す。出す/出さない・文字・色は
+## WallDamageReadoutの純粋関数が決め、ここは持ち主からゲージ(初期rps)と
+## コマの色を引いて渡すだけ。大きさは衝撃波と同じSparkScaleで振るので、
+## 「大きい波＝大きい数字」が必ず揃う。
+func _spawn_wall_damage_number(imp: BattleResult.Impact) -> void:
+	if not show_wall_damage:
+		return
+	var gauge := _gauge_rps_of(imp.owner)
+	if not WallDamageReadout.should_show(
+		imp.strength, gauge, wall_damage_min_share, imp.owner
+	):
+		return
+	var num := DAMAGE_NUMBER.instantiate()
+	num.position = imp.point
+	num.z_index = OVERLAY_Z
+	num.text = WallDamageReadout.text(imp.strength)
+	num.color = WallDamageReadout.color(imp.owner, Palette.PLAYER, ENEMY_COLOR)
+	num.font_size *= SparkScale.scale_for(
+		imp.strength, spark_ref_loss, spark_scale_min, spark_scale_max
+	)
+	# 親(ArenaRoot)のユニット系を打ち消させて、文字だけpxで描かせる。
+	num.unit_scale = _arena_root.scale
+	$ArenaRoot.add_child(num)
+
+
+## 衝撃波の持ち主のゲージ(＝初期rps)。持ち主不明・範囲外は0を返し、
+## 呼び出し側(should_show)がそこで出さないと決める。
+func _gauge_rps_of(owner: int) -> float:
+	if owner == BattleResult.Impact.OWNER_PLAYER:
+		return _player.stats.rps
+	if owner < 0 or owner >= _enemies.size():
+		return 0.0
+	return _enemies[owner].stats.rps
 
 
 ## 再生が結果の終わりまで来た。勝敗はもう決まっているので、見せるだけ。

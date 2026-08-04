@@ -34,14 +34,31 @@ class Snapshot:
 class Impact:
 	extends RefCounted
 
+	## owner の値。壁・障害物の衝撃波にだけ意味がある(コマ同士は両者のものなので
+	## 持ち主が決まらず、常にUNKNOWNのまま)。
+	const OWNER_PLAYER := -1
+	const OWNER_UNKNOWN := -2
+
 	var time: float
 	var point: Vector2
 	var strength: float
 
-	func _init(time_: float, point_: Vector2, strength_: float = 1.0) -> void:
+	## その喪失を負ったのは誰か。OWNER_PLAYER か、敵の0始まりindex。
+	## 「壁で何回転持っていかれたか」を再生中にその場へ出す(WallDamageReadout)には
+	## 色を分ける相手が要るが、軌跡との距離から当てる推定は乱戦で外れる。
+	## リゾルバが課金した瞬間に知っている事実なので、そのまま記録する。
+	var owner: int
+
+	func _init(
+		time_: float,
+		point_: Vector2,
+		strength_: float = 1.0,
+		owner_: int = OWNER_UNKNOWN
+	) -> void:
 		time = time_
 		point = point_
 		strength = strength_
+		owner = owner_
 
 
 ## 何もなければ引き分け。
@@ -164,8 +181,10 @@ func to_dict() -> Dictionary:
 		"enemies": enemies_out,
 		"impacts": impacts.map(func(x: Impact) -> Array:
 			return [x.time, x.point.x, x.point.y, x.strength]),
+		# 壁だけ5要素目に持ち主を載せる。コマ同士(impacts)は両者のものなので
+		# 持ち主が決まらず、載せても常にUNKNOWNの水増しにしかならない。
 		"wall_impacts": wall_impacts.map(func(x: Impact) -> Array:
-			return [x.time, x.point.x, x.point.y, x.strength]),
+			return [x.time, x.point.x, x.point.y, x.strength, x.owner]),
 		"outcome": int(outcome),
 		"finish_time": finish_time,
 		"time_step": time_step,
@@ -196,7 +215,14 @@ static func from_dict(d: Dictionary) -> BattleResult:
 	r.impacts = impacts_
 	var wall_impacts_: Array[Impact] = []
 	for x in d["wall_impacts"]:
-		wall_impacts_.append(Impact.new(x[0], Vector2(x[1], x[2]), x[3] if x.size() > 3 else 1.0))
+		# 持ち主(5要素目)を持たない旧dictはUNKNOWNで読む。再生側は持ち主不明の
+		# 喪失表示を出さないので、当時の結果は当時の見た目のまま再生される。
+		wall_impacts_.append(Impact.new(
+			x[0],
+			Vector2(x[1], x[2]),
+			x[3] if x.size() > 3 else 1.0,
+			x[4] if x.size() > 4 else Impact.OWNER_UNKNOWN
+		))
 	r.wall_impacts = wall_impacts_
 	r.outcome = d["outcome"]
 	r.finish_time = d["finish_time"]

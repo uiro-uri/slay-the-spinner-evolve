@@ -141,10 +141,12 @@ static func resolve(request: BattleRequest) -> BattleResult:
 
 		# 壁・障害物・自然減衰を体ごとに。いずれも体単位で独立なので並び順は
 		# 結果に影響しない。
-		_resolve_body_field(player, walls, request, dt, t, result)
-		for enemy in enemies:
-			_resolve_body_field(enemy, walls, request, dt, t, result)
-			enemy.alive = enemy.rps > request.lose_threshold
+		_resolve_body_field(
+			player, walls, request, dt, t, result, BattleResult.Impact.OWNER_PLAYER
+		)
+		for i in enemies.size():
+			_resolve_body_field(enemies[i], walls, request, dt, t, result, i)
+			enemies[i].alive = enemies[i].rps > request.lose_threshold
 
 		t += dt
 
@@ -392,16 +394,23 @@ static func _resolve_disc_collision(
 ## 他の体には触れないので、複数体でも並び順は結果に影響しない。
 ## 落ちたコマ(alive=false)は壁・障害物の当たり判定を持たず素通りする。
 ## 積分と自然減衰だけは続けるので、勢いのまま流れつつ止まっていく。
+## ownerは壁・障害物の衝撃波に載せる持ち主(OWNER_PLAYER か敵のindex)。
 static func _resolve_body_field(
-	s: State, walls: Array[ArenaWall], req: BattleRequest, dt: float, t: float, result: BattleResult
+	s: State,
+	walls: Array[ArenaWall],
+	req: BattleRequest,
+	dt: float,
+	t: float,
+	result: BattleResult,
+	owner: int
 ) -> void:
 	if s.alive:
 		# 面から一度も離れないまま続く接触は、ステップ数によらず「1回の接触」。
 		# 課金の可否はステップの頭で固定し、このステップ中に増えた接触では変えない
 		# (壁と柱を同じステップで踏んでも二重取りにしない)。
 		var billable := not s.touching_surface
-		var hit_wall := _resolve_walls(s, walls, req, t, result, billable)
-		var hit_obstacle := _resolve_obstacles(s, req, t, result, billable)
+		var hit_wall := _resolve_walls(s, walls, req, t, result, billable, owner)
+		var hit_obstacle := _resolve_obstacles(s, req, t, result, billable, owner)
 		# 接触を掛けるのは実際に衝突を解いたときだけ。面のそばに居るだけでは掛けない
 		# ——押し出しでコマは面のちょうど上に乗るので、「近い」を接触と読むと
 		# 到達した次のステップの本物の衝突まで「続き」に見えて課金が消える。
@@ -436,7 +445,7 @@ static func _touching_any_surface(
 ## 衝突を1つでも解いたらtrue(接触の掛け金を掛ける側が使う)。
 static func _resolve_walls(
 	s: State, walls: Array[ArenaWall], req: BattleRequest, t: float, result: BattleResult,
-	billable: bool
+	billable: bool, owner: int
 ) -> bool:
 	var hit_any := false
 	for wall in walls:
@@ -467,9 +476,9 @@ static func _resolve_walls(
 		# 壁面上の当たった点になる。
 		# 強度=この1回で実際に失ったrps。壁の喪失は進入速度比例なので、擦り接触の
 		# 波は小さく・激突の波は大きく再生される。
-		result.wall_impacts.append(
-			BattleResult.Impact.new(t, s.position - wall.normal * s.stats.radius, before - s.rps)
-		)
+		result.wall_impacts.append(BattleResult.Impact.new(
+			t, s.position - wall.normal * s.stats.radius, before - s.rps, owner
+		))
 		_mark_if_dead(s, "wall", req, t)
 	return hit_any
 
@@ -478,7 +487,7 @@ static func _resolve_walls(
 ## 衝撃波は壁と同じwall_impactsチャンネルに載せる（見た目も壁と同じ控えめな波）。
 ## 壁と同じく、衝突を1つでも解いたらtrue。
 static func _resolve_obstacles(
-	s: State, req: BattleRequest, t: float, result: BattleResult, billable: bool
+	s: State, req: BattleRequest, t: float, result: BattleResult, billable: bool, owner: int
 ) -> bool:
 	var hit_any := false
 	for o in req.obstacles:
@@ -505,9 +514,9 @@ static func _resolve_obstacles(
 		s.lost_wall += before - s.rps
 		s.wall_hits += 1
 		# 強度=この1回で実際に失ったrps(壁と同じ扱いで衝撃波をスケールする)。
-		result.wall_impacts.append(
-			BattleResult.Impact.new(t, s.position - normal * s.stats.radius, before - s.rps)
-		)
+		result.wall_impacts.append(BattleResult.Impact.new(
+			t, s.position - normal * s.stats.radius, before - s.rps, owner
+		))
 		_mark_if_dead(s, "wall", req, t)
 	return hit_any
 
