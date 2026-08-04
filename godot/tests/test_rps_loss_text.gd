@@ -17,6 +17,10 @@ func run(check: Callable) -> void:
 	_test_dealt_values_appear(check)
 	_test_dealt_sums_melee(check)
 	_test_dealt_uses_player_share(check)
+	_test_dealt_shows_mutual(check)
+	_test_dealt_mutual_sums_and_reconciles(check)
+	_test_dealt_hides_zero_mutual(check)
+	_test_dealt_mutual_locales(check)
 	_test_dealt_locales(check)
 	_test_dealt_hides_without_facts(check)
 	TranslationServer.set_locale(saved_locale)
@@ -100,6 +104,98 @@ func _test_dealt_uses_player_share(check: Callable) -> void:
 	])
 	check.call(line.contains("6.0"), "自分の削り6.0が出る: %s" % line)
 	check.call(not line.contains("20.0"), "同士討ち込みの20.0は出ない: %s" % line)
+
+
+## 同士討ち(総削り − 自分の削り)が独立した欄として出る。単体戦では常に0なので
+## この欄は乱戦だけのもの。落とすと相手の行の数字が実際の喪失に足りなくなる。
+func _test_dealt_shows_mutual(check: Callable) -> void:
+	# 総削り20.0のうち自分は6.0＝同士討ちは14.0。
+	var line := RpsLossText.dealt_line([
+		{"drain": 20.0, "drain_by_player": 6.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0}
+	])
+	check.call(line.contains("6.0"), "自分の削り6.0が出る: %s" % line)
+	check.call(line.contains("14.0"), "同士討ち14.0が出る: %s" % line)
+	check.call(not line.contains("20.0"), "総削り20.0を自分の手柄として出さない: %s" % line)
+
+
+## 乱戦は敵ごとの同士討ちも和を取り、「自分の削り＋同士討ち」が敵の総削りに一致する
+## (＝リザルトの数字が実際の喪失と帳尻を合わせる)。2026-08-04 のコールドプレイで
+## 段2(3体)の同士討ち49%がどこにも出ていなかったのが、この検査の元。
+func _test_dealt_mutual_sums_and_reconciles(check: Callable) -> void:
+	var enemies := [
+		{"drain": 17.1, "drain_by_player": 9.0, "wall": 0.8, "decay": 0.1, "wall_hits": 1},
+		{"drain": 16.6, "drain_by_player": 7.8, "wall": 0.0, "decay": 1.0, "wall_hits": 0},
+		{"drain": 16.7, "drain_by_player": 8.8, "wall": 0.8, "decay": 0.1, "wall_hits": 1},
+	]
+	var line := RpsLossText.dealt_line(enemies)
+	# 自分の削り 9.0+7.8+8.8 = 25.6、同士討ち (17.1-9.0)+(16.6-7.8)+(16.7-8.8) = 24.8。
+	check.call(line.contains("25.6"), "自分の削りは和(25.6): %s" % line)
+	check.call(line.contains("24.8"), "同士討ちも和(24.8): %s" % line)
+	var total := 0.0
+	for loss in enemies:
+		total += float(loss["drain"])
+	check.call(
+		absf((25.6 + 24.8) - total) < 0.05,
+		"自分の削り+同士討ちが敵の総削り%.1fに一致する" % total
+	)
+
+
+## 単体戦(同士討ちが厳密に0)と、丸めで0.0にしかならない塵は欄ごと出さない。
+## 「同士討ち0.0」は毎戦出る無意味な雑音になる。
+func _test_dealt_hides_zero_mutual(check: Callable) -> void:
+	var solo := RpsLossText.dealt_line([
+		{"drain": 12.5, "drain_by_player": 12.5, "wall": 1.0, "decay": 1.0, "wall_hits": 1}
+	])
+	check.call(solo != "", "単体戦でも行そのものは出る: %s" % solo)
+	TranslationServer.set_locale("ja")
+	solo = RpsLossText.dealt_line([
+		{"drain": 12.5, "drain_by_player": 12.5, "wall": 1.0, "decay": 1.0, "wall_hits": 1}
+	])
+	check.call(not solo.contains("同士討ち"), "同士討ち0は欄ごと出ない: %s" % solo)
+	var dust := RpsLossText.dealt_line([
+		{"drain": 12.5001, "drain_by_player": 12.5, "wall": 1.0, "decay": 1.0, "wall_hits": 1}
+	])
+	check.call(not dust.contains("同士討ち"), "丸めて0.0になる塵も出ない: %s" % dust)
+	# 総削りを持たない旧結果は同士討ち0扱い(欠落を「全部同士討ち」と読まない)。
+	var legacy := RpsLossText.dealt_line([
+		{"drain_by_player": 5.0, "wall": 1.0, "decay": 1.0, "wall_hits": 1}
+	])
+	check.call(not legacy.contains("同士討ち"), "drainを持たない旧結果は同士討ち0扱い: %s" % legacy)
+
+	# drain欠落の敵が混ざっても、他の敵の同士討ちを食い減らさない。
+	# (欠落を0.0で埋めると mutual が負に振れ、和で正の同士討ちを打ち消す)
+	var mixed := RpsLossText.dealt_line([
+		{"drain_by_player": 5.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0},
+		{"drain": 10.0, "drain_by_player": 2.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0},
+	])
+	check.call(mixed.contains("8.0"), "旧結果が混ざっても同士討ち8.0は目減りしない: %s" % mixed)
+
+	# drain < drain_by_player という壊れた内訳を、体ごとに0で止める(表示の防衛)。
+	# 和を取ってから潰すのでは足りない: 負のまま積むと、まともな敵の同士討ちを
+	# その体が食い減らす。単体で見ると欄が消えるだけなので気付けず、混在で初めて出る。
+	var broken := RpsLossText.dealt_line([
+		{"drain": 1.0, "drain_by_player": 9.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0},
+		{"drain": 12.0, "drain_by_player": 2.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0},
+	])
+	check.call(broken.contains("10.0"), "壊れた内訳が他の敵の同士討ち10.0を食わない: %s" % broken)
+	check.call(not broken.contains("-"), "壊れた内訳でも負の同士討ちを出さない: %s" % broken)
+
+
+## 同士討ちの欄も両言語に訳がある(訳抜けならキーがそのまま出て気付ける)。
+func _test_dealt_mutual_locales(check: Callable) -> void:
+	var enemies := [
+		{"drain": 10.0, "drain_by_player": 4.0, "wall": 2.0, "decay": 3.0, "wall_hits": 4}
+	]
+
+	TranslationServer.set_locale("ja")
+	var ja := RpsLossText.dealt_line(enemies)
+	check.call(ja.contains("同士討ち"), "ja: '同士討ち'を含む: %s" % ja)
+	check.call(not ja.contains("BATTLE_RPS_DEALT_BREAKDOWN_MUTUAL"), "ja: キーが素通りしていない: %s" % ja)
+
+	TranslationServer.set_locale("en")
+	var en := RpsLossText.dealt_line(enemies)
+	check.call(en.contains("each other"), "en: 'each other'を含む: %s" % en)
+	check.call(not en.contains("BATTLE_RPS_DEALT_BREAKDOWN_MUTUAL"), "en: キーが素通りしていない: %s" % en)
 
 
 ## 両言語に訳があり、自分の行と見分けが付く(訳抜けならキーがそのまま出て気付ける)。

@@ -58,6 +58,17 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_launch_force.gd -- --count=400
   ```
+- `godot/playtest/measure_slope_grip.gd` — 自機の**傾斜の効き**(`slope_grip`)を1.0未満まで
+  振って、「離れて待つ」が戦術として成立するかを見る計測器。引き量も併せて振る
+  (弱く撃って離れるのが実プレイヤーの取る手なので、満引き固定では待ちの成否が
+  出ない)。**2026-08-04 の結論は否定的**: grip を 1.0→0.4 にすると Lv3 で衝突は
+  3.3→2.7 回に減るが、壁の取り分が 21%→32% に増えて相殺し、勝率は動かない
+  (どの grip でも素の自機は Lv3 に 0%)。**傾斜を弱めるだけでは間合いは買えず、
+  壁が代わりに食う**——「縁に留まる軸の札」を足す案はこの計測で見送った。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_slope_grip.gd -- --count=300
+  ```
 - `godot/playtest/measure_field.gd` — **土俵**(FIELD_*)を振って、土俵×敵レベルの
   勝率と自機のrps喪失内訳を出す計測器。run_sim は土俵を毎戦ランダムに選ぶので、
   統計はいつも6つの土俵の平均になっていて「どの土俵が難しいか」が出ていなかった。
