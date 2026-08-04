@@ -240,7 +240,7 @@ func _test_fits_inside_arena(check: Callable) -> void:
 ## 気づけなかったので、数値で押さえる。
 ##
 ## 発射速度は自機と共通のレンジ(LaunchSpeed)から出現ごとに抽選し、下限は0まで下がる。
-## 予告長は sqrt(速度)×length_scale なので**最も短くなる速度0**が最悪ケース。そこでも
+## 予告長は初速に比例する(AimTriangle.length_for_speed)ので**速度0**が最悪ケース。そこでも
 ## 隠れないよう、EnemyTelegraphは readable_radius+min_length_margin を最小可視長にする。
 ## Battleが出現時に readable_radius=disc.stats.radius を入れるのと同じ状態で、速度0でも
 ## どの敵の予告もコマの縁より外に出ることを確かめる。min_length_marginを削るとここが落ちる。
@@ -276,7 +276,7 @@ func _test_telegraph_visible(check: Callable) -> void:
 		"敵の予告: どの敵でもコマの縁より外に出る (最小 %.2f: %s)" % [worst, worst_name]
 	)
 
-	# 速い敵ほど長い（強さが見た目で分かる）。生の sqrt 式を見たいので最小可視長は無効化。
+	# 速い敵ほど長い（強さが見た目で分かる）。生の長さを見たいので最小可視長は無効化。
 	telegraph.readable_radius = 0.0
 	telegraph.min_length_margin = 0.0
 	telegraph.show_plan(Vector2.ZERO, Vector2.DOWN * 2.2)

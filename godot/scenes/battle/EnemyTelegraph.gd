@@ -21,13 +21,17 @@ extends Node2D
 ## プレイヤーの狙い(lime)と対になる赤。
 @export var color: Color = Color(Palette.ENEMY, 0.85)
 
-## 三角形の長さ。速い敵ほど長く出るので、強さが見た目で分かる。
+## LaunchSpeed.MAX で撃たれたときの三角形の長さ(ユニット)。長さの規則そのものは
+## AimTriangle.length_for_speed が持っていて、自機の狙いと共通。
 ##
-## 速度に比例させると破綻する。敵の速度はLv1で2.2、ボスで14.1と6倍以上
-## 開くので、Lv1が見える長さに合わせるとボスがアリーナを突き抜け、ボスに
-## 合わせるとLv1はコマ(半径0.5)の下に隠れて何も見えない。平方根で圧縮すれば
-## 1.8〜4.5に収まり、どの敵でもコマの外に出た上で速い方が長いままになる。
-@export_range(0.2, 4.0, 0.1) var length_scale: float = 1.2
+## 既定4.0は自機のfull pull長(LaunchController.max_pull)と同じ値だが、頼りに
+## しないこと——Battleが出現時に実際の max_pull を入れる。**両者が同じ値でないと
+## 「自分の三角形と相手の三角形の長短＝速度の大小」が成り立たない**ので、
+## 定数を2箇所に置いて揃うことを祈るのではなく、片方から流し込む。
+##
+## かつては sqrt(速度)×length_scale だった。その圧縮の経緯と、なぜ今は
+## 線形なのかは AimTriangle.length_for_speed のコメントにある。
+@export_range(0.5, 10.0, 0.1) var full_speed_length: float = 4.0
 
 ## 予告がコマの下に隠れないための最小可視長の余白(ユニット)。
 ## 発射速度は自機と共通のレンジ(LaunchSpeed)から抽選され、下限は0まで下がる。
@@ -132,10 +136,12 @@ func display_velocity() -> Vector2:
 	)
 
 
-## 長さは表示用の速度から決める。揺れ幅の分だけ伸び縮みする。
-## ただし低速でもコマの下に隠れないよう、readable_radius+min_length_margin を下限にする。
+## 長さは表示用の速度から決める。揺れ幅の分だけ伸び縮みする。規則は自機の狙いと
+## 共通(AimTriangle.length_for_speed)なので、並べた三角形の長短がそのまま速度の
+## 大小になる。ただし低速でもコマの下に隠れないよう、
+## readable_radius+min_length_margin を下限にする。
 func telegraph_length() -> float:
-	var raw := sqrt(display_velocity().length()) * length_scale
+	var raw := AimTriangle.length_for_speed(display_velocity().length(), full_speed_length)
 	return maxf(raw, readable_radius + min_length_margin)
 
 
