@@ -124,10 +124,29 @@ if [[ $rc -ne 0 ]]; then
   echo "一部のジョブが失敗。$OUT_DIR/jobs.log を確認" >&2
 fi
 
-"$VENV/bin/python" "$REPO_ROOT/scripts/playtest_report.py" "$OUT_DIR/data" >"$OUT_DIR/report.md"
+# レポート生成のpython。venvがあれば使い、無ければ素のpython3へ落ちる。
+# playtest_report.py は標準ライブラリしか使っていないので venv は必須ではない。
+# 落とさないと、venvの無い環境(クラウドの自動進化サイクルなど)では
+# 「レポートが0バイトのまま『不変条件違反がある』と警告する」という
+# 一番たちの悪い壊れ方をする(journalに6回記録あり)。
+if [[ -x "$VENV/bin/python" ]]; then PY="$VENV/bin/python"
+elif command -v python3 >/dev/null 2>&1; then PY="$(command -v python3)"
+else
+  echo "python3 も $VENV/bin/python も見つからない。レポートを作れない" >&2
+  exit 1
+fi
+
+"$PY" "$REPO_ROOT/scripts/playtest_report.py" "$OUT_DIR/data" >"$OUT_DIR/report.md"
 report_rc=$?
-echo "レポート: $OUT_DIR/report.md"
+echo "レポート: $OUT_DIR/report.md ($PY)"
 echo
+
+# 集計そのものが落ちた(=レポートが空)場合は、アラートと区別して報告する。
+# 同じ「exit 1」でも直す場所が違う。
+if [[ $report_rc -gt 1 || ! -s "$OUT_DIR/report.md" ]]; then
+  echo "⚠️  レポート生成に失敗した(rc=$report_rc)。集計スクリプト側の問題。" >&2
+  exit 1
+fi
 
 # アラート(勝率0%/100%の段、不変条件違反)はレポートの先頭に出る。
 # 埋もれないようここにも出し、終了コードにも乗せる。
