@@ -129,19 +129,59 @@ var enemy_rps_loss: Array = []
 var player_death: Dictionary = {}
 
 ## 敵ごとの同事実。enemy_deaths[i] が i 番目の敵のDictionary(生存なら空)。
+## 死んだ敵は "by_player"(プレイヤーが一度でも触れた相手か)も持つ。撃破判定が
+## 「決着を付けた1体」ではなく「自分が落とした敵が居るか」を見るための事実。
 var enemy_deaths: Array = []
+
+## 接触で決着したと見なす死因。自然減衰("decay")待ちの勝ちはここに入らない。
+const CONTACT_CAUSES := ["drain", "wall"]
 
 
 func player_won() -> bool:
 	return outcome == Outcome.PLAYER_WIN
 
 
+## 自分が触れて落とした敵が1体でも居るか(死因が接触系 かつ by_player)。
+## 乱戦で「自分が2体潰したのに、最後の1体が勝手に壁で果てた」ときに、勝ち全体を
+## 自滅扱いにしないための判定。単体戦では敵が1体しか居ないので従来と一致する。
+func player_finished_any_enemy() -> bool:
+	for death in enemy_deaths:
+		if death is Dictionary and String(death.get("cause", "")) in CONTACT_CAUSES:
+			if bool(death.get("by_player", false)):
+				return true
+	return false
+
+
+## 体ごとの停止事実に「誰が落としたか」(by_player)が入っているか。旧dictや
+## 手組みの結果は持たないので、その場合だけ決着1体の事実(loser_*)へ落とす。
+func _has_finisher_records() -> bool:
+	var found := false
+	for death in enemy_deaths:
+		if death is Dictionary and not death.is_empty():
+			if not death.has("by_player"):
+				return false
+			found = true
+	return found
+
+
 ## 勝利が「接触(衝突削り/壁への弾き飛ばし)で決まった」なら真。敵の自然減衰を
-## 待っただけの勝ち("decay")と、決着を付けた敵に一度も触れないまま敵が勝手に
-## 果てた勝ち(壁自滅・同士討ち)を除き、当てにいった勝ちに撃破ボーナス
-## (SpinnerStats.KNOCKOUT_RPS_GROWTH)を与えるための判定。
+## 待っただけの勝ち("decay")と、自分が1体も落としていない勝ち(壁自滅・同士討ち)を
+## 除き、当てにいった勝ちに撃破ボーナス(SpinnerStats.KNOCKOUT_RPS_GROWTH)を
+## 与えるための判定。
+##
+## 見るのは**全ての敵**であって、決着を付けた最後の1体ではない。乱戦では
+## 「自分の接触で2体を落とし、残る1体が離れた所で壁に自滅する」が普通に起きるが
+## (2026-08-04のコールドプレイ 段2 Lv1×3体: 自分が9.0と8.8を削って2体を0.85秒で
+## 落とし、3体目は6.5秒に壁で勝手に果てた)、最後の1体だけで判定していたため
+## 「接触ゼロの自滅勝ち」に分類され、撃破ボーナスが消えていた。乱戦は報酬が
+## 頭数ぶん多い代わりに危険な部屋なのに、**自分の手柄が敵の自滅で取り消される**。
+## 記録を持たない結果(旧dict・手組み)は従来どおり決着1体の事実で判定する。
 func finished_by_knockout() -> bool:
-	return player_won() and loser_death_cause in ["drain", "wall"] and loser_hit_by_player
+	if not player_won():
+		return false
+	if _has_finisher_records():
+		return player_finished_any_enemy()
+	return loser_death_cause in CONTACT_CAUSES and loser_hit_by_player
 
 
 func duration() -> float:

@@ -1024,6 +1024,28 @@ func _test_naive_play_no_contact_note(check: Callable) -> void:
 	check.call(
 		NaivePlay.no_contact_note(knockout) == "",
 		"naive_play: 接触で仕留めた勝ちに注記は出ない")
+	# 乱戦で自分が1体でも落としていれば、決着を付けたのが自滅した敵でも出ない
+	# (撃破ボーナスは付くので、「対象外」と書いたら嘘になる)。
+	var melee := BattleResult.new()
+	melee.outcome = BattleResult.Outcome.PLAYER_WIN
+	melee.loser_death_cause = "wall"
+	melee.loser_hit_by_player = false
+	melee.enemy_deaths = [
+		{"cause": "drain", "time": 0.5, "by_player": true},
+		{"cause": "wall", "time": 2.0, "by_player": false},
+	]
+	check.call(
+		NaivePlay.no_contact_note(melee) == "",
+		"naive_play: 乱戦で1体でも落としていれば注記は出ない (%s)"
+		% NaivePlay.no_contact_note(melee))
+	# 逆に、1体も落としていない乱戦(全員が自滅・同士討ち)には出る。
+	melee.enemy_deaths = [
+		{"cause": "drain", "time": 0.5, "by_player": false},
+		{"cause": "wall", "time": 2.0, "by_player": false},
+	]
+	check.call(
+		NaivePlay.no_contact_note(melee) != "",
+		"naive_play: 1体も落としていない乱戦の勝ちには注記が出る")
 	# 減衰待ちの勝ち(そもそも撃破対象外)と敗北にも出ない。
 	var decay_win := BattleResult.new()
 	decay_win.outcome = BattleResult.Outcome.PLAYER_WIN

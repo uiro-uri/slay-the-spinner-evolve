@@ -21,10 +21,12 @@ func run(check: Callable) -> void:
 	_test_wall_kill(check)
 	_test_wall_kill_with_contact(check)
 	_test_mutual_drain_no_contact(check)
+	_test_melee_partial_knockout(check)
 	_test_player_loss(check)
 	_test_dominant_cause_unit(check)
 	_test_dominant_drain_over_final_decay(check)
 	_test_dominant_decay_over_final_drain(check)
+	_test_knockout_records_unit(check)
 	_test_serialization(check)
 
 
@@ -188,6 +190,60 @@ func _test_mutual_drain_no_contact(check: Callable) -> void:
 	check.call(
 		not result.finished_by_knockout(),
 		"同士討ち: 敵が勝手に潰し合った勝ちは撃破扱いにしない"
+	)
+
+
+## 乱戦の部分撃破: 自分の接触で1体を落とし、残る1体は離れた所で壁に自滅する。
+## 決着を付ける(最後に落ちる)のは自滅した方なので、**決着1体だけを見る旧判定では
+## 「接触ゼロの自滅勝ち」**に化けて撃破ボーナスが消えていた。2026-08-04の
+## コールドプレイ 段2(Lv1×3体)の再現: 自分が2体を0.85秒で削り落としたのに、
+## 3体目が6.5秒に壁で勝手に果てたせいで成長が受け身の+0.5だった。
+## 乱戦は報酬が頭数ぶん多い代わりに危険な部屋で、そこで自分の手柄が敵の自滅で
+## 取り消されるのは、部屋選びの動機を直接壊す。
+func _test_melee_partial_knockout(check: Callable) -> void:
+	var r := BattleRequest.new()
+	r.natural_damping = 0.0
+	r.stage_strength = 0.0
+	# 「1体を初撃で確実に落とす」が筋書きの前提なので、1撃の削りを切る天井は外す
+	# (天井が入ると敵1が生き延びて壁へ流れ、死因の帳簿の話が変わる)。
+	r.drain_cap_share = 0.0
+	r.player = BattleRequest.Launch.new(SpinnerStats.default_player(), Vector2(3, 5), Vector2(8, 0))
+	r.enemies = [
+		# 敵1: 正面から突っ込んできて初撃で落ちる(自分が落とした相手)。
+		BattleRequest.Launch.new(_enemy_stats(0.1), Vector2(7, 5), Vector2(-4, 0)),
+		# 敵2: 別の高さを高速で走り、誰にも触れないまま壁で果てる(自滅)。
+		BattleRequest.Launch.new(_enemy_stats(3.0), Vector2(2, 8.5), Vector2(12, 0)),
+	]
+	var result := BattleResolver.resolve(r)
+
+	check.call(result.player_won(), "乱戦部分撃破: 敵2体が全滅して勝つ")
+	var killed: Dictionary = result.enemy_deaths[0]
+	var suicide: Dictionary = result.enemy_deaths[1]
+	check.call(
+		killed.get("cause", "") == "drain" and bool(killed.get("by_player", false)),
+		"乱戦部分撃破: 敵1は自分の削りで落ちた事実が記録される (%s)" % str(killed)
+	)
+	check.call(
+		suicide.get("cause", "") == "wall" and not bool(suicide.get("by_player", true)),
+		"乱戦部分撃破: 敵2は接触ゼロで壁に自滅した事実が記録される (%s)" % str(suicide)
+	)
+	check.call(
+		float(suicide.get("time", -1.0)) > float(killed.get("time", -1.0)),
+		"乱戦部分撃破: 検証環境で自滅した敵2の方が後に落ちる (%s / %s)" % [str(killed), str(suicide)]
+	)
+	# 決着を付けたのは自滅した敵2なので、旧判定の材料(loser_*)は「接触ゼロ」を指す。
+	check.call(
+		result.loser_death_cause == "wall" and not result.loser_hit_by_player,
+		"乱戦部分撃破: 決着1体の事実は接触ゼロの壁自滅のまま (%s/%s)"
+		% [result.loser_death_cause, str(result.loser_hit_by_player)]
+	)
+	check.call(
+		result.player_finished_any_enemy(),
+		"乱戦部分撃破: 自分が落とした敵が居ると判定される"
+	)
+	check.call(
+		result.finished_by_knockout(),
+		"乱戦部分撃破: 最後の1体が自滅しても、自分が落とした敵が居れば撃破扱い"
 	)
 
 
@@ -366,6 +422,44 @@ func _test_dominant_decay_over_final_drain(check: Callable) -> void:
 	)
 
 
+## 撃破判定が読む「記録」そのものの規則(BattleResult側の単体)。E2Eでは踏めない
+## 混在・欠落を、停止事実を直に組んで固定する。
+func _test_knockout_records_unit(check: Callable) -> void:
+	var r := BattleResult.new()
+	r.outcome = BattleResult.Outcome.PLAYER_WIN
+	# 接触系でない死因(減衰)は、自分が触れた相手でも「落とした」に数えない。
+	r.enemy_deaths = [{"cause": "decay", "time": 1.0, "by_player": true}]
+	check.call(
+		not r.player_finished_any_enemy(),
+		"撃破記録: 減衰で果てた敵は、触れていても落とした敵に数えない"
+	)
+	# by_playerを持たない記録は証拠が無い＝「落とした」と数えない(既定は安全側)。
+	r.enemy_deaths = [{"cause": "drain", "time": 1.0}]
+	check.call(
+		not r.player_finished_any_enemy(),
+		"撃破記録: by_playerを持たない記録は落とした敵に数えない"
+	)
+	# 記録が混在(片方だけby_playerを持つ)なら、新判定は使わず決着1体の事実へ落とす。
+	# 中途半端な記録で「1体でも落としていれば撃破」を名乗ると、根拠の無い+1.0になる。
+	r.enemy_deaths = [
+		{"cause": "drain", "time": 0.5, "by_player": true},
+		{"cause": "wall", "time": 2.0},
+	]
+	r.loser_death_cause = "wall"
+	r.loser_hit_by_player = false
+	check.call(
+		not r.finished_by_knockout(),
+		"撃破記録: by_playerが揃っていない結果は決着1体の事実で判定される"
+	)
+	# 生存(空Dictionary)は記録の欠落ではない。全滅していない敵が居ても、
+	# 落とした敵の記録が揃っていれば新判定を使う。
+	r.enemy_deaths = [{"cause": "drain", "time": 0.5, "by_player": true}, {}]
+	check.call(
+		r.finished_by_knockout(),
+		"撃破記録: 生存の空Dictionaryは記録の欠落として扱わない"
+	)
+
+
 func _test_serialization(check: Callable) -> void:
 	# dict往復で死因が保存されること。落ちるとサーバー化・リプレイで撃破ボーナスが消える。
 	var result := BattleResult.new()
@@ -417,6 +511,36 @@ func _test_serialization(check: Callable) -> void:
 		and revived2.enemy_deaths[1].is_empty(),
 		"往復: enemy_deaths(生存の空Dictionary込み)が保存される (%s)" % str(revived2.enemy_deaths)
 	)
+
+	# 撃破判定の材料(by_player)もdict往復で保存される。落ちるとサーバー化・リプレイで
+	# 乱戦の撃破ボーナスが「最後に落ちた1体」だけの判定に戻る。
+	result.enemy_deaths = [
+		{"cause": "drain", "time": 0.5, "by_player": true},
+		{"cause": "wall", "time": 2.0, "by_player": false},
+	]
+	result.loser_death_cause = "wall"
+	result.loser_hit_by_player = false
+	var revived3 := BattleResult.from_dict(result.to_dict())
+	check.call(
+		bool(revived3.enemy_deaths[0].get("by_player", false))
+		and not bool(revived3.enemy_deaths[1].get("by_player", true)),
+		"往復: enemy_deathsのby_playerが保存される (%s)" % str(revived3.enemy_deaths)
+	)
+	check.call(
+		revived3.finished_by_knockout(),
+		"往復: 復元後も乱戦の部分撃破は撃破扱いのまま"
+	)
+	# by_playerを持たない旧dictは、決着1体の事実(loser_*)で当時のまま判定される。
+	var legacy_deaths := result.to_dict()
+	legacy_deaths["enemy_deaths"] = [{"cause": "drain", "time": 0.5}, {"cause": "wall", "time": 2.0}]
+	var legacy_melee := BattleResult.from_dict(legacy_deaths)
+	check.call(
+		not legacy_melee.finished_by_knockout(),
+		"往復: by_playerの無い旧dictは決着1体の事実で判定される(接触ゼロ=撃破外)"
+	)
+	result.enemy_deaths = [{"cause": "drain", "time": 2.5}, {}]
+	result.loser_death_cause = "drain"
+	result.loser_hit_by_player = true
 
 	# 旧いdict(キーなし)は空文字で読める(後方互換)。
 	var old_dict := result.to_dict()

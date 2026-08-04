@@ -905,17 +905,17 @@ static func ghost_text(result: BattleResult) -> String:
 
 
 ## 接触ゼロ勝利の注記。死因が接触系(wall/drain)なのに撃破ボーナスが付かない勝ちは
-## 「決着死因=壁なのに成長が受け身の+0.5」と矛盾して見える(撃破の寄与判定は
-## 決着を付けた敵とプレイヤーの接触の有無=BattleResult.loser_hit_by_player)。
-## その敵に一度も触れていない事実をここで明文化する。該当しなければ空文字で、
-## 呼び出し側が行ごと出さない。
+## 「決着死因=壁なのに成長が受け身の+0.5」と矛盾して見える。判定は撃破ボーナスと
+## 同じ BattleResult.finished_by_knockout を通す——乱戦で自分が1体でも落として
+## いれば撃破ボーナスは付くので、注記が出るのは「1体も落としていない」勝ちだけ。
+## 該当しなければ空文字で、呼び出し側が行ごと出さない。
 static func no_contact_note(result: BattleResult) -> String:
 	if (
 		result.player_won()
-		and result.loser_death_cause in ["drain", "wall"]
-		and not result.loser_hit_by_player
+		and result.loser_death_cause in BattleResult.CONTACT_CAUSES
+		and not result.finished_by_knockout()
 	):
-		return "(接触ゼロ: 決着を付けた敵に一度も触れていない。自滅なので撃破ボーナス対象外)"
+		return "(接触ゼロ: 自分が落とした敵が1体も居ない。自滅・同士討ちなので撃破ボーナス対象外)"
 	return ""
 
 
