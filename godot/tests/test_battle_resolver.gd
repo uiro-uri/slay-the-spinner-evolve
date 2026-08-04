@@ -418,8 +418,12 @@ func _test_dead_ignores_walls(check: Callable) -> void:
 	for step in 40:
 		BattleResolver._integrate(alive_state, center, req, dt)
 		BattleResolver._integrate(dead_state, center, req, dt)
-		BattleResolver._resolve_body_field(alive_state, walls, req, dt, t, alive_result)
-		BattleResolver._resolve_body_field(dead_state, walls, req, dt, t, dead_result)
+		BattleResolver._resolve_body_field(
+			alive_state, walls, req, dt, t, alive_result, BattleResult.Impact.OWNER_PLAYER
+		)
+		BattleResolver._resolve_body_field(
+			dead_state, walls, req, dt, t, dead_result, BattleResult.Impact.OWNER_PLAYER
+		)
 		t += dt
 
 	check.call(
