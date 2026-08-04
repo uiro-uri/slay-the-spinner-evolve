@@ -41,12 +41,15 @@ static func reward_by_name(name: String) -> RewardPolicy:
 
 ## 1ラン。シードが同じなら結果も同じ。
 ## force_part_id: FORCED方針のとき優先して取る札のid(0で指定なし)。他方針では無視。
+## rare_pity: RAREの天井(CustomPartCatalog.RARE_PITY_OFFERS)を効かせるか。偽にすると
+## 空振りを数えず、天井導入前と厳密に同じ抽選になる(measure_rare_pityのon/off比較用)。
 static func play_one(
 	seed_value: int,
 	launch_policy: LaunchPolicy.Kind,
 	reward_policy: RewardPolicy,
 	overrides: BattleSim.Overrides = null,
-	force_part_id: int = 0
+	force_part_id: int = 0,
+	rare_pity: bool = true
 ) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
@@ -61,6 +64,13 @@ static func play_one(
 	# 直前の報酬画面で見送った札(GameState.last_rejected_idsに相当)。
 	# 次の抽選から除外して、実ゲームと同じ提示ルールで測る。
 	var last_rejected: Array[int] = []
+	# RAREを1枚も含まなかった提示の連続数(GameState.rare_droughtに相当)。
+	var rare_drought := 0
+	# 天井の効き目を読むための集計。offers=提示した回数、rare_offers=そのうち
+	# RAREを1枚以上含んだ回数、first_rare_offer=初めてRAREを見た提示の番号(1始まり)。
+	var offers := 0
+	var rare_offers := 0
+	var first_rare_offer := -1
 	# 残機(コンティニュー)。実プレイのGameStateと同じく開始3。敗北しても残機が
 	# あれば同じノード・同じ土俵で再挑戦する(Main._on_continue_requested)。
 	# 相手は同レベルの別個体に入れ替わる(下のreroll_group参照)。
@@ -147,10 +157,19 @@ static func play_one(
 			# 実ゲーム(Main.goto_reward)と同じく、現ステータス・残機で死にカードを、
 			# 直前の画面で見送った札(last_rejected)も除外する。
 			# 乱戦はRAREの重みが頭数倍(実ゲームと同じ規則)。
+			# RAREの空振りが続いていれば天井が1枚保証する(実ゲームと同じ規則)。
 			var choices := CustomPartCatalog.pick_choices(
 				CustomPartCatalog.REWARD_CHOICES, rng, int(record["level"]),
-				stats, continues, last_rejected, group.size()
+				stats, continues, last_rejected, group.size(), rare_drought
 			)
+			offers += 1
+			if CustomPartCatalog.offer_has_rare(choices):
+				rare_offers += 1
+				if first_rare_offer < 0:
+					first_rare_offer = offers
+			# 天井offのときは空振りを数えない=rare_droughtが0のまま=従来の抽選。
+			if rare_pity:
+				rare_drought = CustomPartCatalog.next_rare_drought(rare_drought, choices)
 			var part := _choose_part(choices, reward_policy, rng, stats, force_part_id)
 			last_rejected = CustomPartCatalog.rejected_ids(choices, part.id)
 			part.apply_to(stats)
@@ -166,6 +185,9 @@ static func play_one(
 		"died_at_step": -1 if won_all else tree.current_step(),
 		"battles_won": battles.filter(func(b): return b["win"]).size(),
 		"parts": parts,
+		"offers": offers,
+		"rare_offers": rare_offers,
+		"first_rare_offer": first_rare_offer,
 		"continues_used": continues_used,
 		"final_continues": continues,
 		"final_rps": stats.rps,

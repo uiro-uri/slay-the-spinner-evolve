@@ -42,6 +42,52 @@ static func rare_weight_for(level: int, enemy_count: int = 1) -> int:
 ## これを参照する。別々に持つと乖離するため。
 const REWARD_CHOICES := 3
 
+## RAREを1枚も含まない報酬提示がこの回数だけ続いたら、次の提示でRAREを1枚保証する
+## (天井)。
+##
+## 動機はコールドプレイ(2026-08-04)の一次証拠。段1〜4を勝ち抜いて**5回の提示=15枚**を
+## 見たが、RAREは1枚も出ず、素の自機に近いまま段5(Lv3×2体)へ入って4連敗しラン終了。
+## 敵の硬さはレベルごとに3〜4倍動く(ThreatMeter参照)のに、こちらの伸びは
+## 撃破ボーナス(+1.0/勝)とCOMMON札の小刻みな加算しかなく、**RAREを1枚も引けない
+## ランは段3〜5で機構的に詰む**——これはjournalが VICTORY_RPS_GROWTH を入れたときの
+## 「引けないランは段3〜5の減衰レースで詰む(段5勝率20.3%が谷)」と同じ穴で、
+## あのときは成長の下支えで塞いだが、**札の引き運そのものの分散**は手付かずだった。
+##
+## 出現率(WEIGHTS/rare_weight_for)は変えない。変えると当たり運の良いランまで
+## 一緒に強くなる。天井は**下振れの深さだけ**を切る: 平均は上げず、
+## 「1枚も見ないままランが終わる」を無くす。
+##
+## 値は計測で決めた(playtest/measure_rare_pity.gd)。連続空振りの分布から、
+## 4は「大半のランでは一度も発動せず、下振れだけを拾う」位置。
+const RARE_PITY_OFFERS := 4
+
+
+## 提示にRARE(レア)が1枚以上含まれているか。天井の空振り判定の唯一の定義。
+##
+## nullを弾く防御は**入れない**。提示はpick_choicesが組み立てるので実際にnullは
+## 来ないうえ、GDScriptのnullプロパティ参照は関数を中断せずエラーを出して
+## nullを返すだけなので、**弾いても弾かなくても戻り値が変わらない**=テストで
+## 落とせない分岐になる(サボタージュ検査で素通りした)。落とせない防御は置かない。
+static func offer_has_rare(offered: Array[CustomPart]) -> bool:
+	for part in offered:
+		if part.rarity == CustomPart.Rarity.RARE:
+			return true
+	return false
+
+
+## 提示のあとの連続空振り数。RAREが出ていれば0へ戻り、出ていなければ+1。
+## 実プレイ(GameState)・シミュレーション(RunSim)・CLI(naive_play)がこの1本を通る。
+static func next_rare_drought(drought: int, offered: Array[CustomPart]) -> int:
+	if offer_has_rare(offered):
+		return 0
+	return maxi(drought, 0) + 1
+
+
+## 天井が発動する空振り数か。thresholdが0以下なら天井そのものを無効にする
+## (計測でon/offを並べるため。既定は RARE_PITY_OFFERS)。
+static func pity_due(drought: int, threshold: int = RARE_PITY_OFFERS) -> bool:
+	return threshold > 0 and drought >= threshold
+
 ## 残機が満タン(ランの初期値以上)のときのSET_LIVES札(SPARE_CORE)の抽選重み。
 ## 保険の価値は残機を失って初めて生まれるのに、無敗のランでも通常のRARE重み
 ## (レベル・頭数で最大12)で提示枠を占有していた(コールドプレイ: 無敗ランで
@@ -314,10 +360,14 @@ static func aggregate_acquired(ids: Array[int]) -> Array[Dictionary]:
 ## 取った札はここに入らないので、同じ札を重ねて取る戦略は妨げない。
 ## enemy_countは倒したノードの頭数。乱戦(2体以上)はRAREの重みが頭数倍になる
 ## (rare_weight_for参照)。省略時1=単体で従来の抽選と厳密に同じ。
+## rare_droughtはRAREを1枚も含まなかった提示が続いた回数(next_rare_droughtで作る)。
+## 天井(RARE_PITY_OFFERS)に達していると、抽選結果にRAREが無かった場合だけ1枚を
+## 差し替えて保証する。省略時0=天井は発動せず、従来の抽選と厳密に同じ。
 static func pick_choices(
 	count: int, rng: RandomNumberGenerator = null, level: int = 1,
 	stats: SpinnerStats = null, lives_now: int = -1,
-	rejected_ids: Array[int] = [], enemy_count: int = 1
+	rejected_ids: Array[int] = [], enemy_count: int = 1,
+	rare_drought: int = 0
 ) -> Array[CustomPart]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
@@ -347,7 +397,34 @@ static func pick_choices(
 		var index := _weighted_index(pool, rng, level, enemy_count, lives_now)
 		chosen.append(pool[index])
 		pool.remove_at(index)
+	if pity_due(rare_drought) and not offer_has_rare(chosen):
+		_swap_in_rare(chosen, pool, rng, level, enemy_count, lives_now)
 	return chosen
+
+
+## 天井の差し替え。chosenのCOMMON1枚を、母集団の残り(pool)のRARE1枚と入れ替える。
+##
+## 「1枚足す」ではなく「入れ替える」のは、提示枚数(REWARD_CHOICES)を天井の有無で
+## 変えないため。枚数が増えると天井が発動したことが見え、しかも選択肢の広さまで
+## 変わってしまう。差し替えなら、見えるのは「レアが1枚混じっている」だけ。
+##
+## 入れる側は通常の重み(_weight_for)で引く。天井は**RAREが出るかどうか**だけを
+## 保証するもので、どのRAREが出るかまで歪めない(満タン時のSPARE_CORE札が
+## 最小重みのまま=天井で保険札を掴まされにくい、も保たれる)。
+## 抜く側は一様に選ぶ。特定の枠を固定すると、天井のときだけ並びに規則性が出る。
+## poolにRAREが1枚も残っていなければ何もしない(死にカード除外で全RAREが消えた等)。
+static func _swap_in_rare(
+	chosen: Array[CustomPart], pool: Array[CustomPart], rng: RandomNumberGenerator,
+	level: int, enemy_count: int, lives_now: int
+) -> void:
+	var rares: Array[CustomPart] = []
+	for part in pool:
+		if part.rarity == CustomPart.Rarity.RARE:
+			rares.append(part)
+	if rares.is_empty() or chosen.is_empty():
+		return
+	var incoming := rares[_weighted_index(rares, rng, level, enemy_count, lives_now)]
+	chosen[rng.randi_range(0, chosen.size() - 1)] = incoming
 
 
 ## 提示(offered)からプレイヤーが選ばなかった札のID＝見送り札を返す。
