@@ -26,6 +26,7 @@ extends SceneTree
 
 const SPAWN_RING := 4.0
 const SPAWN_SPREAD_DEG := 30.0
+const SPAWN_SWIRL_DEG := EnemySpawn.DEFAULT_SWIRL_DEG
 
 
 ## 自機の発射速度ベクトル。実ゲーム(LaunchController)は full pull で LaunchSpeed.MAX を
@@ -446,8 +447,10 @@ static func _enemy_plans(enemies: Array, field: FieldData, bseed: int) -> Array:
 	# 実ゲーム(Battle._spawn_enemy)と同じく柱(障害物)を除け、乱戦では敵同士も
 	# 重ならない間隔(EnemySpawn.Group)で出現させる。
 	var group := EnemySpawn.Group.new()
+	# 乱戦の回り込みも実ゲームと同じく群で1回だけ、出現ループより前に決める。
+	var swirl := EnemySpawn.group_swirl_deg(enemies.size(), SPAWN_SWIRL_DEG, rng)
 	for e in enemies:
-		var plan := EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng, e.stats.radius), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius(), group.avoid(), group.min_gap(e.stats.radius), field.obstacles)
+		var plan := EnemySpawn.plan(field.center(), SPAWN_RING, LaunchSpeed.random(rng, e.stats.radius), SPAWN_SPREAD_DEG, rng, e.stats.radius, field.inradius(), group.avoid(), group.min_gap(e.stats.radius), field.obstacles, swirl)
 		group.add(plan.position, e.stats.radius)
 		plans.append(plan)
 	return plans

@@ -11,6 +11,7 @@ extends RefCounted
 ## Battle.tscnと同じ出現条件。
 const SPAWN_RING := 4.0
 const SPAWN_SPREAD_DEG := 30.0
+const SPAWN_SWIRL_DEG := EnemySpawn.DEFAULT_SWIRL_DEG
 
 
 ## 設定の上書き(スイープ用)。nullなら既定のまま。
@@ -26,6 +27,9 @@ class Overrides:
 	var enemy_rps_scale := 1.0
 	## 自機の発射初速の倍率(=実UIの引き量/フォース)。1.0で満引き=従来と厳密一致。
 	var launch_force_scale := 1.0
+	## 乱戦の回り込み角(度)。既定は実ゲームと同じ。0にすると回り込み無し
+	## (＝この機構が入る前の「全員まっすぐ中央へ」)に戻せるので、効果を測れる。
+	var swirl_deg := SPAWN_SWIRL_DEG
 
 	func apply(request: BattleRequest) -> void:
 		if stage_shape >= 0:
@@ -88,13 +92,18 @@ static func play_one(
 	# ここでは発射(LaunchPolicy)が出現より後に決まるので入れようがなく、
 	# 発射位置は LaunchStandoff が全敵の間合いの外へクランプしている。
 	var group := EnemySpawn.Group.new()
+	# 乱戦の回り込みも実ゲームと同じく群で1回だけ決める(消費順も実ゲームと同じく
+	# 出現ループより前)。
+	var swirl := EnemySpawn.group_swirl_deg(
+		enemies.size(), SPAWN_SWIRL_DEG if overrides == null else overrides.swirl_deg, rng
+	)
 	for enemy in enemies:
 		# 発射速度は実ゲーム(Battle._spawn_enemy)と同じく共通レンジから出現ごとに抽選。
 		# 柱(障害物)の除けも実ゲームと同じ。
 		var plan := EnemySpawn.plan(
 			field.center(), SPAWN_RING, LaunchSpeed.random(rng, enemy.stats.radius),
 			SPAWN_SPREAD_DEG, rng, enemy.stats.radius, field.inradius(),
-			group.avoid(), group.min_gap(enemy.stats.radius), field.obstacles
+			group.avoid(), group.min_gap(enemy.stats.radius), field.obstacles, swirl
 		)
 		group.add(plan.position, enemy.stats.radius)
 		plans.append(plan)

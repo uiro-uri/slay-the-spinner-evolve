@@ -169,6 +169,11 @@ const BAR_ROW_H := 60.0
 ## 大きいほど読みにくくなる。
 @export_range(0.0, 90.0, 5.0) var enemy_spread_deg: float = 30.0
 
+## 乱戦(2体以上)で、群の全員に共通して掛ける回り込み角(度)。単体戦では使わない。
+## 0なら全員が中央へまっすぐ来て開幕に正面衝突する(＝この値が入る前の挙動)。
+## 詳しくは EnemySpawn.group_swirl_deg()。
+@export_range(0.0, 60.0, 1.0) var enemy_swirl_deg: float = EnemySpawn.DEFAULT_SWIRL_DEG
+
 ## 発射前の初期表示で、敵をプレイヤーや他の敵からこれだけ離して出す余白(ユニット)。
 ## コマの縁同士がこの分だけ空く。予告の揺れ(表示のみ、揺れ幅±1.2+中心ずらしは
 ## 主に中心向き)ぶんも吸えるよう少し大きめ。
@@ -276,6 +281,10 @@ var _enemy_bars: Array[ProgressBar] = []
 ## 各敵の出現内容。発射前に決めて予告しておく。
 var _enemy_plans: Array[EnemySpawn.Plan] = []
 
+## この戦闘の乱戦の回り込み角(度)。群で1回だけ決めて全員に同じ値を渡す
+## (符号が揃っていることが同士討ちを減らす要点)。単体戦では 0。
+var _group_swirl_deg: float = 0.0
+
 ## 各敵が rps を尽かした時刻(秒)。未撃破は -1.0。再生開始時に軌跡から確定する。
 ## 乱戦(敵が複数体)のときだけ、この時刻を基準に時間差で敵をフェードアウトさせる。
 var _enemy_defeat_times: Array[float] = []
@@ -380,7 +389,10 @@ func _ready() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	_max_rps = _player.stats.rps
-	for data in _enemy_datas():
+	# 乱戦の回り込みは群で1回だけ決める(全員が同じ向きに回るのが要点)。
+	var datas := _enemy_datas()
+	_group_swirl_deg = EnemySpawn.group_swirl_deg(datas.size(), enemy_swirl_deg, rng)
+	for data in datas:
 		_spawn_enemy(data, rng)
 	set_process(true)
 
@@ -528,7 +540,7 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 	var plan := EnemySpawn.plan(
 		_center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
 		disc.stats.radius, _inradius(),
-		group.avoid(), group.min_gap(disc.stats.radius), obstacles
+		group.avoid(), group.min_gap(disc.stats.radius), obstacles, _group_swirl_deg
 	)
 	disc.position = plan.position
 	disc.velocity = Vector2.ZERO

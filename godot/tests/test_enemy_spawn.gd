@@ -25,6 +25,10 @@ func run(check: Callable) -> void:
 	_test_avoids_obstacles(check)
 	_test_group_spacing(check)
 	_test_battle_wires_group(check)
+	_test_group_swirl(check)
+	_test_swirl_turns_the_aim(check)
+	_test_swirl_aligns_the_group(check)
+	_test_battle_wires_swirl(check)
 
 
 ## 発射前の初期表示が重ならないよう、avoidに渡した点からmin_gap以上離れて出ること。
@@ -123,6 +127,145 @@ func _test_battle_wires_group(check: Callable) -> void:
 	check.call(
 		source.contains("group.avoid()") and source.contains("group.min_gap("),
 		"Battle.gdが間隔をEnemySpawn.plan()へ渡す"
+	)
+
+
+## 乱戦の回り込み角(group_swirl_deg)の決まり方。
+##
+## 一番大事なのは**単体戦では0を返し、rngを1つも引かない**こと。引いてしまうと
+## 以後の出現(速度→角度)が全部ずれて、単体戦の既存シードの再現が壊れる。
+func _test_group_swirl(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+
+	# 単体戦は0。しかも乱数を消費しない(消費すると単体戦の出現が変わってしまう)。
+	rng.seed = 7
+	var before := rng.randi()
+	rng.seed = 7
+	check.call(
+		EnemySpawn.group_swirl_deg(1, 25.0, rng) == 0.0 and rng.randi() == before,
+		"回り込み: 単体戦は0で、乱数も引かない"
+	)
+
+	# 0度指定(＝機構オフ)も同じく無消費。
+	rng.seed = 7
+	check.call(
+		EnemySpawn.group_swirl_deg(3, 0.0, rng) == 0.0 and rng.randi() == before,
+		"回り込み: 0度指定は乱数も引かない(導入前と厳密に同じ)"
+	)
+
+	# 乱戦は ±swirl_deg のどちらか。両方の符号が出ること(片側に固定されていない)。
+	var plus := 0
+	var minus := 0
+	var off_value := 0
+	for trial in TRIALS:
+		rng.seed = trial
+		var swirl := EnemySpawn.group_swirl_deg(2, 25.0, rng)
+		if absf(absf(swirl) - 25.0) >= EPS:
+			off_value += 1
+		elif swirl > 0.0:
+			plus += 1
+		else:
+			minus += 1
+	check.call(off_value == 0, "回り込み: 乱戦は必ず±指定値ちょうど (%d件はずれ)" % off_value)
+	check.call(
+		plus > 0 and minus > 0,
+		"回り込み: 向きは両方出る (+%d / -%d)" % [plus, minus]
+	)
+
+
+## plan() の swirl_deg が狙いをその角度ぶんだけ回すこと。
+## 0なら乱数列も結果も導入前と厳密に一致すること(単体戦の後方互換の要)。
+func _test_swirl_turns_the_aim(check: Callable) -> void:
+	var worst := 0.0
+	var same := true
+	for trial in TRIALS:
+		var rng_a := RandomNumberGenerator.new()
+		rng_a.seed = trial
+		var plain := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_a)
+		var rng_b := RandomNumberGenerator.new()
+		rng_b.seed = trial
+		var zero := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_b, 0.0, 5.0, [], 0.0, [], 0.0)
+		if not (plain.position.is_equal_approx(zero.position)
+				and plain.velocity.is_equal_approx(zero.velocity)):
+			same = false
+		var rng_c := RandomNumberGenerator.new()
+		rng_c.seed = trial
+		var turned := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_c, 0.0, 5.0, [], 0.0, [], 25.0)
+		# 位置は変わらず(角度の抽選は同じ)、速度だけがちょうど25度回っている。
+		if not turned.position.is_equal_approx(plain.position):
+			same = false
+		worst = maxf(worst, absf(rad_to_deg(plain.velocity.angle_to(turned.velocity)) - 25.0))
+	check.call(same, "回り込み: 0度は導入前と同じ結果・位置は回り込みで動かない")
+	check.call(
+		worst < 1e-2,
+		"回り込み: 狙いがちょうど指定角ぶん回る (最大ずれ %.4f度)" % worst
+	)
+
+
+## この変更の目的そのもの: 群で符号を揃えると、全員が中心のまわりを**同じ向きに**
+## 回る。回転の向きは (出現位置-中心) × 速度 の符号で読める。
+##
+## 導入前(swirl=0)は狙いが中心±spreadなので符号はほぼ半々に散らばり、
+## 逆向き同士＝正面衝突の組が生まれる。共通の回り込みを入れると全員同符号になり、
+## 交差しても追い越しになるので開幕の潰し合いが減る
+## (measure_melee_selfkill.gd: 敵同士の初衝突の中央値が全乱戦セルで後ろへ動いた)。
+func _test_swirl_aligns_the_group(check: Callable) -> void:
+	var sign_of := func(plan: EnemySpawn.Plan) -> float:
+		return signf((plan.position - CENTER).cross(plan.velocity))
+
+	var aligned_plain := 0
+	var aligned_swirl := 0
+	var pairs := 0
+	for trial in TRIALS:
+		# 同じ群の2体ぶん(同じrngから続けて引く=実プレイと同じ)。
+		var rng_a := RandomNumberGenerator.new()
+		rng_a.seed = trial
+		var a1 := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_a)
+		var a2 := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_a)
+		var rng_b := RandomNumberGenerator.new()
+		rng_b.seed = trial
+		var b1 := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_b, 0.0, 5.0, [], 0.0, [], 25.0)
+		var b2 := EnemySpawn.plan(CENTER, RING, SPEED, 30.0, rng_b, 0.0, 5.0, [], 0.0, [], 25.0)
+		pairs += 1
+		if sign_of.call(a1) == sign_of.call(a2):
+			aligned_plain += 1
+		if sign_of.call(b1) == sign_of.call(b2):
+			aligned_swirl += 1
+
+	# 回り込み25度 > 散らし30度 ではないので全部は揃わないが、揃う割合は明確に上がる。
+	check.call(
+		aligned_swirl > aligned_plain,
+		"回り込み: 群の回る向きが揃いやすくなる (%d/%d → %d/%d組)" % [
+			aligned_plain, pairs, aligned_swirl, pairs
+		]
+	)
+	check.call(
+		aligned_swirl * 10 >= pairs * 8,
+		"回り込み: 8割以上の組で向きが揃う (%d/%d組)" % [aligned_swirl, pairs]
+	)
+
+
+## 実プレイ(Battle.gd)が回り込みを**群で1回だけ**決めてplan()へ渡していること。
+## _test_battle_wires_group と同じ理由(実プレイ側だけテストの目が届かない)で、
+## ソースの配線を見る。体ごとに引き直すと符号が揃わず、機構の意味が消える。
+func _test_battle_wires_swirl(check: Callable) -> void:
+	var source := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
+	check.call(
+		source.contains("EnemySpawn.group_swirl_deg("),
+		"Battle.gdが回り込みをEnemySpawn.group_swirl_degで決める"
+	)
+	# 体ごとに引き直すと符号が揃わない＝機構がまるごと無意味になる。出現を組む
+	# _spawn_enemy の中で引いていないこと(＝ループの外で1回)を見る。
+	var spawn_body := source.substr(source.find("func _spawn_enemy"))
+	# 代入の形で数える(コメント中の言及を巻き込まないため)。
+	var assign := "_group_swirl_deg = EnemySpawn.group_swirl_deg("
+	check.call(
+		source.count(assign) == 1 and not spawn_body.contains(assign),
+		"Battle.gdが回り込みを群で1回だけ決める(体ごとに引き直さない)"
+	)
+	check.call(
+		spawn_body.contains("_group_swirl_deg"),
+		"Battle.gdが決めた回り込みを各敵のplan()へ渡す"
 	)
 
 

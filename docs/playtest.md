@@ -109,6 +109,20 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_group_size.gd -- --count=400 --build=mid
   ```
+- `godot/playtest/measure_melee_selfkill.gd` — 乱戦の敵が**プレイヤーの手を借りずに
+  開幕で消える**度合いを測る計測器。敵1体を1件として、(a)プレイヤーの削りが
+  ほぼ0のまま落ちた割合、(b)1.5秒以内に落ちた割合、(c)敵が削りで失ったrpsのうち
+  同士討ちの割合、(d)**敵同士が最初にぶつかった時刻**の中央値を出す。
+  `--swirl=<度>` で乱戦の回り込み(`EnemySpawn.group_swirl_deg`)を振れる。0が導入前。
+
+  journal に何サイクルも「乱戦が1.2秒で終わる」と書かれていたのを数字にするために
+  作った。読み方の勘所: (d)と(b)は回り込みで動くが、(c)は**ほとんど動かない**。
+  開幕の一点集中と、戦い全体を通した中央での揉み合いは別の現象で、回り込みが効くのは
+  前者だけ。(c)を動かしたいなら `BattleRequest.enemy_mutual_drain_scale` の方を見ること。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_melee_selfkill.gd -- --count=1000
+  ```
 - `godot/playtest/measure_melee_scale.gd` — 乱戦メンバーの**質量倍率**
   (`EnemyRoster.MELEE_MASS_EXP`)を掃引して、頭数別の勝率と**期待値(報酬枚数×勝率)**を
   並べて出す計測器。乱戦は「頭数ぶんの報酬」と引き換えの選べるリスクなので、
