@@ -223,9 +223,11 @@ static func _dominant_cause(s: State, final_cause: String) -> String:
 
 
 ## 勝敗を決めた(=最後に力尽きた)敵の事実(死因と、プレイヤーとの接触の有無)を
-## 結果へ写す。乱戦では途中で落ちた敵ではなく、決着を付けた最後の1体で判定する。
-## 撃破ボーナス(finished_by_knockout)はこの2つの事実に懸かる: 死因が接触系
-## (drain/wall)でも、その敵に一度も触れていなければ「接触で仕留めた」勝ちではない。
+## 結果へ写す。乱戦では途中で落ちた敵ではなく、決着を付けた最後の1体の事実。
+## 「この戦いがどう終わったか」の表示(決着死因)はここを読む。
+## 撃破ボーナス(finished_by_knockout)は**全ての敵**の停止事実(enemy_deaths)を
+## 見るので、この1体だけには懸からない——乱戦では自分が落とした敵と最後に落ちる
+## 敵が別なのが普通だから。記録を持たない旧dictだけがこの2つへ落ちる。
 static func _record_decisive_enemy(enemies: Array[State], result: BattleResult) -> void:
 	var decisive: State = null
 	var latest := -INF
@@ -570,7 +572,7 @@ static func _record_losses(player: State, enemies: Array[State], result: BattleR
 	result.player_death = _death_dict(player)
 	for enemy in enemies:
 		result.enemy_rps_loss.append(_loss_dict(enemy))
-		result.enemy_deaths.append(_death_dict(enemy))
+		result.enemy_deaths.append(_enemy_death_dict(enemy))
 
 
 static func _loss_dict(s: State) -> Dictionary:
@@ -588,3 +590,14 @@ static func _death_dict(s: State) -> Dictionary:
 	if s.death_cause == "":
 		return {}
 	return {"cause": s.death_cause, "time": s.death_time}
+
+
+## 敵の停止事実。死因・時刻に加えて「プレイヤーが一度でも触れた相手か」を持つ。
+## 撃破判定(BattleResult.finished_by_knockout)が乱戦で「最後に落ちた1体」ではなく
+## 「自分が落とした敵が居るか」を見るための事実で、hit_by_playerと同じ帳簿から出す。
+static func _enemy_death_dict(s: State) -> Dictionary:
+	var d := _death_dict(s)
+	if d.is_empty():
+		return d
+	d["by_player"] = s.hit_by_player
+	return d
