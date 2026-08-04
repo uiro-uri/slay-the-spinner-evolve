@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity"
 ]
 
 
@@ -209,6 +209,9 @@ func _init() -> void:
 	print("== aimlength ==")
 	_test_aim_length()
 
+	print("== rarepity ==")
+	_test_rare_pity()
+
 	for test_name in EXPECTED_TESTS:
 		if not test_name in _completed:
 			_failures.append("%s が完走しなかった（実行時エラーの可能性）" % test_name)
@@ -302,6 +305,12 @@ func _test_gamestate_autoload() -> void:
 	game_state.break_streak()
 	_check(game_state.clear_streak == 0, "break_streak()で連続クリア記録が0に戻る")
 
+	# RAREの天井の空振り数はランの状態なので、reset_run()で0へ戻る
+	# (持ち越すと、前のランの空振りで次のランの1枚目が保証されてしまう)。
+	game_state.rare_drought = 3
+	game_state.reset_run()
+	_check(game_state.rare_drought == 0, "reset_run()でRAREの空振り数が0に戻る")
+
 	game_state.free()
 
 	_done("gamestate")
@@ -391,6 +400,12 @@ func _test_aim_length() -> void:
 	var suite = load("res://tests/test_aim_length.gd").new()
 	suite.run(_check)
 	_done("aimlength")
+
+
+func _test_rare_pity() -> void:
+	var suite = load("res://tests/test_rare_pity.gd").new()
+	suite.run(_check)
+	_done("rarepity")
 
 
 func _test_roster() -> void:

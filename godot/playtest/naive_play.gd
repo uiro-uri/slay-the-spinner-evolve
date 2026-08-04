@@ -65,6 +65,7 @@ func _default_state(seed_value: int) -> Dictionary:
 		"stats": stats_dict(s),
 		"parts": [],
 		"offered": null,       # 直前のrewardで提示した札id列 (pickの検証と再抽選防止)
+		"rare_drought": 0,     # RAREを1枚も含まなかった提示の連続数 (天井。GameState.rare_drought相当)
 		"rewards_left": null,  # この勝利で残っている報酬選択回数 (乱戦=頭数ぶん)
 		"bseed": null,         # enter/retryで予告したbseed (launchは必ずこれで解決する)
 		"enemies": null,       # retryで入れ替えた個体の名前列 (null=ノード生成時のまま)
@@ -354,11 +355,15 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 			for v in state["last_rejected"]:
 				skip.append(int(v))
 		# 乱戦はRAREの重みが頭数倍(実ゲームと同じ規則)。
+		# RAREの空振りが続いていれば天井が1枚保証する(実ゲームと同じ規則)。
+		# 旧stateはキー無し=空振り0=天井なしで、従来どおりに読める。
+		var drought := int(state.get("rare_drought", 0))
 		choices = CustomPartCatalog.pick_choices(
 			CustomPartCatalog.REWARD_CHOICES, rng, level,
 			stats_from(state["stats"]), int(state["continues"]), skip,
-			node.enemy_count()
+			node.enemy_count(), drought
 		)
+		state["rare_drought"] = CustomPartCatalog.next_rare_drought(drought, choices)
 		var ids := []
 		for c in choices: ids.append(c.id)
 		state["offered"] = ids

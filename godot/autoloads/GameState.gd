@@ -32,6 +32,12 @@ var continues_left: int = MAX_CONTINUES
 ## 画面をまたいで続くのを防ぐ。取った札は入らない=重ね取り戦略は妨げない。
 var last_rejected_ids: Array[int] = []
 
+## RAREを1枚も含まなかった報酬提示が続いた回数。天井
+## (CustomPartCatalog.RARE_PITY_OFFERS)に達すると次の提示でRAREが1枚保証される。
+## 提示のたびにCustomPartCatalog.next_rare_droughtで更新する。ランの状態なので
+## reset_run()で0へ戻る。
+var rare_drought: int = 0
+
 ## 連続クリア記録（連勝数）。ランをまたいで持ち越すので reset_run() では消さない。
 ## クリアで +1、ギブアップ（ランを勝ち切れず終了）で 0 に戻る。メモリ上のみ＝
 ## アプリを閉じると消えるのは、このプロジェクトのセーブなし方針に合わせている。
@@ -46,6 +52,7 @@ func reset_run() -> void:
 	acquired_part_ids = []
 	continues_left = MAX_CONTINUES
 	last_rejected_ids = []
+	rare_drought = 0
 
 
 ## 選んだパーツをランに適用する。ステータス強化と残機の引き上げ、取得記録をまとめる。

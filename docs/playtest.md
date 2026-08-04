@@ -107,6 +107,16 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_melee_scale.gd -- --count=300
   ```
+- `godot/playtest/measure_rare_pity.gd` — **RAREの天井**
+  (`CustomPartCatalog.RARE_PITY_OFFERS`)の効き目を測る計測器。天井 on/off を
+  同じシード範囲で並べる(`RunSim.play_one` の `rare_pity`)。読むのは
+  「RAREを1枚も見ないままのランの割合」と「クリア率」の2つで、前者だけが大きく
+  減って後者が動かないなら、天井が**下振れの深さだけ**を切れている。
+  クリア率まで動くなら閾値が緩すぎる。閾値を変えたらここで測り直すこと。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_rare_pity.gd -- --count=1500
+  ```
 - `godot/tests/test_playtest.gd` — 検査器が壊れた結果を本当に拾うかの常設テスト。
 
 ## アラート

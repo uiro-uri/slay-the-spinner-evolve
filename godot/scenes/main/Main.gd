@@ -163,12 +163,18 @@ func goto_reward() -> void:
 	# 直前の画面で見送った札も除外し、同じ顔ぶれの連続を防ぐ。
 	# 乱戦(複数体ノード)は報酬枚数だけでなく質も上がる: RAREの重みが頭数倍
 	# (CustomPartCatalog.rare_weight_for)。危険な部屋の見返りを質でも釣り合わせる。
+	# RAREの空振りが続いていれば天井が発動して1枚保証される(GameState.rare_drought)。
 	var node: MapTree.MapNode = GameState.map_tree.nodes[GameState.map_tree.current_coord]
 	var level := node.level()
 	_reward_offer = CustomPartCatalog.pick_choices(
 		CustomPartCatalog.REWARD_CHOICES, null, level,
 		GameState.player_stats, GameState.continues_left,
-		GameState.last_rejected_ids, node.enemy_count()
+		GameState.last_rejected_ids, node.enemy_count(), GameState.rare_drought
+	)
+	# 空振りの数え直しは「提示した時点」で確定する。選んだかどうかは関係ない
+	# (天井が保証するのは提示であって取得ではない)。
+	GameState.rare_drought = CustomPartCatalog.next_rare_drought(
+		GameState.rare_drought, _reward_offer
 	)
 	# 今のビルドを渡す。カードごとの「取ると硬さ・寿命がどう動くか」(PartPreview)の
 	# 基準になる。残機とゴーストの合計秒は、コマの性能を変えない札(残機・無敵)でも
