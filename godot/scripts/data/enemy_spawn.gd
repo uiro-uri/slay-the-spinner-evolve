@@ -15,6 +15,12 @@ extends RefCounted
 ## Nodeに依存しない純粋な計算なので、ヘッドレスから直接テストできる。
 
 
+## 乱戦で群の全員に掛ける回り込み角(度)の既定値。実プレイ(Battle.gdの@export)・
+## ボット(BattleSim)・CLI(naive_play)の3経路がここを見て揃える。
+## 値の根拠は group_swirl_deg() のコメントと docs/evolve/journal.md 2026-08-04。
+const DEFAULT_SWIRL_DEG := 25.0
+
+
 ## 決まった出現内容。
 class Plan:
 	extends RefCounted
@@ -74,11 +80,38 @@ class Group:
 		_widest = maxf(_widest, radius)
 
 
+## 乱戦(2体以上)で群の全員に共通して掛ける回り込み角(度)。1体の戦いでは 0 を返し、
+## rngも引かない＝**単体戦は従来と厳密に同じ**。
+##
+## 動機: plan() は全員を「中心方向 ± spread」へ撃つので、リング上の全員が
+## **同時刻に中央へ集まって正面衝突する**。2026-08-04 のコールドプレイでは
+## 段4(Lv2×2体)の1体がプレイヤーに一度も触られないまま0.78秒で落ち、段3(2体)も
+## 両方が1.2秒台で消えた。measure_melee_selfkill.gd で数えると、敵同士の初衝突の
+## 中央値は頭数3で **0.20〜0.42秒**、敵が削りで失うrpsの **33〜56%が同士討ち**。
+## 「報酬が頭数ぶん増える危険な部屋」が、プレイヤーと無関係に片付く自壊ショーだった。
+##
+## 群の全員を**同じ向き**へ回り込ませると、軌道は中心を通る半径から半径swirlの円に
+## 接する弦になり、交差しても互いの相対速度が小さい(正面衝突が追い越しになる)。
+## 向きは群ごとに1回だけ引く。プレイヤーは全員から見て「渦の中」に居るので、
+## 敵が来なくなるわけではない——同士討ちだけが減る。
+##
+## 予告(EnemyTelegraph)は plan().velocity をそのまま描くので、回り込みは自動で予告される。
+static func group_swirl_deg(
+	member_count: int, swirl_deg: float, rng: RandomNumberGenerator
+) -> float:
+	if member_count < 2 or swirl_deg <= 0.0:
+		return 0.0
+	return swirl_deg if rng.randi() % 2 == 0 else -swirl_deg
+
+
 ## 中心からring_radiusだけ離れた円周上のランダムな一点に出現し、
 ## 中心方向 ± spread_deg の範囲へ speed で発射する。
 ##
 ## 中心を狙わせるのは、そうしないと敵がプレイヤーと出会わないまま
 ## 外周を回って終わることがあるため。spread_degで読みにくさを調整する。
+##
+## swirl_degは乱戦で群の全員に共通して掛ける回り込み(group_swirl_degが決める)。
+## spreadと同じ回転だが、こちらは**群で符号が揃っている**ところが違う。0なら従来どおり。
 ##
 ## radiusはコマの半径。大きいコマがring_radiusのまま外周に出ると壁に
 ## めり込むので、アリーナに収まるところまで内側へ寄せる。ボスは半径3.0と
@@ -103,7 +136,8 @@ static func plan(
 	arena_half_size: float = 5.0,
 	avoid: Array[Vector2] = [],
 	min_gap: float = 0.0,
-	obstacles: Array[Vector3] = []
+	obstacles: Array[Vector3] = [],
+	swirl_deg: float = 0.0
 ) -> Plan:
 	var max_ring := maxf(arena_half_size - radius, 0.0)
 	var effective_ring := minf(ring_radius, max_ring)
@@ -112,8 +146,10 @@ static func plan(
 	var position := center + Vector2.RIGHT.rotated(angle) * effective_ring
 
 	var toward_center := (center - position).normalized()
+	# 散らし(spread)は毎回引く。回り込み(swirl)は群で共通の定数なので引かない——
+	# 引く順を変えないので、swirl=0なら乱数列も結果も従来と厳密に一致する。
 	var spread := deg_to_rad(rng.randf_range(-spread_deg, spread_deg))
-	return Plan.new(position, toward_center.rotated(spread) * speed)
+	return Plan.new(position, toward_center.rotated(spread + deg_to_rad(swirl_deg)) * speed)
 
 
 ## リング上の角度を選ぶ。除け所も柱も無ければ1回引くだけ(従来どおり)。
