@@ -93,8 +93,14 @@ func _draw() -> void:
 
 	# 上限まで引いたらそれ以上は伸びない。見た目と実際の初速をずらさないため、
 	# 描画も頭打ちにした位置で行う（プロトタイプに上限はなかった）。
+	#
+	# 長さは引き量ではなく**初速**から出す。敵の予告と同じ規則(AimTriangle)を
+	# 通すためで、こうしないと同じ速度でも自機と敵で三角形の長さが違ってしまう。
+	# 自機は引き量比＝初速比なので、この経路でも底辺は従来どおりカーソル位置に来る
+	# (数値は完全に一致する。手触りは変わらない)。
 	var pull := _effective_pull()
-	var points := AimTriangle.points(_origin, pull, pull.length())
+	var speed := LaunchSpeed.from_pull(pull.length(), max_pull)
+	var points := AimTriangle.points(_origin, pull, AimTriangle.length_for_speed(speed, max_pull))
 	if points.is_empty():
 		return
 	draw_colored_polygon(points, ARROW_COLOR)

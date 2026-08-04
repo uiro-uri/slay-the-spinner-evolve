@@ -478,6 +478,9 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 		telegraph.apply_level(data.level)
 	# 発射速度は0まで下がりうるので、予告がこのコマの下に隠れないよう半径を渡す。
 	telegraph.readable_radius = disc.stats.radius
+	# 予告の長さの基準を自機のfull pull長に揃える。これが揃って初めて
+	# 「相手の三角形より自分の三角形が長い＝自分の方が速い」と読める。
+	telegraph.full_speed_length = _launcher.max_pull
 	_enemy_telegraphs_root.add_child(telegraph)
 
 	# HPバーの見た目はプレイヤーバー(Battle.tscnで設定)に合わせる。背景は共有し、

@@ -12,7 +12,8 @@ extends RefCounted
 ## 発射速度11.0→8.5の経緯参照)。上限12でその暴発を抑える。
 ##
 ## **MIN=0** は自機の下限。自機は引き量0で速度0まで撃てる(from_pull)。
-## 低速だと EnemyTelegraph の予告(長さ sqrt(速度)×length_scale)がコマの下に隠れかねないが、
+## 低速だと EnemyTelegraph の予告(長さは自機と共通の AimTriangle.length_for_speed)が
+## コマの下に隠れかねないが、
 ## それは予告側で「コマ半径＋余白」を下回らない最小可視長を張って対処する(EnemyTelegraphの
 ## readable_radius / min_length_margin)。
 ##
