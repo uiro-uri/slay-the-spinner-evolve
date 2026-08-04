@@ -623,8 +623,8 @@ static func rewards_for_group(group_size: int) -> int:
 
 
 ## 進める先の1行。敵数(リスク)の隣に報酬枚数(リターン=倒した頭数ぶん)を必ず並べる。
-## 実UIのマップも敵数ピップ(赤・下辺)と報酬ピップ(金・上辺)を対で見せており、その
-## 情報同等のCLI版。以前は敵数しか出ておらず、報酬が頭数ぶん貰えるルールを知らない
+## 実UIのマップも敵数ピップ(赤・下辺)と報酬ピップ(金・上辺。質が上がる部屋ほど
+## 白く明るい)を対で見せており、その情報同等のCLI版。以前は敵数しか出ておらず、報酬が頭数ぶん貰えるルールを知らない
 ## 初見プレイヤーには乱戦が「リスクだけの部屋」に読めて、全戦で最少体数ノードを
 ## 選んでいた(コールドプレイの一次証拠)。ゴール(ボス)は報酬選択が無い(勝てば即クリア)
 ## ので報酬枚数の代わりにそれを明示する。
@@ -633,11 +633,15 @@ static func route_text(col: int, n: MapTree.MapNode, player: SpinnerStats = null
 	if n.reward_count() <= 0:
 		return "col%+d : Lv%d %d体%s %s 撃破でクリア(報酬なし)" % [
 			col, n.level(), n.enemy_count(), threat, n.field.title_key]
-	# 乱戦は枚数だけでなく質も上がる(RARE重みが頭数倍)。リターンが読めないと
-	# 乱戦がリスクだけの部屋に見えるので、選択の時点で両方を明示する。
-	if n.enemy_count() > 1:
-		return "col%+d : Lv%d %d体%s→報酬%d枚(レア出やすさ×%d) %s" % [
-			col, n.level(), n.enemy_count(), threat, n.reward_count(), n.enemy_count(),
+	# 枚数だけでなく**質**も上がる部屋がある(RARE重みが 実レベル×頭数)。リターンが
+	# 読めないとリスクだけの部屋に見えるので、選択の時点で両方を明示する。
+	# かつてここは頭数ぶん(×2/×3)しか出しておらず、**斥候(格上の単体)の見返りは
+	# 一言も出ていなかった**——実UIの報酬ピップの色(RewardQuality.pip_color)と
+	# 同じ倍率をここでも出す。ハーネスと実ゲームの情報量は対等に保つ約束。
+	var ratio := RewardQuality.ratio_for_node(n)
+	if ratio > 1.0:
+		return "col%+d : Lv%d %d体%s→報酬%d枚(レア出やすさ×%.2f) %s" % [
+			col, n.level(), n.enemy_count(), threat, n.reward_count(), ratio,
 			n.field.title_key]
 	return "col%+d : Lv%d %d体%s→報酬%d枚 %s" % [
 		col, n.level(), n.enemy_count(), threat, n.reward_count(), n.field.title_key]

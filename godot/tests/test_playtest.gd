@@ -640,7 +640,8 @@ func _test_naive_play_route_text(check: Callable) -> void:
 				continue
 			if n.enemy_count() >= 2 and group == null:
 				group = n
-			elif n.enemy_count() == 1 and single == null:
+			elif n.enemy_count() == 1 and not n.is_vanguard() and single == null:
+				# 斥候(格上の単体)はレア倍率が出る側なので、素の単体ノードだけを拾う。
 				single = n
 		if single != null and group != null:
 			break
@@ -658,9 +659,23 @@ func _test_naive_play_route_text(check: Callable) -> void:
 		("%d体→報酬%d枚" % [group.enemy_count(), group.enemy_count()]) in group_text,
 		"naive_play: 乱戦ノードは頭数ぶんの報酬枚数が読める (%s)" % group_text)
 	check.call(
-		("レア出やすさ×%d" % group.enemy_count()) in group_text,
+		("レア出やすさ×%.2f" % RewardQuality.ratio_for_node(group)) in group_text,
 		"naive_play: 乱戦ノードはレアの出やすさ(頭数倍)が読める (%s)" % group_text)
 	check.call(group_text.begins_with("col-2"), "naive_play: 列表記は従来どおり (%s)" % group_text)
+
+	# 斥候(格上の単体)の見返り。実UIは報酬ピップの色で出しており(RewardQuality)、
+	# CLIに無いままだとコールドプレイのエージェントだけが「格上を選ぶ理由」を
+	# 一言も知らずに部屋を選ぶ。ハーネスと実ゲームの情報量は対等に保つ約束。
+	var vanguard: MapTree.MapNode = MapTree.MapNode.new(Vector2i(2, 2))
+	vanguard.enemies = [EnemyRoster.of_level(EnemyRoster.level_for_step(2) + 1)[0]]
+	vanguard.field = single.field
+	var vanguard_text: String = NaivePlay.route_text(1, vanguard)
+	check.call(
+		("レア出やすさ×%.2f" % RewardQuality.ratio_for_node(vanguard)) in vanguard_text,
+		"naive_play: 斥候(格上の単体)もレアの出やすさが読める (%s)" % vanguard_text)
+	check.call(
+		RewardQuality.ratio_for_node(vanguard) > 1.0,
+		"naive_play: 斥候の倍率は基準より大きい (%s)" % vanguard_text)
 
 	# 相手の硬さの取り分。実UIのマップに載ったメーターのCLI版で、**値も判定も
 	# ThreatMeter と一致していなければならない**——ここがずれると、コールドプレイの

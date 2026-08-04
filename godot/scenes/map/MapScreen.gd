@@ -359,6 +359,10 @@ func _draw_closed_polyline(pts: PackedVector2Array, color: Color, width: float) 
 
 ## 実レベルの数字（中央）・敵数ぶんのピップ（下辺の外側）・報酬枚数ぶんのピップ
 ## （上辺の外側）を描く。ボスは報酬なし(reward_count=0)なので上のピップが出ない。
+##
+## 報酬ピップは枚数だけでなく**質**も持つ: その部屋のRARE抽選重みが段の基準より
+## 高ければ(斥候＝格上の単体、乱戦＝頭数倍)、ピップが金から白へ寄って明るくなる
+## (RewardQuality.pip_color)。基準の部屋では色は1ドットも変わらない。
 func _draw_encounter_info(center: Vector2, radius: float, node: MapTree.MapNode, e: float) -> void:
 	var font := ThemeDB.fallback_font
 	var fs := maxi(1, int(round(LEVEL_FONT * _draw_scale)))
@@ -385,8 +389,16 @@ func _draw_encounter_info(center: Vector2, radius: float, node: MapTree.MapNode,
 	if rewards > 0:
 		var ry := center.y - radius - PIP_OFFSET * _draw_scale
 		var rx0 := center.x - (rewards - 1) * gap * 0.5
+		var reward_color := reward_pip_color(node)
 		for i in rewards:
-			draw_circle(Vector2(rx0 + i * gap, ry), pip_r, _faded(COLOR_REWARD_PIP, e))
+			draw_circle(Vector2(rx0 + i * gap, ry), pip_r, _faded(reward_color, e))
+
+
+## 報酬ピップの色。質(RAREの出やすさ)が段の基準より高い部屋ほど金から白へ寄る。
+## 「どの色で描くか」は見た目ではなく報酬の規則なので、_draw()に埋めずここに出して
+## テストから直接呼べるようにする(threat_meterの reachable_shares と同じ流儀)。
+static func reward_pip_color(node: MapTree.MapNode) -> Color:
+	return RewardQuality.pip_color(COLOR_REWARD_PIP, RewardQuality.ratio_for_node(node))
 
 
 ## 土俵の傾斜をノードの縁のケバで描く。急な土俵ほど本数が多く・長い(幾何は
