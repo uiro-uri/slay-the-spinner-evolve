@@ -56,6 +56,18 @@ const BAR_BAND := 90.0
 const BAND_GAP := 12.0
 const BAR_ROW_H := 60.0
 
+@export_group("先読み")
+
+## 狙っている間、自分と相手が同じ時刻にどこに居るかを先読みして見せる
+## (RendezvousPreview)。offで従来どおり三角形だけ。
+@export var show_lead_preview: bool = true
+
+## 先読みする秒数。壁へ届いた時点でどのみち打ち切るので、伸ばしても
+## 「壁に着くまでに噛み合うか」から先は見えない。
+@export_range(0.2, 4.0, 0.1) var lead_horizon: float = RendezvousPreview.DEFAULT_HORIZON
+
+@export_group("")
+
 ## ステージの傾斜の強さ。
 @export_range(0.0, 20.0, 0.1) var stage_strength: float = 4.9
 
@@ -349,6 +361,7 @@ func _ready() -> void:
 	set_physics_process(false)
 	_launcher.launched.connect(_on_launched)
 	_launcher.aim_moved.connect(_on_aim_moved)
+	_launcher.aim_changed.connect(_on_aim_changed)
 
 	# メッセージは暗紫の床の上に出るので、明色文字＋暗色縁取りで読ませる。
 	# 下を明るいネオンのコマやスパークが通っても縁取りで浮く。色はPaletteが唯一の出所。
@@ -582,7 +595,7 @@ func _spawn_enemy(data: EnemyData, rng: RandomNumberGenerator) -> void:
 		group.add(other.position, other.stats.radius)
 
 	# 柱(障害物)に重なった出現はめり込み拘束になるので、柱も除けて角度を選ぶ。
-	var obstacles: Array[Vector3] = _field.obstacles if _field != null else []
+	var obstacles: Array[Vector3] = _obstacles()
 	var plan := EnemySpawn.plan(
 		_center(), enemy_spawn_radius, speed, enemy_spread_deg, rng,
 		disc.stats.radius, _inradius(),
@@ -694,6 +707,51 @@ func _on_aim_moved(origin: Vector2) -> void:
 	_player.position = _clamp_launch(origin)
 
 
+## 狙いが変わるたび、いま撃ったら相手と噛み合うかを先読みして狙いへ返す。
+##
+## **相手側は予告の表示値(揺れたもの)を渡す**。確定値(_enemy_plans)を渡すと
+## 先読みが確定情報になり、読み切らせないための揺れが無意味になる。
+## 発射(_on_launched)は今までどおり確定値で解決されるので、ここは表示専用。
+##
+## 乱戦では最初に噛み合う相手1体だけを見せる(RendezvousPreview.primary_index)。
+func _on_aim_changed(origin: Vector2, velocity: Vector2) -> void:
+	if _result != null or not show_lead_preview or velocity.length() <= 0.0:
+		_launcher.set_lead({}, 0.0, 0.0)
+		return
+	var start := _clamp_launch(origin)
+	var results: Array[Dictionary] = []
+	for i in _enemies.size():
+		results.append(RendezvousPreview.closest_approach(
+			start, velocity, _player.stats,
+			_telegraphs[i].display_position(), _telegraphs[i].display_velocity(),
+			_enemies[i].stats,
+			_center(), _stage_strength(), _stage_shape(), _inradius(), _obstacles(),
+			lead_horizon
+		))
+	var index := RendezvousPreview.primary_index(results)
+	if index < 0:
+		_launcher.set_lead({}, 0.0, 0.0)
+		return
+	_launcher.set_lead(
+		results[index], _player.stats.radius, _enemies[index].stats.radius
+	)
+
+
+## 土俵の傾斜。フィールドが入っていればそちら、無ければシーンの@export
+## (build_requestと同じ分岐。先読みと本番が違う傾斜を歩かないため)。
+func _stage_strength() -> float:
+	return _field.stage_strength if _field != null else stage_strength
+
+
+func _stage_shape() -> SpinnerPhysics.StageShape:
+	return _field.stage_shape if _field != null else stage_shape
+
+
+## 土俵の柱。先読みは柱へ届いたところで打ち切る(跳ね返った先は追わない)。
+func _obstacles() -> Array[Vector3]:
+	return _field.obstacles if _field != null else ([] as Array[Vector3])
+
+
 func _on_launched(pos: Vector2, velocity: Vector2) -> void:
 	AudioManager.play("launch")
 	_begin(_clamp_launch(pos), velocity)
@@ -741,14 +799,14 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 	if _field != null:
 		request.arena_bounds = _field.arena_bounds
 		request.wall_shape = _field.wall_shape
-		request.obstacles = _field.obstacles
-		request.stage_strength = _field.stage_strength
-		request.stage_shape = _field.stage_shape
 	else:
 		request.arena_bounds = Arena.BOUNDS
 		request.wall_shape = ArenaWall.WallShape.RECT
-		request.stage_strength = stage_strength
-		request.stage_shape = stage_shape
+	# 傾斜だけは先読み(_on_aim_changed)も要るので分岐を関数へ出してある。
+	# ここで直接書くと、先読みと本番が違う傾斜を歩く余地ができる。
+	request.obstacles = _obstacles()
+	request.stage_strength = _stage_strength()
+	request.stage_shape = _stage_shape()
 	request.violence = violence
 	request.spin_kick_scale = spin_kick_scale
 	request.natural_damping = natural_damping

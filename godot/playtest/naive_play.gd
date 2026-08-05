@@ -8,6 +8,9 @@ extends SceneTree
 ##   enter  --state=path --col=C --bseed=B    次ノードへ入り、敵の予告(テレグラフ)を出す
 ##                                            (入ったら一方通行。決着かretry/giveupまで
 ##                                             enterし直せない=実ゲームのマップと同じ)
+##   aim    --state=path --bseed=B --from-deg=D --target=center|enemyK|x,y --force=F
+##                                            撃たずに先読みだけ出す(実UIの狙い中の輪と
+##                                             同じRendezvousPreview)。何度でも試せる
 ##   launch --state=path --bseed=B --from-deg=D --target=center|enemyK|x,y --force=F
 ##                                            自分の発射を決めて1戦解決。勝敗を出す
 ##                                            (解決は enter/retry で予告した bseed で行う。
@@ -46,6 +49,7 @@ func _init() -> void:
 		"new": _new(int(a.get("seed", "0")), path)
 		"status": _status(_load(path), path)
 		"enter": _enter(_load(path), path, int(a["col"]), int(a["bseed"]))
+		"aim": _aim(_load(path), int(a["bseed"]), float(a.get("from-deg","0")), a.get("target","enemy1"), float(a.get("force","1.0")))
 		"launch": _launch(_load(path), path, int(a["bseed"]), float(a.get("from-deg","0")), a.get("target","enemy1"), float(a.get("force","1.0")))
 		"reward": _reward(_load(path), path, int(a["bseed"]))
 		"pick": _pick(_load(path), path, int(a["id"]))
@@ -203,6 +207,53 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 			i, enemies[i], plans[i],
 			float(state["stats"]["radius"]), field.inradius()))
 	print("→ launch --bseed=%d --from-deg=<0-360> --target=center|enemy1..|x,y --force=<0-1>" % bseed)
+
+## 撃たずに先読みだけ出す。実UIで引いている最中に見えている輪(RendezvousPreview)を
+## 文字にしたもので、状態は一切書き換えない(何度でも試せる=マウスを動かすのと同じ)。
+##
+## 実UIとの違いが1つある: あちらは**予告の揺れた表示値**を先読みに渡すので結果も
+## 揺れるが、CLIは元から確定値を印字する道具(enemy_lineが出現位置も速度も
+## そのまま出す)なので、ここも確定値で読む。CLIの方が正確に読めるのは
+## 揺れの導入前から変わらない性質で、この行だけの話ではない。
+func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force: float) -> void:
+	var block := launch_block_reason(state)
+	if block != "":
+		printerr(block); return
+	var use_bseed := launch_bseed(state, bseed)
+	var tree := _tree_at(state)
+	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
+	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
+	var field: FieldData = node.field
+	var enemies := node_group(state, node)
+	var plans := _enemy_plans(enemies, field, use_bseed)
+	var pstats := stats_from(state["stats"])
+
+	var pos := field.clamp_launch(
+		_ring_pos(field, pstats.radius, from_deg),
+		spawn_points_of(plans), enemy_radii_of(enemies), pstats.radius)
+	var vel := launch_velocity(pos, _target_point(field, plans, target), force)
+
+	var results: Array[Dictionary] = []
+	for i in enemies.size():
+		results.append(RendezvousPreview.closest_approach(
+			pos, vel, pstats,
+			plans[i].position, plans[i].velocity, enemies[i].stats,
+			field.center(), field.stage_strength, field.stage_shape,
+			field.inradius(), field.obstacles))
+	print("=== 先読み(撃たない): pos=%s vel=%.1f@%d° force=%.2f ===" % [
+		str(pos), vel.length(), int(rad_to_deg(vel.angle())), clampf(force, 0.0, 1.0)])
+	for i in results.size():
+		var r: Dictionary = results[i]
+		var why := "噛み合う" if bool(r["contact"]) else (
+			"外す(壁か柱で打ち切り)" if bool(r["cut_short"]) else "外す")
+		var pp: Vector2 = r["player_point"]
+		var ep: Vector2 = r["enemy_point"]
+		print("  enemy%d: %s  一番近づくのは %.2fs / 縁の隙間 %.2f / 自分(%.2f, %.2f) 相手(%.2f, %.2f)" % [
+			i + 1, why, r["time"], r["gap"], pp.x, pp.y, ep.x, ep.y])
+	var best := RendezvousPreview.primary_index(results)
+	if best >= 0:
+		print("  → 実UIが輪で見せるのは enemy%d のぶん" % [best + 1])
+
 
 func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float) -> void:
 	var block := launch_block_reason(state)
