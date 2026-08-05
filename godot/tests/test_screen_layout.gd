@@ -13,6 +13,7 @@ func run(check: Callable) -> void:
 	_test_is_portrait(check)
 	_test_fit_scale(check)
 	_test_placement(check)
+	_test_stack_top(check)
 
 
 ## 一番大事な不変条件: 設計解像度(1280x720, 16:9)は横画面扱い=変換しない。
@@ -86,3 +87,38 @@ func _test_placement(check: Callable) -> void:
 	# 横画面相当(scaled==visible)なら shift 0。
 	var same := ScreenLayout.placement(visible, visible, 0.5, 0.7)
 	check.call(same == Vector2.ZERO, "placement: ぴったりなら移動なし")
+
+
+## リザルト行の塊の置き所。対戦画面はメッセージ(60px)＋固定高の行を
+## アリーナの上に重ねるが、行は画面に依らない固定pxでアリーナだけが端末幅で縮むので、
+## 細い端末では塊が下のバー帯へ食い込む。span を越えない範囲まで押し上げる規則を固定する。
+func _test_stack_top(check: Callable) -> void:
+	const EPS := 0.001
+	# 余裕がある(広い縦画面・タブレット相当)なら bias のまま動かない。
+	# arena_px=691, 塊=60+40*4=220 → 691*0.4=276.4 が 691-220=471 より小さいので素通り。
+	check.call(
+		absf(ScreenLayout.stack_top(691.0, 220.0, 0.4) - 276.4) < EPS,
+		"stack_top: 余裕があれば bias のまま (%.1f)" % ScreenLayout.stack_top(691.0, 220.0, 0.4)
+	)
+
+	# SP幅390 (arena_px=351): bias位置140.4だと下端が360.4でアリーナ(351)を越える。
+	# 押し上げて 351-220=131。この端末が押し上げの要る側の代表。
+	check.call(
+		absf(ScreenLayout.stack_top(351.0, 220.0, 0.4) - 131.0) < EPS,
+		"stack_top: SP390は押し上げる (%.1f)" % ScreenLayout.stack_top(351.0, 220.0, 0.4)
+	)
+
+	# どの端末でも下端が span を越えない、が守るべき性質そのもの。
+	# 行が3本だった頃(180px)は押し上げ不要だった幅でも、4本(220px)なら要る。
+	for arena_px in [324.0, 351.0, 400.0, 500.0, 691.0]:
+		var top := ScreenLayout.stack_top(arena_px, 220.0, 0.4)
+		check.call(
+			top + 220.0 <= arena_px + EPS,
+			"stack_top: arena %.0f で塊がはみ出さない (下端 %.1f)" % [arena_px, top + 220.0]
+		)
+		check.call(top >= -EPS, "stack_top: arena %.0f で負にならない (%.1f)" % [arena_px, top])
+
+	# 塊が領域より高ければ上端へ貼り付く(負にして画面外へ出さない)。
+	check.call(
+		absf(ScreenLayout.stack_top(100.0, 220.0, 0.4)) < EPS, "stack_top: 入り切らなければ0"
+	)

@@ -35,8 +35,14 @@ const LAND_MESSAGE_RECT := Rect2(390.0, 300.0, 500.0, 60.0)
 const LAND_LOSS_RECT := Rect2(390.0, 360.0, 500.0, 40.0)
 ## 相手側の内訳は自分の内訳のすぐ下(同じ高さの行)。成長行はその下へ1行ぶん送る。
 const LAND_DEALT_RECT := Rect2(390.0, 400.0, 500.0, 40.0)
-const LAND_GROWTH_RECT := Rect2(390.0, 440.0, 500.0, 40.0)
+## 残り回転の行は喪失内訳2行の直下(「何で失ったか」の次に「どれだけ残ったか」)。
+const LAND_REMAIN_RECT := Rect2(390.0, 440.0, 500.0, 40.0)
+const LAND_GROWTH_RECT := Rect2(390.0, 480.0, 500.0, 40.0)
 const LAND_BARS_RECT := Rect2(390.0, 622.0, 500.0, 60.0)
+
+## 縦画面で、メッセージ＋リザルト行の塊をアリーナのどの高さから置くか(0.4=縦4割)。
+## 塊が下のバー帯へ食い込むときだけ ScreenLayout.stack_top が押し上げる。
+const MSG_BLOCK_BIAS := 0.4
 
 ## アリーナの1辺の表示px。当てはめの基準であり、1ユニットあたりのスケールもここから
 ## 割り出す(_unit_scale)。土俵が何ユニット四方でも画面上の正方形はこの大きさで動かない。
@@ -259,6 +265,13 @@ var _loss_label: Label = null
 ## 「ボス連敗の手がかりの無さ」)。同じ並びで真下に置き、縦に読み比べさせる。
 var _dealt_label: Label = null
 
+## 決着時に喪失内訳2行の直下へ出す、両者の残り回転(実数と満タン比)。喪失内訳は
+## 「何で失ったか」しか語らず、「あとどれだけで倒せたか」は相手の開始rps(画面の
+## どこにも出ない)が要る。決戦の連敗が近づいているのかどうかがこの行でしか読めない
+## (journal 2026-08-05: ボス6連敗の敵残りが25%〜0.5%とばらけていたのに全部同じ顔で
+## 流れた)。文言の組み立てはRemainingRpsTextに委譲。動的生成なのでtscnには居ない。
+var _remain_label: Label = null
+
 ## 決着時に内訳の下へ出す、勝利成長(撃破ボーナス)の行。CLIでは見えていた
 ## 「接触で仕留めた勝ちは大きく育つ」が実UIでは無言だったのを事実として見せる。
 ## 文言の組み立てはVictoryGrowthTextに委譲。こちらも動的生成なのでtscnには居ない。
@@ -351,6 +364,18 @@ func _ready() -> void:
 	_dealt_label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
 	$UI.add_child(_dealt_label)
 
+	# 残り回転の行は喪失内訳2行の直下。同じ書式・同じ字送りで、上2行が「何で失ったか」、
+	# この行が「どれだけ残ったか」という読み順になる。
+	_remain_label = Label.new()
+	_remain_label.text = ""
+	_remain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_remain_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_remain_label.add_theme_font_size_override("font_size", 20)
+	_remain_label.add_theme_color_override("font_color", Palette.TEXT_PRIMARY)
+	_remain_label.add_theme_color_override("font_outline_color", Palette.TEXT_OUTLINE)
+	_remain_label.add_theme_constant_override("outline_size", Palette.MESSAGE_OUTLINE_SIZE)
+	$UI.add_child(_remain_label)
+
 	# 勝利成長の行は内訳の直下。決着までは空文字で見えない。色は決着時に
 	# 撃破ボーナスかどうかで決める(既定は通常テキスト色)。
 	_growth_label = Label.new()
@@ -420,6 +445,7 @@ func _recompute_layout() -> void:
 		_set_rect(_message, LAND_MESSAGE_RECT)
 		_set_rect(_loss_label, LAND_LOSS_RECT)
 		_set_rect(_dealt_label, LAND_DEALT_RECT)
+		_set_rect(_remain_label, LAND_REMAIN_RECT)
 		_set_rect(_growth_label, LAND_GROWTH_RECT)
 		_set_rect(_bars, LAND_BARS_RECT)
 		return
@@ -436,28 +462,30 @@ func _recompute_layout() -> void:
 	_arena_root.position = top_left
 	_record_arena_base()
 
-	# メッセージはアリーナ幅に合わせ、アリーナの縦中央あたりへ。内訳はその直下。
-	_set_rect(_message, Rect2(top_left.x, top_left.y + arena_px * 0.4, arena_px, BAR_ROW_H))
-	var rows_top := top_left.y + arena_px * 0.4 + BAR_ROW_H
-	_set_rect(_loss_label, Rect2(top_left.x, rows_top, arena_px, LAND_LOSS_RECT.size.y))
-	_set_rect(
-		_dealt_label,
-		Rect2(
-			top_left.x,
-			rows_top + LAND_LOSS_RECT.size.y,
-			arena_px,
-			LAND_DEALT_RECT.size.y
-		)
-	)
-	_set_rect(
-		_growth_label,
-		Rect2(
-			top_left.x,
-			rows_top + LAND_LOSS_RECT.size.y + LAND_DEALT_RECT.size.y,
-			arena_px,
-			LAND_GROWTH_RECT.size.y
-		)
-	)
+	# メッセージ＋リザルトの行は1つの塊としてアリーナの上に重ねる。行は上から順に積む
+	# ——手で足し算を書き足すと行が増えるたびに重なりの種になるので、送り幅は横画面と
+	# 同じ定数から取って走らせる(横と縦で行の高さが食い違わない)。
+	var rows: Array = [
+		[_loss_label, LAND_LOSS_RECT.size.y],
+		[_dealt_label, LAND_DEALT_RECT.size.y],
+		[_remain_label, LAND_REMAIN_RECT.size.y],
+		[_growth_label, LAND_GROWTH_RECT.size.y],
+	]
+	var block_h := BAR_ROW_H
+	for row in rows:
+		block_h += float(row[1])
+
+	# 置き所はアリーナの縦4割から。ただし行の高さは画面に依らず固定pxなので、
+	# 細い端末ほどアリーナが縮んで塊がはみ出す(SP幅360では4行目がバー帯へ食い込む)。
+	# 塊の下端がアリーナ下端(=バー帯の直前)を越えないところまで押し上げる規則は
+	# ScreenLayout の純粋関数側(ヘッドレスで固定できる)。広い縦画面では4割のまま動かない。
+	var block_top := top_left.y + ScreenLayout.stack_top(arena_px, block_h, MSG_BLOCK_BIAS)
+	_set_rect(_message, Rect2(top_left.x, block_top, arena_px, BAR_ROW_H))
+	var row_y := block_top + BAR_ROW_H
+	for row in rows:
+		var row_h: float = row[1]
+		_set_rect(row[0], Rect2(top_left.x, row_y, arena_px, row_h))
+		row_y += row_h
 	# バーはアリーナ直下、幅いっぱい。
 	_set_rect(_bars, Rect2(top_left.x, top_left.y + arena_px + BAND_GAP, arena_px, BAR_ROW_H))
 
@@ -665,6 +693,7 @@ func _begin(player_pos: Vector2, player_vel: Vector2) -> void:
 	_message.text = ""
 	_loss_label.text = ""
 	_dealt_label.text = ""
+	_remain_label.text = ""
 	_growth_label.text = ""
 	start(player_pos, player_vel)
 
@@ -999,6 +1028,13 @@ func _finish() -> void:
 	# 連敗しても何を変えればいいのか読めない。並べて初めて「削りで負けている」のか
 	# 「壁で自滅している」のかが見える(勝ったときも出す=どう勝てたのかが分かる)。
 	_dealt_label.text = RpsLossText.dealt_line(_result.enemy_rps_loss)
+	# その下に、決着の瞬間に**どちらがどれだけ残していたか**。上2行の「何で失ったか」を
+	# 全部足しても、相手の満タン(画面のどこにも出ない)を知らなければ「あと一撃だった」
+	# のか「歯が立たなかった」のかが分かれない。リトライは毎回別個体を出すので、
+	# 実数だけでは試行間の比較にもならない=満タン比が要る(RemainingRpsText参照)。
+	_remain_label.text = RemainingRpsText.remaining_line(
+		_result.player_frames, _result.enemy_tracks
+	)
 
 	# 内訳の下に、この勝ちで回転がどれだけ育つかを出す。適用はMainがfinished後に
 	# 行うが、同じgrow_rps_by_victoryを複製へ当てるので表示と適用は必ず同額。

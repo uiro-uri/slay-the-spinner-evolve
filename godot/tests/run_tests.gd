@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality"
 ]
 
 
@@ -178,6 +178,9 @@ func _init() -> void:
 
 	print("== losstext ==")
 	_test_loss_text()
+
+	print("== remaintext ==")
+	_test_remaining_text()
 
 	print("== growthtext ==")
 	_test_growth_text()
@@ -658,6 +661,12 @@ func _test_loss_text() -> void:
 	var suite = load("res://tests/test_rps_loss_text.gd").new()
 	suite.run(_check)
 	_done("losstext")
+
+
+func _test_remaining_text() -> void:
+	var suite = load("res://tests/test_remaining_rps_text.gd").new()
+	suite.run(_check)
+	_done("remaintext")
 
 
 func _test_growth_text() -> void:
