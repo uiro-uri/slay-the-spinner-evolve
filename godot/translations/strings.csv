@@ -27,6 +27,7 @@ BATTLE_GROWTH_VICTORY,Victory — spin +{0} → {1},勝利の勢いで回転 +{0
 BATTLE_GROWTH_KNOCKOUT_CAPPED,Knockout bonus — but spin is capped at {0},撃破ボーナス — だが回転は上限{0}で頭打ち
 BATTLE_GROWTH_KNOCKOUT_OVERFLOW,Knockout bonus! Overflow steadies your spin — decay {0}→{1},撃破ボーナス! 勢い余って回転が長持ちに 回転減衰 {0}→{1}
 BATTLE_GROWTH_CAPPED,Spin at cap {0} — no growth,回転は上限{0}で頭打ち・成長なし
+BATTLE_FIELD_LINE,{0} — {1},{0} — {1}
 BATTLE_FAST_FORWARD,▶▶ Fast-forward,▶▶ 早送り
 BATTLE_AUTO_FAST_FORWARD,▶▶ Fast-forward (no contact yet),▶▶ 早送り（まだ噛み合いません）
 GAMEOVER_TITLE,GAME OVER,ゲームオーバー
@@ -50,6 +51,12 @@ FIELD_ARENA,Octagon Arena,八角形の闘技場
 FIELD_ROUND,Round Dish,円形の土俵
 FIELD_PILLARS,Pillar Field,柱の土俵
 FIELD_GRAND_ARENA,Grand Arena,大闘技場
+FIELD_TRAIT_PILLARS,pillars blur the ricochets,中の柱で跳ね返りが読めない
+FIELD_TRAIT_CONE,same slope at center and rim,中央でも縁でも同じ傾斜
+FIELD_TRAIT_OCTAGON,"blunted corners, not square",隅の角度が鈍い
+FIELD_TRAIT_ROUND,no corners at all,外周に角が一つも無い
+FIELD_TRAIT_STEEP,dragged hard to the center,中央へ強く引き戻される
+FIELD_TRAIT_PLAIN,"square walls, standard slope",四角い壁に標準の傾斜
 ENEMY_1_1,Chipling,コマ小僧
 ENEMY_1_2,Needlet,ニードレット
 ENEMY_1_3,Pebblet,小石コマ
