@@ -442,8 +442,13 @@ func _ready() -> void:
 	#
 	# 予告は確定値の周りで揺らして見せる(読み切らせないため)が、揺れるのは
 	# 見た目だけ。撃つときは必ず_enemy_plansの確定値を使う。
+	#
+	# 乱数の種はGameStateが持つ(rng.randomize()にしない)。負けたあと
+	# 「同じ相手に挑む」を選ぶと個体も種も据え置かれるので、**予告が1ドットも
+	# 変わらない立ち合い**をもう一度やれる＝狙いを変えた効果だけが結果に出る。
+	# randomize()だと同じ相手を選んでも出現だけ変わり、再戦にならない(RetryPlan)。
 	var rng := RandomNumberGenerator.new()
-	rng.randomize()
+	rng.seed = GameState.pending_spawn_seed
 	_max_rps = _player.stats.rps
 	# 乱戦の回り込みは群で1回だけ決める(全員が同じ向きに回るのが要点)。
 	var datas := _enemy_datas()

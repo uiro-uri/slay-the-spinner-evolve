@@ -71,6 +71,9 @@ func _on_map_node_chosen(coord: Vector2i) -> void:
 	var node: MapTree.MapNode = GameState.map_tree.nodes[GameState.map_tree.current_coord]
 	GameState.pending_enemies = node.enemies
 	GameState.pending_field = node.field
+	# 出現(位置・向き・速度)はここで引き直す。以後この種が据え置かれる限り
+	# 同じ予告が出るので、負けたあとの「同じ相手に挑む」が本当の再戦になる。
+	GameState.roll_spawn_seed()
 	goto_battle()
 
 
@@ -131,18 +134,28 @@ func goto_gameover() -> void:
 	gameover.setup(GameState.continues_left)
 
 
-## コンティニュー: 回数を1消費し、同じマップ位置で戦闘へ戻る。相手は同レベルの
-## 別個体に入れ替える(EnemyRoster.reroll_group)。以前は出現位置しか変わらず、
-## 同じ相手に同じ負け方を繰り返す徒労だった。レベル・頭数は保たれるので、
-## マップ表示も報酬(node.level())も嘘にならない。ノード自体(node.enemies)は
-## 触らず、この戦闘のpending_enemiesだけを差し替える。current_coordも触らない。
-func _on_continue_requested() -> void:
+## コンティニュー: 回数を1消費し、同じマップ位置で戦闘へ戻る。相手を据え置くか
+## 引き直すかはプレイヤーが選ぶ(same_opponent。規則はRetryPlanに1つだけ置き、
+## コールドプレイCLIも同じものを通る)。
+##
+## 「同じ相手に挑む」は個体も出現の種も据え置くので、負けた立ち合いがそっくり
+## 再現される＝狙いを変えた効果だけが結果に出る。「相手を替えて挑む」は同レベルの
+## 別個体へ入れ替え、出現も引き直す(従来の挙動＝噛み合わない相手から降りる逃げ道)。
+## どちらもレベル・頭数は保たれるので、マップ表示も報酬(node.level())も嘘にならない。
+## ノード自体(node.enemies)は触らず、この戦闘のpending_enemiesだけを差し替える。
+## current_coordも触らない。
+func _on_continue_requested(same_opponent: bool) -> void:
 	AudioManager.play("ui_confirm")
 	if not GameState.use_continue():
 		# 残0で来たら念のためタイトルへ（通常はボタンが隠れて起きない）。
 		goto_title()
 		return
-	GameState.pending_enemies = EnemyRoster.reroll_group(GameState.pending_enemies)
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	GameState.pending_enemies = RetryPlan.next_enemies(
+		GameState.pending_enemies, same_opponent, rng)
+	GameState.pending_spawn_seed = RetryPlan.next_spawn_seed(
+		GameState.pending_spawn_seed, same_opponent, rng)
 	goto_battle()
 
 

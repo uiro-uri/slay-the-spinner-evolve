@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan"
 ]
 
 
@@ -194,6 +194,9 @@ func _init() -> void:
 	print("== rendezvous ==")
 	_test_rendezvous_preview()
 
+	print("== retryplan ==")
+	_test_retry_plan()
+
 	print("== partpreview ==")
 	_test_part_preview()
 
@@ -249,8 +252,12 @@ func _test_translations() -> void:
 	TranslationServer.set_locale("ja")
 	_check(tr("TITLE_START") == "ゲームスタート", "ja: TITLE_START -> '%s'" % tr("TITLE_START"))
 	_check(
-		tr("GAMEOVER_CONTINUE") == "コンティニュー",
+		tr("GAMEOVER_CONTINUE") == "相手を替えて挑む",
 		"ja: GAMEOVER_CONTINUE -> '%s'" % tr("GAMEOVER_CONTINUE")
+	)
+	_check(
+		tr("GAMEOVER_REMATCH") == "同じ相手にもう一度",
+		"ja: GAMEOVER_REMATCH -> '%s'" % tr("GAMEOVER_REMATCH")
 	)
 
 	# 対戦画面のステータス表示キー(初期回転数など)
@@ -281,6 +288,17 @@ func _test_gamestate_autoload() -> void:
 	game_state.pending_enemies = pending
 	game_state.pending_field = FieldRoster.all()[0]
 	game_state.reset_run()
+
+	# 出現の種。呼ぶたびに散り、ランを始め直すと引き直される（前のランの立ち合いを
+	# 引き継がない）。据え置きの側は RetryPlan のテストが見る。
+	var seeds := {}
+	for i in 32:
+		game_state.roll_spawn_seed()
+		seeds[game_state.pending_spawn_seed] = true
+	_check(seeds.size() > 1, "roll_spawn_seed()は呼ぶたびに散る")
+	game_state.pending_spawn_seed = 0
+	game_state.reset_run()
+	_check(game_state.pending_spawn_seed != 0, "reset_run()で出現の種が引き直される")
 
 	_check(game_state.acquired_part_ids.is_empty(), "reset_run()でacquired_part_idsが空になる")
 	_check(game_state.pending_enemies.is_empty(), "reset_run()でpending_enemiesが空になる")
@@ -682,6 +700,12 @@ func _test_battle_defaults() -> void:
 	var suite = load("res://tests/test_battle_defaults.gd").new()
 	suite.run(_check)
 	_done("battledefaults")
+
+
+func _test_retry_plan() -> void:
+	var suite = load("res://tests/test_retry_plan.gd").new()
+	suite.run(_check)
+	_done("retryplan")
 
 
 func _test_playback_pacing() -> void:
