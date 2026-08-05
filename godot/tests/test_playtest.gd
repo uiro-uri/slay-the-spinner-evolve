@@ -718,7 +718,7 @@ func _test_naive_play_slope_text(check: Callable) -> void:
 	check.call(checked > 0, "前提: 傾斜の印を検査した戦闘ノードがある")
 
 
-## 報酬カードに実UIと同じ「取るとどう変わるか」(硬さ/寿命)が出ること。
+## 報酬カードに実UIと同じ「取るとどう変わるか」(硬さ/打たれ強さ)が出ること。
 ##
 ## 発見の経緯(コールドプレイ 2026-08-05, seed=48231): 実UIのRewardScreenは
 ## 2026-08-02から PartPreview.rows をカードに出しているのに、CLIには効果文しか
@@ -729,23 +729,26 @@ func _test_naive_play_card_preview(check: Callable) -> void:
 	var NaivePlay = load("res://playtest/naive_play.gd")
 	var stats := SpinnerStats.default_player()
 
-	# 硬さと寿命は、動かさない札でも常に出す(実UIと同じ規則。「この札では硬さが
+	# 硬さと打たれ強さは、動かさない札でも常に出す(実UIと同じ規則。「この札では硬さが
 	# 伸びない」ことも選択に必要な情報)。
-	var edge := CustomPartCatalog.by_id(11)    # SHARP_EDGE(硬さも寿命も動かさない)
+	var edge := CustomPartCatalog.by_id(11)    # SHARP_EDGE(硬さも打たれ強さも動かさない)
 	var edge_text: String = NaivePlay.card_preview_text(stats, edge)
 	check.call("硬さ" in edge_text, "naive_play: 硬さの行は変化しない札でも出る (%s)" % edge_text)
-	check.call("寿命" in edge_text, "naive_play: 寿命の行は変化しない札でも出る (%s)" % edge_text)
+	check.call(
+		"打たれ強さ" in edge_text,
+		"naive_play: 打たれ強さの行は変化しない札でも出る (%s)" % edge_text)
 	check.call(
 		not ("→" in edge_text),
 		"naive_play: 動かさない札に矢印を出さない(誤読を招く) (%s)" % edge_text)
 
-	# 巨大化は硬さを上げ寿命を下げる。両方が数字で見えること。
+	# 巨大化は硬さも打たれ強さも上げる。両方が数字で見えること
+	# (実UIが2026-08-06に寿命の行を打たれ強さへ差し替えたのと同じ内容)。
 	var growth := CustomPartCatalog.by_id(2)    # GIANT_GROWTH
 	var after := PartPreview.preview_stats(stats, growth)
 	check.call(
 		PartPreview.toughness(after) > PartPreview.toughness(stats)
-		and PartPreview.lifetime(after) < PartPreview.lifetime(stats),
-		"前提: 巨大化は硬さを上げ寿命を下げる")
+		and PartPreview.endurance(after) > PartPreview.endurance(stats),
+		"前提: 巨大化は硬さも打たれ強さも上げる")
 	var growth_text: String = NaivePlay.card_preview_text(stats, growth)
 	check.call(
 		("%s → %s" % [
@@ -754,9 +757,12 @@ func _test_naive_play_card_preview(check: Callable) -> void:
 		"naive_play: 硬さの変化が実UIと同じ桁で出る (%s)" % growth_text)
 	check.call(
 		("%s → %s" % [
-			String.num(PartPreview.lifetime(stats), 1),
-			String.num(PartPreview.lifetime(after), 1)]) in growth_text,
-		"naive_play: 寿命の変化が実UIと同じ桁で出る (%s)" % growth_text)
+			String.num(PartPreview.endurance(stats), 1),
+			String.num(PartPreview.endurance(after), 1)]) in growth_text,
+		"naive_play: 打たれ強さの変化が実UIと同じ桁で出る (%s)" % growth_text)
+	check.call(
+		not ("寿命" in growth_text),
+		"naive_play: カードに寿命の行を出さない(実UIと同じ) (%s)" % growth_text)
 
 	# 値は PartPreview から借りること(2箇所に式を書くと実UIとCLIが別の数字を出す)。
 	for id in [2, 3, 5, 7, 11, 12, 14]:
@@ -768,7 +774,7 @@ func _test_naive_play_card_preview(check: Callable) -> void:
 				"naive_play: id=%d の行が PartPreview と一致する (%s)" % [id, text])
 
 	# コマの性能を変えない札(残機・ゴースト)は、ラン側の効果を行として補う
-	# ——硬さ/寿命だけだと「何も起きない札」に見える(実UIと同じ規則)。
+	# ——硬さ/打たれ強さだけだと「何も起きない札」に見える(実UIと同じ規則)。
 	var spare := CustomPartCatalog.by_id(8)    # SPARE_CORE(残機を5にする)
 	var spare_text: String = NaivePlay.card_preview_text(stats, spare, 2)
 	check.call("残機 2 → 5" in spare_text, "naive_play: 残機札は残機の行を出す (%s)" % spare_text)

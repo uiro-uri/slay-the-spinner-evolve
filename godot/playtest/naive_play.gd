@@ -613,15 +613,16 @@ func _print_reachable(tree: MapTree, player: SpinnerStats = null) -> void:
 ## 一次証拠(コールドプレイ 2026-08-05, seed=48231): 段1でGIANT_GROWTHを
 ## 「直径×1.25(自然減衰が速まる)」がデメリットに読めて見送った——これは
 ## PartPreview の doc が「この死に方を潰すために作った」と名指ししている
-## 見送り方そのもので、実UIでは「硬さ 0.73 → 1.32 / 寿命 21.4 → 17.1」が
+## 見送り方そのもので、実UIでは「硬さ 0.73 → 1.32 / 打たれ強さ 11.0 → 19.8」が
 ## カードに出ているから起きない。**直したはずの穴をCLIだけが踏み続けていた**。
 ##
 ## ラベルは実UIの日本語(translations/strings.csv の STAT_*)に合わせる。
 ## naive_play は翻訳を通さず生キーを出す方針だが、ここは数値の意味そのものなので
-## 読める語を置く(キーのままだと硬さ/寿命の区別が付かない)。
+## 読める語を置く(キーのままだと硬さ/打たれ強さの区別が付かない)。
 const _PREVIEW_LABELS := {
 	"STAT_TOUGHNESS": "硬さ",
 	"STAT_LIFETIME": "寿命",
+	"STAT_ENDURANCE": "打たれ強さ",
 	"STAT_LIVES": "残機",
 	"STAT_GHOST": "無敵時間",
 }

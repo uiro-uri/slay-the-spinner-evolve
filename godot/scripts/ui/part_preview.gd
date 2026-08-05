@@ -19,11 +19,35 @@ extends RefCounted
 ## 急に何も通らなくなった」)をしている。カード文面は「直径×1.25・質量×1.15」までは
 ## 言うが、それが硬さと寿命をどちらへどれだけ動かすかは言わない。
 ##
-## 硬さと寿命は**変化しない札でも常に出す**。「この札では硬さが伸びない」こと自体が
+## **なぜ2行目が寿命でなく打たれ強さなのか**(2026-08-06)
+## 寿命は「殴られなくても力尽きるまでの秒数」＝**自然減衰**の軸だが、
+## 自然減衰は実際にはほとんど決着に効いていない:
+##  - `build/playtest/report.md` の死因内訳では、敵の敗因のうち自然減衰は
+##    **全レベルで0.0%**(削り51〜84% / 壁16〜49%)。
+##  - `playtest/measure_launch_force.gd` で見る自機のrps喪失内訳も、ランの行方を
+##    決めるLv3〜5では 削り71〜80% / 壁15〜25% / **減衰3〜11%**。
+## それでも寿命は2行のうち1行を占め、しかも**カード間で最も大きく動く行**だった。
+## 結果として、硬さを1ミリも動かさない FULL_STEAM_AHEAD が寿命 +5.4 と
+## 「いちばん得する札」に見え、硬さを1.8倍にする GIANT_GROWTH が寿命 −4.3 と
+## 「損する札」に見えていた。`playtest/measure_parts.gd`(Lv3・3枚)の実測では
+## 前者が **+0.5pt(全11札で最下位)**、後者が **+95.2pt(1位)** で、**見積もりの
+## 2行目が札の価値と逆を向いていた**。
+##
+## 一次証拠(コールドプレイ 2026-08-06, seed=4821): 効果テキストと見積もりだけで
+## 11枚選んだ結果、FULL_STEAM_AHEAD を2枚採り GIANT_GROWTH を2回見送って、
+## 硬さ 0.73→0.96(1.3倍)のまま決戦(敵の硬さ12.1〜12.6)へ入り**7連敗**した。
+##
+## そこで2行目を、**削り(＝喪失の7〜8割)に何回耐えられるか**に比例する
+## **打たれ強さ**へ差し替えた。寿命そのものは対戦画面の StatReadout に残る
+## ——あちらは「相手と自分のどちらが先に自滅するか」を比べる場所で、
+## 相手が分かっているぶん寿命に意味がある。カードの巨大化札は効果テキストが
+## 「大きくなるぶん自然減衰が速まる」と言い続けるので、代償が消えるわけではない。
+##
+## 硬さと打たれ強さは**変化しない札でも常に出す**。「この札では硬さが伸びない」こと自体が
 ## 選択に必要な情報で、行が出たり消えたりするとカードの高さも揺れる。
 ## 残機・無敵時間の行は、その札が動かすときだけ足す(コマの性能ではないため)。
 
-## 硬さ・寿命がゼロ除算にならないための下限。半径や回転減衰は@export_rangeで
+## 硬さ・寿命・打たれ強さがゼロ除算にならないための下限。半径や回転減衰は@export_rangeで
 ## 0.1以上に制限されているが、テストや将来の札が0を渡してもnan/infを出さない。
 const _EPSILON := 0.0001
 
@@ -40,6 +64,25 @@ static func lifetime(stats: SpinnerStats) -> float:
 	if rate < _EPSILON:
 		return 0.0
 	return stats.rps / rate
+
+
+## 打たれ強さ = rps × 硬さ ÷ (1 − 衝突軽減)。**接触に何回耐えられるか**に比例する。
+##
+## 1接触で削られるrpsは
+##   (相手の質量 × 相手の速さ × violence) ÷ 硬さ × (1 − hit_guard)
+## (spin_drain と guarded_spin_drain)。耐えられる回数は rps ÷ これなので、
+## 相手と速さと violence を共通因子として括り出すと rps × 硬さ ÷ (1 − hit_guard)
+## が残る。**相手にも速さにも依らない**ので、硬さと同じく相手を知らずに出せる。
+##
+## 硬さの行と重なるが、重ならない札がある: 回転を上げる札(EXTRA_WINDING /
+## SPIN_ENGINE)と衝突軽減の札(SHOCK_ABSORBER)は硬さを1ミリも動かさないので、
+## 硬さの行だけでは「何も起きない札」に見える。特にSHOCK_ABSORBERは
+## 硬さ・寿命の両方が凍っていて、**見積もりが一言も語らない札**だった。
+static func endurance(stats: SpinnerStats) -> float:
+	# hit_guard=1(完全無効化)でのゼロ除算避け。カタログの上限はGUARD_HIT_MAX=0.5
+	# なので実プレイでは届かないが、届いても inf を出さない。
+	var taken := maxf(1.0 - clampf(stats.hit_guard, 0.0, 1.0), _EPSILON)
+	return stats.rps * toughness(stats) / taken
 
 
 ## この札を取った後のステータス。元のstatsは変えない(プレビューなので破壊しない)。
@@ -64,9 +107,9 @@ static func rows(
 	var after := preview_stats(stats, part)
 	var result: Array[Dictionary] = [
 		_row("STAT_TOUGHNESS", toughness(stats), toughness(after), 2),
-		_row("STAT_LIFETIME", lifetime(stats), lifetime(after), 1),
+		_row("STAT_ENDURANCE", endurance(stats), endurance(after), 1),
 	]
-	# 残機札(SPARE_CORE)はコマの性能を一切変えないので、硬さ・寿命だけでは
+	# 残機札(SPARE_CORE)はコマの性能を一切変えないので、硬さ・打たれ強さだけでは
 	# 「何も起きない札」に見えてしまう。GameState側の効果をここで補う。
 	if continues >= 0 and part.lives > 0:
 		result.append(_row("STAT_LIVES", continues, maxi(continues, part.lives), 0))

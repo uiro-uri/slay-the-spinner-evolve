@@ -67,7 +67,7 @@ func _build_card(part: CustomPart) -> Control:
 	box.add_child(text)
 
 	# 「取るとどうなるか」の見積もり。効果テキストは倍率までしか言わないので、
-	# 勝敗を決める複合量(硬さ・寿命)がどちらへ動くかをここで見せる。詳細は
+	# 勝敗を決める複合量(硬さ・打たれ強さ)がどちらへ動くかをここで見せる。詳細は
 	# scripts/ui/part_preview.gd の冒頭コメント。
 	var preview_labels: Array[Label] = []
 	if _stats != null:
