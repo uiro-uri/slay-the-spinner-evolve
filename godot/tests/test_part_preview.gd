@@ -2,11 +2,17 @@ extends RefCounted
 
 ## 報酬カードの「取るとどうなるか」見積もり(scripts/ui/part_preview.gd)のテスト。
 ##
-## 大事なのは (1) 硬さ・寿命が物理と同じ式であること(表示だけ別式だと嘘になる)、
-## (2) プレビューが元のステータスを壊さないこと、(3) 変化の向き(better)が
-## 実際の増減と一致すること、(4) 硬さ・寿命の行は変化しない札でも必ず出ること、
+## 大事なのは (1) 硬さ・寿命・打たれ強さが物理と同じ式であること(表示だけ別式だと
+## 嘘になる)、(2) プレビューが元のステータスを壊さないこと、(3) 変化の向き(better)が
+## 実際の増減と一致すること、(4) 硬さ・打たれ強さの行は変化しない札でも必ず出ること、
 ## (5) コマの性能を変えない札(残機・ゴースト)でも見積もりが空にならないこと、
 ## (6) RewardScreen/Mainの配線と訳の存在。
+##
+## (7) **2行目が寿命でないこと**。寿命は自然減衰の軸で、実測では決着にほぼ効かない
+## (敵の敗因の自然減衰は全レベル0.0%)のに、カード間で最も大きく動く行だった。
+## 結果として最下位の札(FULL_STEAM_AHEAD)が最も得に見え、1位の札(GIANT_GROWTH)が
+## 損に見えていた——その逆立ちを戻さないための検査。経緯は part_preview.gd の
+## 冒頭コメントと docs/evolve/journal.md の当該サイクル。
 ##
 ## サボタージュ検証(CLAUDE.md「壊した実装を落とせて初めて完成」)は
 ## docs/evolve/journal.md の当該サイクルに記録。
@@ -15,7 +21,8 @@ extends RefCounted
 func run(check: Callable) -> void:
 	_test_derived_matches_physics(check)
 	_test_preview_does_not_mutate(check)
-	_test_growth_trades_toughness_for_lifetime(check)
+	_test_growth_shows_both_gains(check)
+	_test_second_row_tracks_drain_not_decay(check)
 	_test_rows_always_show_the_deciding_pair(check)
 	_test_non_stat_parts_still_show_something(check)
 	_test_format_hides_unchanged(check)
@@ -83,9 +90,13 @@ func _test_preview_does_not_mutate(check: Callable) -> void:
 	)
 
 
-## 巨大化(GROWTH)は硬さが上がり寿命が下がる両刃。効果テキストは「直径×1.25・
-## 質量×1.15」までしか言わないので、この2方向が見積もりに出ることが今回の眼目。
-func _test_growth_trades_toughness_for_lifetime(check: Callable) -> void:
+## 巨大化(GROWTH)は硬さも打たれ強さも上がる、実測1位(measure_parts Lv3・3枚で
+## +95.2pt)の札。効果テキストは「直径×1.25・質量×1.15・自然減衰が速まる」までしか
+## 言わないので、**得の側が数字で出ること**が今回の眼目。
+##
+## 以前の2行目(寿命)では、この札だけが唯一「悪くなる側」を表示する札で、
+## コールドプレイが2度とも見送る原因になっていた。
+func _test_growth_shows_both_gains(check: Callable) -> void:
 	var stats := _player()
 	var growth := _find_effect(CustomPart.Effect.GROWTH)
 	check.call(growth != null, "カタログに巨大化札がある")
@@ -93,11 +104,17 @@ func _test_growth_trades_toughness_for_lifetime(check: Callable) -> void:
 		return
 	var rows := PartPreview.rows(stats, growth, 3, 0.0)
 	var tough := _row_of(rows, "STAT_TOUGHNESS")
-	var life := _row_of(rows, "STAT_LIFETIME")
+	var endure := _row_of(rows, "STAT_ENDURANCE")
 	check.call(tough["better"] == 1, "巨大化: 硬さは良くなる側 (%.2f→%.2f)" % [
 		tough["before"], tough["after"]])
-	check.call(life["better"] == -1, "巨大化: 寿命は悪くなる側 (%.1f→%.1f)" % [
-		life["before"], life["after"]])
+	check.call(endure["better"] == 1, "巨大化: 打たれ強さも良くなる側 (%.1f→%.1f)" % [
+		endure["before"], endure["after"]])
+	# 寿命の行はもう出さない。出すと「最も大きく動く行」が実測1位の札に
+	# 唯一のマイナスを付ける状態へ戻る。
+	check.call(
+		_row_of(rows, "STAT_LIFETIME").is_empty(),
+		"報酬カードに寿命の行を出さない(自然減衰は決着にほぼ効かない)"
+	)
 
 	# betterの符号は実際の増減と一致していること(全札・全行で確認する)。
 	var mismatched := 0
@@ -111,33 +128,129 @@ func _test_growth_trades_toughness_for_lifetime(check: Callable) -> void:
 				mismatched += 1
 	check.call(mismatched == 0, "betterの符号が実際の増減と一致 (不一致 %d 件)" % mismatched)
 
+	# カタログには現在「下がる行」を出す札が無いので、-1の枝は合成の値で押さえる
+	# (将来デメリット札が入ったときに向きを取り違えないため)。
+	var worse := PartPreview._row("STAT_ENDURANCE", 20.0, 12.0, 1)
+	check.call(worse["better"] == -1, "下がる行は悪くなる側として出る (%d)" % worse["better"])
 
-## 硬さ・寿命は「この札では伸びない」ことも情報なので、動かない札でも必ず出す。
+
+## 2行目が「削られる側」を測っていること。打たれ強さは
+## **1接触で削られるrpsに何回耐えられるか**に比例していなければならない。
+##
+## 物理側(spin_drain × guarded_spin_drain)から耐久回数を実際に組み立て、
+## 打たれ強さの比と一致することを見る。式を2箇所に書くと表示だけが嘘になるので、
+## ここでは PartPreview を信用せず物理から作り直して突き合わせる。
+func _test_second_row_tracks_drain_not_decay(check: Callable) -> void:
+	var a := _player()
+	var b := _player()
+	b.mass = 2.4
+	b.radius = 0.9
+	b.rps = 21.0
+	b.hit_guard = 0.34
+	# 相手・速さ・violence は任意でよい(打たれ強さの定義から約分されるため、
+	# ここで違う値を入れても比が変わらないことが主張そのもの)。
+	var hits_a := _hits_survived(a, 3.1, 6.0, 0.16)
+	var hits_b := _hits_survived(b, 3.1, 6.0, 0.16)
+	var by_physics := hits_b / hits_a
+	var by_preview := PartPreview.endurance(b) / PartPreview.endurance(a)
+	check.call(
+		is_equal_approx(by_physics, by_preview),
+		"打たれ強さの比 = 耐えられる接触回数の比 (物理 %.4f / 表示 %.4f)" % [
+			by_physics, by_preview]
+	)
+	# 相手も速さも変えて同じ比になる(＝相手を知らずに出してよい量である証拠)。
+	var other := _hits_survived(b, 0.7, 12.0, 0.5) / _hits_survived(a, 0.7, 12.0, 0.5)
+	check.call(
+		is_equal_approx(other, by_preview),
+		"打たれ強さの比は相手・速さ・violenceに依らない (%.4f / %.4f)" % [other, by_preview]
+	)
+
+	# 衝突軽減(SHOCK_ABSORBER)が効くこと。以前は硬さも寿命も凍っていて、
+	# **見積もりが一言も語らない札**だった。
+	var guarded := _player()
+	guarded.hit_guard = 0.5
+	check.call(
+		PartPreview.endurance(guarded) > PartPreview.endurance(_player()) * 1.5,
+		"衝突軽減0.5で打たれ強さが1.5倍超 (%.1f → %.1f)" % [
+			PartPreview.endurance(_player()), PartPreview.endurance(guarded)]
+	)
+	var absorber := _find_effect(CustomPart.Effect.GUARD)
+	check.call(absorber != null, "カタログに衝突軽減札がある")
+	if absorber != null:
+		var row := _row_of(PartPreview.rows(_player(), absorber, 3, 0.0), "STAT_ENDURANCE")
+		check.call(
+			row["better"] == 1,
+			"衝突軽減札: 打たれ強さの行が伸びる側で出る (%.1f→%.1f)" % [
+				row["before"], row["after"]]
+		)
+
+	# 自然減衰だけを動かす札(MOMENTUM)は、どちらの行も動かさない。
+	# measure_parts(Lv3・3枚)で全11札中最下位(+0.5pt)の札が、以前は寿命 +5.4 と
+	# 「最も大きく得をする札」に見えていた。
+	var momentum := _find_effect(CustomPart.Effect.MOMENTUM)
+	check.call(momentum != null, "カタログに勢い維持札がある")
+	if momentum != null:
+		var rows := PartPreview.rows(_player(), momentum, 3, 0.0)
+		check.call(
+			_row_of(rows, "STAT_TOUGHNESS")["better"] == 0
+			and _row_of(rows, "STAT_ENDURANCE")["better"] == 0,
+			"勢い維持札: 硬さも打たれ強さも動かない(自然減衰しか触らないため)"
+		)
+
+	# ゼロ除算でinf/nanを出さない(将来の札が軽減を1.0にしても壊れない)。
+	var immune := _player()
+	immune.hit_guard = 1.0
+	check.call(
+		is_finite(PartPreview.endurance(immune))
+		and PartPreview.endurance(immune) > PartPreview.endurance(guarded),
+		"打たれ強さ: 軽減1.0でもinf/nanにならない (%.1f)" % PartPreview.endurance(immune)
+	)
+
+
+## 1回の接触で削られるrpsから逆算した「耐えられる接触回数」。物理の関数だけで組む。
+func _hits_survived(
+	stats: SpinnerStats, foe_mass: float, foe_speed: float, violence: float
+) -> float:
+	var drain := SpinnerPhysics.guarded_spin_drain(
+		SpinnerPhysics.spin_drain(foe_mass, foe_speed, stats.mass, stats.radius, violence),
+		stats.hit_guard
+	)
+	return stats.rps / drain
+
+
+## 硬さ・打たれ強さは「この札では伸びない」ことも情報なので、動かない札でも必ず出す。
 ## (行が出たり消えたりするとカードの高さも揺れる)
 func _test_rows_always_show_the_deciding_pair(check: Callable) -> void:
 	var stats := _player()
 	var missing: Array[String] = []
+	var stale: Array[String] = []
 	for part in CustomPartCatalog.all():
 		var rows := PartPreview.rows(stats, part, 3, 0.0)
-		if _row_of(rows, "STAT_TOUGHNESS").is_empty() or _row_of(rows, "STAT_LIFETIME").is_empty():
+		if _row_of(rows, "STAT_TOUGHNESS").is_empty() or _row_of(rows, "STAT_ENDURANCE").is_empty():
 			missing.append(part.title_key)
+		if not _row_of(rows, "STAT_LIFETIME").is_empty():
+			stale.append(part.title_key)
 	check.call(
 		missing.is_empty(),
-		"全ての札で硬さ・寿命の行が出る (欠け: %s)" % ", ".join(missing)
+		"全ての札で硬さ・打たれ強さの行が出る (欠け: %s)" % ", ".join(missing)
+	)
+	check.call(
+		stale.is_empty(),
+		"どの札にも寿命の行を出さない (残り: %s)" % ", ".join(stale)
 	)
 
-	# 攻めの札(EDGE)は硬さも寿命も動かさない。それが見えることが選択の材料になる。
+	# 攻めの札(EDGE)は硬さも打たれ強さも動かさない。それが見えることが選択の材料になる。
 	var edge := _find_effect(CustomPart.Effect.EDGE)
 	if edge != null:
 		var rows := PartPreview.rows(stats, edge, 3, 0.0)
 		check.call(
 			_row_of(rows, "STAT_TOUGHNESS")["better"] == 0
-			and _row_of(rows, "STAT_LIFETIME")["better"] == 0,
-			"シャープエッジ: 硬さも寿命も動かない(変化なしとして出る)"
+			and _row_of(rows, "STAT_ENDURANCE")["better"] == 0,
+			"シャープエッジ: 硬さも打たれ強さも動かない(変化なしとして出る)"
 		)
 
 
-## 残機札・ゴースト札はSpinnerStatsを一切変えない。硬さ・寿命だけだと
+## 残機札・ゴースト札はSpinnerStatsを一切変えない。硬さ・打たれ強さだけだと
 ## 「何も起きない札」に見えるので、ラン側の効果を行として補う。
 func _test_non_stat_parts_still_show_something(check: Callable) -> void:
 	var stats := _player()
@@ -228,7 +341,7 @@ func _test_screen_wiring(check: Callable) -> void:
 	var scene := FileAccess.get_file_as_string("res://scenes/reward/RewardScreen.tscn")
 	check.call(
 		scene.contains("REWARD_PREVIEW_HINT"),
-		"報酬画面に硬さ・寿命の意味の注記がある"
+		"報酬画面に硬さ・打たれ強さの意味の注記がある"
 	)
 
 
@@ -237,7 +350,7 @@ func _test_translations(check: Callable) -> void:
 	var saved := TranslationServer.get_locale()
 	for locale in ["en", "ja"]:
 		TranslationServer.set_locale(locale)
-		for key in ["STAT_TOUGHNESS", "STAT_LIFETIME",
+		for key in ["STAT_TOUGHNESS", "STAT_ENDURANCE",
 				"REWARD_PREVIEW_HEADING", "REWARD_PREVIEW_HINT"]:
 			var got := TranslationServer.translate(key)
 			check.call(got != key, "%s: %s の訳がある (%s)" % [locale, key, got])
