@@ -34,6 +34,8 @@ func run(check: Callable) -> void:
 	_test_naive_play_stats_roundtrip(check)
 	_test_naive_play_group_rewards(check)
 	_test_naive_play_field_text(check)
+	_test_naive_play_slope_text(check)
+	_test_naive_play_card_preview(check)
 	_test_naive_play_route_text(check)
 	_test_naive_play_enemy_line(check)
 	_test_naive_play_launch_lock(check)
@@ -617,6 +619,182 @@ func _test_naive_play_field_text(check: Callable) -> void:
 	var plain: String = NaivePlay.field_text(classic)
 	check.call(not ("柱" in plain), "naive_play: 柱の無い土俵に柱表記は出ない (%s)" % plain)
 	check.call("形状=RECT" in plain, "naive_play: 従来の土俵情報(壁形状)も出る")
+
+
+## 土俵の傾斜がCLIに出ること。実UIはマップのノードにケバ(StageSlopeMark)を、
+## 対戦画面の床に等高線(SlopeContour)を描いているのに、CLIには名前しか無かった。
+##
+## 発見の経緯(コールドプレイ 2026-08-05, seed=48231): 矩形・柱なしの3土俵
+## FIELD_CLASSIC / FIELD_BOWL / FIELD_PLATE は、この行が無いと土俵表示が
+## 一字一句同じで区別が付かない。実際には縁の引き戻しが3倍違う。
+func _test_naive_play_slope_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var by_key := {}
+	for field in FieldRoster.all():
+		by_key[field.title_key] = field
+	var classic: FieldData = by_key["FIELD_CLASSIC"]
+	var bowl: FieldData = by_key["FIELD_BOWL"]
+	var plate: FieldData = by_key["FIELD_PLATE"]
+
+	# 前提: この3つは壁形状・範囲・柱がすべて同じ(=傾斜以外に区別が無い)。
+	check.call(
+		classic.wall_shape == bowl.wall_shape and classic.wall_shape == plate.wall_shape
+		and classic.arena_bounds == bowl.arena_bounds
+		and classic.arena_bounds == plate.arena_bounds
+		and classic.obstacles.is_empty() and bowl.obstacles.is_empty()
+		and plate.obstacles.is_empty(),
+		"前提: CLASSIC/BOWL/PLATEは傾斜以外の土俵情報が同一")
+
+	# 傾斜の形。すり鉢(DISH)と円錐(CONE)が呼び分けられること。
+	check.call(
+		NaivePlay.slope_shape_name(classic) == "すり鉢",
+		"naive_play: DISH土俵はすり鉢と呼ぶ (%s)" % NaivePlay.slope_shape_name(classic))
+	check.call(
+		NaivePlay.slope_shape_name(plate) == "円錐",
+		"naive_play: CONE土俵は円錐と呼ぶ (%s)" % NaivePlay.slope_shape_name(plate))
+
+	# 3つの土俵行がすべて互いに異なること(この変更の目的そのもの)。
+	var t_classic: String = NaivePlay.field_text(classic)
+	var t_bowl: String = NaivePlay.field_text(bowl)
+	var t_plate: String = NaivePlay.field_text(plate)
+	check.call(t_classic != t_bowl, "naive_play: CLASSICとBOWLの土俵行が区別できる")
+	check.call(t_classic != t_plate, "naive_play: CLASSICとPLATEの土俵行が区別できる")
+	check.call(t_bowl != t_plate, "naive_play: BOWLとPLATEの土俵行が区別できる")
+
+	# 値は実UIと同じ関数から借りること(2箇所に式を書くと絵と数字が食い違う)。
+	for field in [classic, bowl, plate]:
+		var text: String = NaivePlay.field_text(field)
+		check.call(
+			("縁の引き戻し=%.1f" % StageSlopeMark.rim_pull(field)) in text,
+			"naive_play: 縁の引き戻しはStageSlopeMark.rim_pullの値 (%s)" % text)
+		check.call(
+			("等高線=%d本" % SlopeContour.ring_count(field)) in text,
+			"naive_play: 等高線の本数はSlopeContour.ring_countの値 (%s)" % text)
+		check.call(
+			("強さ=%.1f" % field.stage_strength) in text,
+			"naive_play: 傾斜の強さが出る (%s)" % text)
+
+	# 急な土俵ほどケバが多い(印としての向きが正しいこと)。
+	check.call(
+		StageSlopeMark.rim_pull(bowl) > StageSlopeMark.rim_pull(plate),
+		"前提: BOWL(すり鉢8.0)はPLATE(円錐3.0)より縁の引き戻しが強い")
+	check.call(
+		StageSlopeMark.tick_count(bowl) > StageSlopeMark.tick_count(plate),
+		"naive_play: 急な土俵ほどケバが多い")
+
+	# 部屋を選ぶ時点(=進める先/盤面)でも読めること。実UIのマップは全戦闘ノードに
+	# ケバを描いているので、選択の1画面手前に無いと意味がない。
+	var mark_bowl: String = NaivePlay.slope_mark(bowl)
+	var mark_plate: String = NaivePlay.slope_mark(plate)
+	check.call(mark_bowl != mark_plate, "naive_play: 選択時点の傾斜の印が土俵で違う")
+	check.call(
+		("%d本" % StageSlopeMark.tick_count(bowl)) in mark_bowl,
+		"naive_play: 印のケバ本数はStageSlopeMark.tick_countの値 (%s)" % mark_bowl)
+
+	# nullの土俵で落ちない(旧stateや手組みのノードから呼ばれても壊れない)。
+	check.call(NaivePlay.slope_mark(null) == "", "naive_play: 土俵nullで印は空文字")
+	check.call(NaivePlay.slope_text(null) == "", "naive_play: 土俵nullで傾斜行は空文字")
+
+	# 進める先の行にも印が載ること(選択の1画面手前)。
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var tree := MapTree.generate(rng)
+	var checked := 0
+	for coord in tree.nodes:
+		var n: MapTree.MapNode = tree.nodes[coord]
+		if not n.has_encounter():
+			continue
+		var line: String = NaivePlay.route_text(coord.y, n, null)
+		check.call(
+			NaivePlay.slope_mark(n.field) in line,
+			"naive_play: 進める先の行に傾斜の印が載る (%s)" % line)
+		var cell: String = NaivePlay.map_cell_text(coord.y, n)
+		check.call(
+			("%s%d" % [
+				NaivePlay.slope_shape_name(n.field),
+				StageSlopeMark.tick_count(n.field)]) in cell,
+			"naive_play: 盤面の俯瞰にも傾斜が載る (%s)" % cell)
+		checked += 1
+	check.call(checked > 0, "前提: 傾斜の印を検査した戦闘ノードがある")
+
+
+## 報酬カードに実UIと同じ「取るとどう変わるか」(硬さ/寿命)が出ること。
+##
+## 発見の経緯(コールドプレイ 2026-08-05, seed=48231): 実UIのRewardScreenは
+## 2026-08-02から PartPreview.rows をカードに出しているのに、CLIには効果文しか
+## 無かった。結果、段1でGIANT_GROWTHを「自然減衰が速まる」がデメリットに読めて
+## 見送った——PartPreviewのdocが「この死に方を潰すために作った」と名指ししている
+## 見送り方そのもので、直したはずの穴をCLIだけが踏み続けていた。
+func _test_naive_play_card_preview(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+	var stats := SpinnerStats.default_player()
+
+	# 硬さと寿命は、動かさない札でも常に出す(実UIと同じ規則。「この札では硬さが
+	# 伸びない」ことも選択に必要な情報)。
+	var edge := CustomPartCatalog.by_id(11)    # SHARP_EDGE(硬さも寿命も動かさない)
+	var edge_text: String = NaivePlay.card_preview_text(stats, edge)
+	check.call("硬さ" in edge_text, "naive_play: 硬さの行は変化しない札でも出る (%s)" % edge_text)
+	check.call("寿命" in edge_text, "naive_play: 寿命の行は変化しない札でも出る (%s)" % edge_text)
+	check.call(
+		not ("→" in edge_text),
+		"naive_play: 動かさない札に矢印を出さない(誤読を招く) (%s)" % edge_text)
+
+	# 巨大化は硬さを上げ寿命を下げる。両方が数字で見えること。
+	var growth := CustomPartCatalog.by_id(2)    # GIANT_GROWTH
+	var after := PartPreview.preview_stats(stats, growth)
+	check.call(
+		PartPreview.toughness(after) > PartPreview.toughness(stats)
+		and PartPreview.lifetime(after) < PartPreview.lifetime(stats),
+		"前提: 巨大化は硬さを上げ寿命を下げる")
+	var growth_text: String = NaivePlay.card_preview_text(stats, growth)
+	check.call(
+		("%s → %s" % [
+			String.num(PartPreview.toughness(stats), 2),
+			String.num(PartPreview.toughness(after), 2)]) in growth_text,
+		"naive_play: 硬さの変化が実UIと同じ桁で出る (%s)" % growth_text)
+	check.call(
+		("%s → %s" % [
+			String.num(PartPreview.lifetime(stats), 1),
+			String.num(PartPreview.lifetime(after), 1)]) in growth_text,
+		"naive_play: 寿命の変化が実UIと同じ桁で出る (%s)" % growth_text)
+
+	# 値は PartPreview から借りること(2箇所に式を書くと実UIとCLIが別の数字を出す)。
+	for id in [2, 3, 5, 7, 11, 12, 14]:
+		var part := CustomPartCatalog.by_id(id)
+		var text: String = NaivePlay.card_preview_text(stats, part)
+		for row in PartPreview.rows(stats, part):
+			check.call(
+				PartPreview.format_row(row) in text,
+				"naive_play: id=%d の行が PartPreview と一致する (%s)" % [id, text])
+
+	# コマの性能を変えない札(残機・ゴースト)は、ラン側の効果を行として補う
+	# ——硬さ/寿命だけだと「何も起きない札」に見える(実UIと同じ規則)。
+	var spare := CustomPartCatalog.by_id(8)    # SPARE_CORE(残機を5にする)
+	var spare_text: String = NaivePlay.card_preview_text(stats, spare, 2)
+	check.call("残機 2 → 5" in spare_text, "naive_play: 残機札は残機の行を出す (%s)" % spare_text)
+	check.call(
+		not ("残機" in NaivePlay.card_preview_text(stats, edge, 2)),
+		"naive_play: 残機を動かさない札に残機の行は出ない")
+	var ghost := CustomPartCatalog.by_id(9)    # GHOST
+	var ghost_text: String = NaivePlay.card_preview_text(stats, ghost, 2, 0.0)
+	check.call("無敵時間" in ghost_text, "naive_play: ゴースト札は無敵時間の行を出す (%s)" % ghost_text)
+
+	# ラベルは翻訳キーのままにしない(STAT_TOUGHNESS/STAT_LIFETIMEでは区別が付かない)。
+	check.call(
+		not ("STAT_" in growth_text),
+		"naive_play: 生の翻訳キーを出さない (%s)" % growth_text)
+
+	# プレビューは元のステータスを壊さない(表示のたびにコマが育ってはならない)。
+	var before_mass := stats.mass
+	var before_radius := stats.radius
+	NaivePlay.card_preview_text(stats, growth, 2)
+	check.call(
+		is_equal_approx(stats.mass, before_mass) and is_equal_approx(stats.radius, before_radius),
+		"naive_play: プレビューが元のステータスを書き換えない")
+
+	# 欠けた引数で落ちない。
+	check.call(NaivePlay.card_preview_text(null, growth) == "", "naive_play: stats nullで空文字")
+	check.call(NaivePlay.card_preview_text(stats, null) == "", "naive_play: part nullで空文字")
 
 
 ## 進める先の行に、敵数(リスク)と対で報酬枚数(リターン=倒した頭数ぶん)が出ること。

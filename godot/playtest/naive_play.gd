@@ -370,8 +370,12 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 		state["offered"] = ids
 		_save(state, path)
 		print("=== REWARD 段%d(Lv%d)撃破 3枚から1枚 (残り%d回, bseed=%d) ===" % [tree.current_step(), level, left, bseed])
+	# 実UIのカードと同じく、効果文の下に「取ると自分のコマがどう変わるか」を出す。
+	var stats := stats_from(state["stats"])
+	var ghost := CustomPartCatalog.total_ghost_seconds(_ids(state))
 	for c in choices:
 		print("  id=%d '%s' [%s] %s" % [c.id, c.title_key, _rarity(c.rarity), card_text(c)])
+		print("      → %s" % card_preview_text(stats, c, int(state["continues"]), ghost))
 	print("→ pick --id=<ID>")
 
 func _pick(state: Dictionary, path: String, id: int) -> void:
@@ -518,14 +522,13 @@ func _print_parts(state: Dictionary) -> void:
 	print("所持パーツ: ", ", ".join(names))
 
 func _print_tree(tree: MapTree) -> void:
-	print("--- MAP (段:col=Lv[体数,土俵])  勝てば倒した体数ぶん報酬  ゴールは段9のボス ---")
+	print("--- MAP (段:col=Lv[体数,土俵 傾斜ケバ本数])  勝てば倒した体数ぶん報酬  ゴールは段9のボス ---")
 	for step in range(1, 10):
 		var row := []
 		for col in range(-4, 6):
 			var c := Vector2i(step, col)
 			if tree.nodes.has(c):
-				var n: MapTree.MapNode = tree.nodes[c]
-				row.append("col%+d=Lv%d[%d体,%s]" % [col, n.level(), n.enemy_count(), n.field.title_key.replace("FIELD_","")])
+				row.append(map_cell_text(col, tree.nodes[c]))
 		if not row.is_empty():
 			print("  段%d: %s" % [step, "  ".join(row)])
 
@@ -534,6 +537,45 @@ func _print_reachable(tree: MapTree, player: SpinnerStats = null) -> void:
 	for c in tree.next_coords():
 		var n: MapTree.MapNode = tree.nodes[c]
 		print("  ", route_text(c.y, n, player))
+
+## 報酬カードの「取ると自分のコマがどう変わるか」の見積もり(実UIの
+## RewardScreen が PartPreview.rows で各カードに出している行のCLI版)。
+##
+## **ハーネスと実ゲームの情報量は対等に保つ約束**(route_text/threat_textと同じ)。
+## 実UIは 2026-08-02 のサイクルで、勝敗をほぼ決める複合量である
+## **硬さ=質量×半径²** と **寿命=rps÷(半径×回転減衰)** をカードに載せた。
+## ところがCLIには載らないままで、コールドプレイのエージェントだけが
+## 生の効果文だけでカードを選び続けていた。
+##
+## 一次証拠(コールドプレイ 2026-08-05, seed=48231): 段1でGIANT_GROWTHを
+## 「直径×1.25(自然減衰が速まる)」がデメリットに読めて見送った——これは
+## PartPreview の doc が「この死に方を潰すために作った」と名指ししている
+## 見送り方そのもので、実UIでは「硬さ 0.73 → 1.32 / 寿命 21.4 → 17.1」が
+## カードに出ているから起きない。**直したはずの穴をCLIだけが踏み続けていた**。
+##
+## ラベルは実UIの日本語(translations/strings.csv の STAT_*)に合わせる。
+## naive_play は翻訳を通さず生キーを出す方針だが、ここは数値の意味そのものなので
+## 読める語を置く(キーのままだと硬さ/寿命の区別が付かない)。
+const _PREVIEW_LABELS := {
+	"STAT_TOUGHNESS": "硬さ",
+	"STAT_LIFETIME": "寿命",
+	"STAT_LIVES": "残機",
+	"STAT_GHOST": "無敵時間",
+}
+
+
+static func card_preview_text(
+	stats: SpinnerStats, part: CustomPart, continues: int = -1, ghost_seconds: float = 0.0
+) -> String:
+	if stats == null or part == null:
+		return ""
+	var cells := []
+	for row in PartPreview.rows(stats, part, continues, ghost_seconds):
+		var key: String = row["label_key"]
+		cells.append("%s %s" % [
+			_PREVIEW_LABELS.get(key, key), PartPreview.format_row(row)])
+	return " / ".join(cells)
+
 
 ## カードの効果を実効果と一致する日本語で出す(CustomPart.describe()のCLI版)。
 ## 以前はRAGE/MOMENTUMもSTAT_MULTIPLY用の分岐に落ち、statの既定値MASSを読んで
@@ -633,9 +675,12 @@ static func rewards_for_group(group_size: int) -> int:
 ## ので報酬枚数の代わりにそれを明示する。
 static func route_text(col: int, n: MapTree.MapNode, player: SpinnerStats = null) -> String:
 	var threat := threat_text(n, player)
+	# 土俵は名前だけでなく傾斜も出す。実UIのマップはノードにケバを描いていて、
+	# CLIに名前しか無いと FIELD_CLASSIC/BOWL/PLATE の区別が選択の時点で付かない。
+	var field_label := "%s(%s)" % [n.field.title_key, slope_mark(n.field)]
 	if n.reward_count() <= 0:
 		return "col%+d : Lv%d %d体%s %s 撃破でクリア(報酬なし)" % [
-			col, n.level(), n.enemy_count(), threat, n.field.title_key]
+			col, n.level(), n.enemy_count(), threat, field_label]
 	# 枚数だけでなく**質**も上がる部屋がある(RARE重みが 実レベル×頭数)。リターンが
 	# 読めないとリスクだけの部屋に見えるので、選択の時点で両方を明示する。
 	# かつてここは頭数ぶん(×2/×3)しか出しておらず、**斥候(格上の単体)の見返りは
@@ -645,9 +690,9 @@ static func route_text(col: int, n: MapTree.MapNode, player: SpinnerStats = null
 	if ratio > 1.0:
 		return "col%+d : Lv%d %d体%s→報酬%d枚(レア出やすさ×%.2f) %s" % [
 			col, n.level(), n.enemy_count(), threat, n.reward_count(), ratio,
-			n.field.title_key]
+			field_label]
 	return "col%+d : Lv%d %d体%s→報酬%d枚 %s" % [
-		col, n.level(), n.enemy_count(), threat, n.reward_count(), n.field.title_key]
+		col, n.level(), n.enemy_count(), threat, n.reward_count(), field_label]
 
 
 ## 進める先1件ぶんの脅威表示。実UIのマップが出す「相手の硬さの取り分」メーターの
@@ -678,9 +723,57 @@ static func pick_allowed(offered: Array, id: int) -> bool:
 ## 土俵の表示行。実ゲームでは画面に見えている情報(壁の形と柱)をCLIにも全部出す。
 ## 以前は柱(障害物)が出ておらず、PILLARS土俵で見えない柱に向かって盲目で狙いを
 ## 決めていた(実ゲームのArenaは柱を描いていてプレイヤーには見える。一次証拠の欠落)。
+## 傾斜の形の名前。measure_field.gd と同じ呼び分け。
+static func slope_shape_name(field: FieldData) -> String:
+	if field == null:
+		return ""
+	return "すり鉢" if field.stage_shape == SpinnerPhysics.StageShape.DISH else "円錐"
+
+
+## 部屋を選ぶ時点で読む傾斜の印。実UIのマップがノードに描くケバ
+## (StageSlopeMark)のCLI版で、本数は同じ関数から借りる。
+##
+## **ハーネスと実ゲームの情報量は対等に保つ約束**(route_text/threat_textと同じ)。
+## 実UIは前サイクルでマップにケバを、対戦画面の床に等高線(SlopeContour)を入れて
+## 「入場するまで傾斜が見えない」を潰したのに、CLIには両方とも載っていなかった。
+static func slope_mark(field: FieldData) -> String:
+	if field == null:
+		return ""
+	return "傾斜%s ケバ%d本" % [slope_shape_name(field), StageSlopeMark.tick_count(field)]
+
+
+## 対戦画面に入ってから読む傾斜。実UIの床の等高線(SlopeContour)のCLI版。
+##
+## 一次証拠(コールドプレイ 2026-08-05, seed=48231): FIELD_PLATE(段2)・
+## FIELD_BOWL(段5・段7)・FIELD_CLASSIC(段8)は、この行が無いと土俵の表示が
+## 「形状=RECT 中心=(5,5) 内接半径=5.00」まで一字一句同じで**区別が付かない**。
+## 実際には円錐3.0とすり鉢8.0で縁の引き戻しが3倍違い、壁の取り分が2倍動く
+## (scripts/ui/stage_slope_mark.gd の実測表)。しかも今回のランで主戦法にした
+## 「中央に弱く置いて受ける」も、取ったGRIP札(傾斜に引かれる力+40%)の価値も、
+## まるごとこの量に乗っている。
+static func slope_text(field: FieldData) -> String:
+	if field == null:
+		return ""
+	# 縁の引き戻しは StageSlopeMark.rim_pull(=物理に測らせた実体)をそのまま出す。
+	# 等高線の本数はケバと同数(SlopeContour.ring_count)で、地図とその場の絵が対応する。
+	return "傾斜=%s 強さ=%.1f 縁の引き戻し=%.1f 等高線=%d本" % [
+		slope_shape_name(field), field.stage_strength,
+		StageSlopeMark.rim_pull(field), SlopeContour.ring_count(field)]
+
+
+## 盤面の俯瞰1マスぶん。傾斜は実UIのマップが全戦闘ノードにケバとして描いている
+## 静的な事実なので、俯瞰にも載せる(名前だけだと矩形3種が同じ絵になる)。
+static func map_cell_text(col: int, n: MapTree.MapNode) -> String:
+	return "col%+d=Lv%d[%d体,%s %s%d]" % [
+		col, n.level(), n.enemy_count(),
+		n.field.title_key.replace("FIELD_", ""),
+		slope_shape_name(n.field), StageSlopeMark.tick_count(n.field)]
+
+
 static func field_text(field: FieldData) -> String:
-	var line := "土俵: 形状=%s 中心=%s 内接半径=%.2f 範囲=%s" % [
-		_wall_name(field.wall_shape), str(field.center()), field.inradius(), str(field.arena_bounds)]
+	var line := "土俵: 形状=%s 中心=%s 内接半径=%.2f 範囲=%s  %s" % [
+		_wall_name(field.wall_shape), str(field.center()), field.inradius(), str(field.arena_bounds),
+		slope_text(field)]
 	if not field.obstacles.is_empty():
 		var pillars := []
 		for o in field.obstacles:
