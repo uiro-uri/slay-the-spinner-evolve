@@ -43,6 +43,11 @@ STREAK,Win streak: {0},連続クリア: {0}
 MAP_CHOOSE_NEXT,Choose your path,進む先を選べ
 MAP_ACQUIRED_HEADING,Your Build,取得済みアップグレード
 MAP_NO_UPGRADES,No parts yet,まだありません
+MAP_NEXT_HEADING,Rooms ahead,進める先の土俵
+MAP_NEXT_LEFT,Left,左下
+MAP_NEXT_STRAIGHT,Ahead,真下
+MAP_NEXT_RIGHT,Right,右下
+MAP_NEXT_ROW,{0}: {1},{0}: {1}
 PART_COUNT_SUFFIX," ×{0}"," ×{0}"
 FIELD_CLASSIC,Classic Dish,標準のすり鉢
 FIELD_BOWL,Deep Bowl,深いすり鉢

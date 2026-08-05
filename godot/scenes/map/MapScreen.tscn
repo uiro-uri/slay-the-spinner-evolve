@@ -25,29 +25,50 @@ theme_override_font_sizes/font_size = 24
 text = "MAP_CHOOSE_NEXT"
 horizontal_alignment = 1
 
-[node name="AcquiredPanel" type="PanelContainer" parent="."]
+[node name="LeftColumn" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 0
 offset_left = 16.0
 offset_top = 210.0
 offset_right = 316.0
 offset_bottom = 680.0
+theme_override_constants/separation = 10
 
-[node name="VBox" type="VBoxContainer" parent="AcquiredPanel"]
+[node name="NextPanel" type="PanelContainer" parent="LeftColumn"]
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="LeftColumn/NextPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="LeftColumn/NextPanel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "MAP_NEXT_HEADING"
+
+[node name="List" type="VBoxContainer" parent="LeftColumn/NextPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AcquiredPanel" type="PanelContainer" parent="LeftColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VBox" type="VBoxContainer" parent="LeftColumn/AcquiredPanel"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="Heading" type="Label" parent="AcquiredPanel/VBox"]
+[node name="Heading" type="Label" parent="LeftColumn/AcquiredPanel/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "MAP_ACQUIRED_HEADING"
 
-[node name="Scroll" type="ScrollContainer" parent="AcquiredPanel/VBox"]
+[node name="Scroll" type="ScrollContainer" parent="LeftColumn/AcquiredPanel/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="List" type="VBoxContainer" parent="AcquiredPanel/VBox/Scroll"]
+[node name="List" type="VBoxContainer" parent="LeftColumn/AcquiredPanel/VBox/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8

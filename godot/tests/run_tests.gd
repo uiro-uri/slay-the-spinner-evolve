@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist"
 ]
 
 
@@ -199,6 +199,9 @@ func _init() -> void:
 
 	print("== fieldflavor ==")
 	_test_field_flavor()
+
+	print("== nextfieldlist ==")
+	_test_next_field_list()
 
 	print("== partpreview ==")
 	_test_part_preview()
@@ -715,6 +718,12 @@ func _test_field_flavor() -> void:
 	var suite = load("res://tests/test_field_flavor.gd").new()
 	suite.run(_check)
 	_done("fieldflavor")
+
+
+func _test_next_field_list() -> void:
+	var suite = load("res://tests/test_next_field_list.gd").new()
+	suite.run(_check)
+	_done("nextfieldlist")
 
 
 func _test_playback_pacing() -> void:
