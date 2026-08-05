@@ -48,3 +48,16 @@ static func arena_unit_scale(bounds_size: Vector2, arena_px: float) -> float:
 static func placement(scaled: Vector2, visible: Vector2, h_bias: float, v_bias: float) -> Vector2:
 	var slack := Vector2(maxf(0.0, visible.x - scaled.x), maxf(0.0, visible.y - scaled.y))
 	return Vector2(slack.x * h_bias, slack.y * v_bias)
+
+
+## 高さ block_h の行の塊を、高さ span の領域の上端からの相対位置で置くときの
+## 上端オフセット。基本は span の bias 倍の位置だが、塊の下端が span を越えるなら
+## 越えない位置まで押し上げる(span より塊が高ければ 0＝上端に貼り付く)。
+##
+## 対戦画面のリザルトはメッセージ＋数行をアリーナの上に重ねるが、**行の高さは画面に
+## 依らない固定px**なのに**アリーナは端末幅で縮む**ので、細い端末ほど塊が下へはみ出して
+## 直下のバー帯へ食い込む。行を1本増やしたときに SP幅360 で 4行目がバーに重なる計算に
+## なったのがこれを入れた理由(実測できない=Battle.gdは自動読み込みに依存していて
+## ヘッドレスで実体化できないので、規則をここへ出して純粋関数として固定する)。
+static func stack_top(span: float, block_h: float, bias: float) -> float:
+	return minf(span * bias, maxf(span - block_h, 0.0))
