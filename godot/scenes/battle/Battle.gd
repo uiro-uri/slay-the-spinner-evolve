@@ -160,6 +160,19 @@ const BAR_ROW_H := 60.0
 ## 押している間の再生速度。1.0で早送り無効。
 @export_range(1.0, 8.0, 0.5) var fast_forward_multiplier: float = 3.0
 
+## コマ同士が触れない区間を自動で早送りする倍率。1.0で自動早送り無効(押した時だけ)。
+## 初弾を外すと次に噛み合うまで十数秒かかることがあり(実測でLv1のp90が15.07秒)、
+## 発射後に入力の無いこのゲームでは「外した罰＝何も起きない画面を見る時間」に
+## なっていた。次の接触の時刻は再生前から分かっているので、接触の瞬間は必ず等速に
+## 戻したまま、その手前だけを詰める。計算はPlaybackPacing.idle_speed_at(純関数)。
+@export_range(1.0, 8.0, 0.5) var idle_fast_forward_multiplier: float = 3.0
+
+## 直前の接触からこの秒数は等速のまま(命中の余韻と、発射直後の助走を潰さない)。
+@export_range(0.0, 3.0, 0.1) var idle_fast_forward_lead_in: float = 0.8
+
+## 等速⇄倍速の移り変わりにかける秒数。次の接触のこの秒数前から等速へ戻り始める。
+@export_range(0.1, 4.0, 0.1) var idle_fast_forward_ramp: float = 2.4
+
 ## 力尽きたコマが、消え始めるまでの待機(秒)。この間は最後の姿のまま残す。
 ## 乱戦の戦闘中に倒れた敵にも、決着で力尽きたコマ(敗者・引き分けの両者)にも同じ尺を使う。
 @export_range(0.0, 5.0, 0.05) var enemy_fadeout_delay: float = EnemyFadeout.DEFAULT_DELAY
@@ -320,8 +333,13 @@ var _arena_base_scale: Vector2 = Vector2.ONE
 ## 決着を付けたコマ衝突の時刻。負なら演出しない(play()で決める)。
 var _decisive_time: float = -1.0
 
-## いま早送り表示を出しているか。境目をまたいだときだけメッセージを書き換える。
-var _fast_forward_shown: bool = false
+## いま出している早送り表示の翻訳キー(空なら非表示)。境目をまたいだときだけ
+## メッセージを書き換える。手動と自動で文言が違うので、真偽ではなくキーで持つ。
+var _fast_forward_note: String = ""
+
+## コマ同士の接触時刻(昇順)。自動早送りが「次に噛み合うまで」を引くのに使う。
+## 再生開始時に軌跡から一度だけ作る。
+var _contact_times: PackedFloat32Array = PackedFloat32Array()
 
 ## いまゴースト(無敵)中か。無敵時間の境目でプレイヤーの見た目とSEを切り替える。
 var _ghost_active: bool = false
@@ -771,7 +789,11 @@ func play(result: BattleResult) -> void:
 		_enemies[i].modulate.a = 1.0
 		_enemy_bars[i].modulate.a = 1.0
 
-	_fast_forward_shown = false
+	_fast_forward_note = ""
+	# 自動早送りが見る「次に噛み合う時刻」の一覧。壁は入れない(理由はcontact_span)。
+	_contact_times = PackedFloat32Array()
+	for imp in _result.impacts:
+		_contact_times.append(imp.time)
 
 	_apply_frame(0.0)
 	# ゴースト(無敵)の見た目とSEをt=0の状態に合わせる。無敵ありなら開始SEが鳴り、
@@ -787,12 +809,24 @@ func _physics_process(delta: float) -> void:
 	if _result == null:
 		return
 
-	# 押している間だけ再生を速める。勝敗は計算済みで、軌跡には触れない。
-	var pace := PlaybackPacing.speed_at(
-		_fast_forward_held(), fast_forward_multiplier,
-		_playback_time, _decisive_time, finish_zoom_lead
+	# 再生を速める。勝敗は計算済みで、軌跡には触れない。手動(押している間)と
+	# 自動(コマ同士が触れない区間)の速い方を採る。どちらも決着ズーム演出の間は等速。
+	var held := _fast_forward_held()
+	var span := PlaybackPacing.contact_span(
+		_contact_times, _playback_time, _result.finish_time
 	)
-	_update_fast_forward_note(pace)
+	var pace := maxf(
+		PlaybackPacing.speed_at(
+			held, fast_forward_multiplier,
+			_playback_time, _decisive_time, finish_zoom_lead
+		),
+		PlaybackPacing.idle_speed_at(
+			_playback_time, span.x, span.y,
+			idle_fast_forward_multiplier, idle_fast_forward_lead_in, idle_fast_forward_ramp,
+			_decisive_time, finish_zoom_lead
+		)
+	)
+	_update_fast_forward_note(pace, held)
 	_playback_time += delta * pace
 	_apply_frame(_playback_time)
 	_update_ghost(_playback_time)
@@ -819,12 +853,17 @@ func _fast_forward_held() -> bool:
 ## 早送り中はメッセージ欄に「▶▶ 早送り」を出す。無言で時間が縮むと物理の
 ## 不具合に見えるため、圧縮していることを事実として見せる。決着(_finish)が
 ## 勝敗メッセージで上書きするので、後始末はここでは要らない。
-func _update_fast_forward_note(pace: float) -> void:
-	var active := pace > 1.05
-	if active == _fast_forward_shown:
+##
+## 自動早送りは文言を分ける。押していないのに速くなる以上、「なぜ速いのか
+## (＝まだ噛み合わない)」まで言わないと、それこそ不具合に見えるため。
+func _update_fast_forward_note(pace: float, held: bool) -> void:
+	var key := ""
+	if pace > 1.05:
+		key = "BATTLE_FAST_FORWARD" if held else "BATTLE_AUTO_FAST_FORWARD"
+	if key == _fast_forward_note:
 		return
-	_fast_forward_shown = active
-	_message.text = "BATTLE_FAST_FORWARD" if active else ""
+	_fast_forward_note = key
+	_message.text = key
 
 
 ## ゴースト(すり抜け)の見た目とSEを、時刻tが窓の内か外かに合わせる。

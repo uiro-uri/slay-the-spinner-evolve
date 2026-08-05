@@ -81,6 +81,17 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_slope_grip.gd -- --count=300
   ```
+- `godot/playtest/measure_dead_time.gd` — **空転**(コマ同士が触れていない時間)の計測器。
+  初接触までの秒数・無接触率と、`PlaybackPacing` の自動早送りを通したときの実再生秒数、
+  そして**記録された接触時刻での最大速度**(必ず1.00＝接触を飛ばしていないこと)を出す。
+  勝率ではなく**手触りの計測**である点が他と違う: 発射後に入力の無いゲームなので、
+  外した罰は「何も起きない画面を見る秒数」そのものになる。中央値ではなく**裾**を読むこと
+  (中央値の戦闘は元から短い)。`--mult` / `--lead-in` / `--ramp` を振れるので、
+  Battle.gd の既定値はここで決める。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_dead_time.gd -- --count=600
+  ```
 - `godot/playtest/measure_field.gd` — **土俵**(FIELD_*)を振って、土俵×敵レベルの
   勝率と自機のrps喪失内訳を出す計測器。run_sim は土俵を毎戦ランダムに選ぶので、
   統計はいつも6つの土俵の平均になっていて「どの土俵が難しいか」が出ていなかった。
