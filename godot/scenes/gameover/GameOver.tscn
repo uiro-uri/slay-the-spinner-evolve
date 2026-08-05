@@ -34,6 +34,16 @@ layout_mode = 2
 text = "GAMEOVER_CONTINUES_LEFT"
 horizontal_alignment = 1
 
+[node name="RetryHintLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "GAMEOVER_RETRY_HINT"
+horizontal_alignment = 1
+
+[node name="RematchButton" type="Button" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "GAMEOVER_REMATCH"
+
 [node name="ContinueButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "GAMEOVER_CONTINUE"

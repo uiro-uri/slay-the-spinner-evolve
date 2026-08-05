@@ -21,8 +21,11 @@ extends SceneTree
 ##   pick   --state=path --id=ID              報酬を1枚取る。乱戦は倒した頭数ぶん
 ##                                            reward→pickを繰り返す(実ゲームと同じ)
 ##                                            (直前のrewardで提示された札しか取れない)
-##   retry  --state=path --bseed=B            残機を1消費して同ノードへ再挑戦(新しい予告)。
-##                                            相手は同レベルの別個体に入れ替わる(実UIと同じ)
+##   retry  --state=path --bseed=B            残機を1消費して同ノードへ再挑戦。相手は
+##                                            同レベルの別個体に入れ替わり、予告も変わる
+##   retry  --state=path --same                同じ相手・同じ予告でそのまま再戦する
+##                                            (bseedは前回のまま。狙いを変えた効果だけが
+##                                             結果に出る。実UIの2択と同じ規則=RetryPlan)
 ##   giveup --state=path                      あきらめてラン終了
 ##
 ## 予告(enter/retry)と解決(launch)は同じ --bseed を渡すこと(敵の出現が一致する)。
@@ -53,7 +56,7 @@ func _init() -> void:
 		"launch": _launch(_load(path), path, int(a["bseed"]), float(a.get("from-deg","0")), a.get("target","enemy1"), float(a.get("force","1.0")))
 		"reward": _reward(_load(path), path, int(a["bseed"]))
 		"pick": _pick(_load(path), path, int(a["id"]))
-		"retry": _retry(_load(path), path, int(a["bseed"]))
+		"retry": _retry(_load(path), path, a)
 		"giveup": _giveup(_load(path), path)
 		_: printerr("unknown cmd: ", cmd)
 	quit(0)
@@ -160,28 +163,37 @@ func _enter(state: Dictionary, path: String, col: int, bseed: int) -> void:
 	tree.advance_to(target)
 	_reveal(state, tree, bseed)
 
-func _retry(state: Dictionary, path: String, bseed: int) -> void:
+## 残機を1消費して同じノードへ再挑戦する。--same なら相手も予告(bseed)も据え置き、
+## 付けなければ同レベルの別個体へ入れ替えて予告も引き直す。実UIのゲームオーバー画面の
+## 2択と同じ規則で、判断は RetryPlan に置いてある(CLIと実ゲームを別のゲームにしない)。
+func _retry(state: Dictionary, path: String, a: Dictionary) -> void:
 	if int(state["continues"]) <= 0:
 		print("残機なし。giveupへ。"); return
 	if state.get("won", false):
 		print("勝利済み。reward → pick でノードを確定する。"); return
+	var same_opponent := a.has("same")
+	if not same_opponent and not a.has("bseed"):
+		print("retry には --bseed=<新しい種> か --same のどちらかが要る。"); return
+	# 据え置きなら前回の種をそのまま使う＝予告が1ドットも変わらない。
+	var bseed := int(state["bseed"]) if same_opponent else int(a["bseed"])
 	state["continues"] = int(state["continues"]) - 1
 	state["offered"] = null
-	state["bseed"] = bseed     # 新しい予告。launchはこのbseedで解決する
+	state["bseed"] = bseed     # launchはこのbseedで解決する
 	state["must_retry"] = false
 	var tree := _tree_at(state)
 	tree.advance_to(Vector2i(tree.current_step() + 1, int(state["pending"])))
 	var node: MapTree.MapNode = tree.nodes[tree.current_coord]
-	# 同じ相手に同じ負け方を繰り返させない: いま戦った個体を基準に、同レベルの
-	# 別個体へ入れ替える(EnemyRoster.reroll_group。実UIのMain._on_continue_requestedと
-	# 同じ規則)。入れ替えはbseedから決定的に引き、名前でstateに保存する
+	# 入れ替えるときはbseedから決定的に引き、名前でstateに保存する
 	# (launchはこの名前列から同じ相手を復元する=予告と実戦は一致したまま)。
 	var reroll_rng := RandomNumberGenerator.new()
 	reroll_rng.seed = bseed
 	state["enemies"] = group_names(
-		EnemyRoster.reroll_group(node_group(state, node), reroll_rng))
+		RetryPlan.next_enemies(node_group(state, node), same_opponent, reroll_rng))
 	_save(state, path)
-	print("=== RETRY 残機を1消費 (残り%d) 同レベルの別個体と再戦 ===" % state["continues"])
+	if same_opponent:
+		print("=== RETRY 残機を1消費 (残り%d) 同じ相手・同じ予告で再戦 ===" % state["continues"])
+	else:
+		print("=== RETRY 残機を1消費 (残り%d) 同レベルの別個体と再戦 ===" % state["continues"])
 	_reveal(state, tree, bseed)
 
 ## 交戦中ノードの敵予告と土俵を出す。プレイヤーが撃つ前に見える情報。
@@ -1115,7 +1127,12 @@ func _args() -> Dictionary:
 	if argv.size() > 0 and not argv[0].begins_with("--"):
 		out["cmd"] = argv[0]
 	for arg in argv:
-		if arg.begins_with("--") and arg.contains("="):
-			var eq := arg.find("=")
+		if not arg.begins_with("--"):
+			continue
+		var eq := arg.find("=")
+		if eq < 0:
+			# 値なしフラグ(--same)。has()で見るので中身は何でもよい。
+			out[arg.substr(2)] = "1"
+		else:
 			out[arg.substr(2, eq - 2)] = arg.substr(eq + 1)
 	return out
