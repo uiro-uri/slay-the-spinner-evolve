@@ -124,7 +124,9 @@ var _time := 0.0
 var _entrance := 0.0
 var _hovered_coord := NO_HOVER
 
-@onready var _acquired_list: VBoxContainer = $AcquiredPanel/VBox/Scroll/List
+@onready var _acquired_list: VBoxContainer = $LeftColumn/AcquiredPanel/VBox/Scroll/List
+@onready var _next_panel: PanelContainer = $LeftColumn/NextPanel
+@onready var _next_list: VBoxContainer = $LeftColumn/NextPanel/VBox/List
 
 
 func _ready() -> void:
@@ -143,6 +145,7 @@ func setup(
 	_acquired_ids = acquired_ids
 	_rebuild()
 	_rebuild_acquired()
+	_rebuild_next_fields()
 
 
 func _process(delta: float) -> void:
@@ -209,6 +212,13 @@ func _on_node_unhover(coord: Vector2i) -> void:
 ## 中身は左上の常時オーバーレイ(StatPanel)がバーで見せるので、ここは取得の一覧に徹する。
 func _rebuild_acquired() -> void:
 	AcquiredUpgradeList.populate(_acquired_list, _acquired_ids, false)
+
+
+## 進める先の土俵を左の列に並べ直す。組み立ては NextFieldList に任せる
+## (_rebuild_acquired と同じ流儀で、ここは器の出し入れだけ)。
+## 行が1つも無ければパネルごと隠す——見出しだけのパネルは壊れて見える。
+func _rebuild_next_fields() -> void:
+	_next_panel.visible = NextFieldList.populate(_next_list, _tree) > 0
 
 
 func _to_pixel(coord: Vector2i) -> Vector2:
