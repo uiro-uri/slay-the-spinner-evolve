@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "cappedaxes", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist"
 ]
 
 
@@ -205,6 +205,9 @@ func _init() -> void:
 
 	print("== partpreview ==")
 	_test_part_preview()
+
+	print("== cappedaxes ==")
+	_test_capped_axes()
 
 	print("== threatmeter ==")
 	_test_threat_meter()
@@ -742,6 +745,12 @@ func _test_part_preview() -> void:
 	var suite = load("res://tests/test_part_preview.gd").new()
 	suite.run(_check)
 	_done("partpreview")
+
+
+func _test_capped_axes() -> void:
+	var suite = load("res://tests/test_capped_axes.gd").new()
+	suite.run(_check)
+	_done("cappedaxes")
 
 
 func _test_ghost_visual() -> void:
