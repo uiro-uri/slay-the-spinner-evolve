@@ -147,12 +147,13 @@ STAT_GHOST,Invincibility,無敵時間
 STAT_LIVES,Lives,残機
 STAT_TOUGHNESS,Toughness,硬さ
 STAT_LIFETIME,Spin Time,寿命
+STAT_ATTACK,Attack,攻め力
 STAT_ENDURANCE,Staying Power,打たれ強さ
 STAT_WALL_ENDURANCE,Wall Endurance,壁強さ
 STAT_ENEMY_TOUGHNESS,vs Toughness,硬さ 相手
 STAT_ENEMY_LIFETIME,vs Spin Time,寿命 相手
 REWARD_PREVIEW_HEADING,If you take it,取ると
-REWARD_PREVIEW_HINT,"Toughness resists drain; Staying Power is how many hits you can take; Wall Endurance is how many wall slams",硬さ＝一撃の削られにくさ／打たれ強さ＝耐えられる接触の回数／壁強さ＝耐えられる壁の回数
+REWARD_PREVIEW_HINT,"Toughness resists drain; Attack is how much you drain per hit; Staying Power is how many hits you can take; Wall Endurance is how many wall slams",硬さ＝一撃の削られにくさ／攻め力＝一撃で削れる量／打たれ強さ＝耐えられる接触の回数／壁強さ＝耐えられる壁の回数
 PART_GIANT_GROWTH,Giant Growth,ジャイアントグロース
 PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
 PART_FULL_STEAM_AHEAD,Full Steam Ahead,フルスロットル

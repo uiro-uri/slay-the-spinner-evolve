@@ -25,6 +25,7 @@ func run(check: Callable) -> void:
 	_test_share_degenerate(check)
 	_test_levels_are_ordered(check)
 	_test_reachable_only(check)
+	_test_hardest_is_one_body_not_the_room(check)
 	_test_geometry(check)
 
 
@@ -308,6 +309,56 @@ func _test_geometry(check: Callable) -> void:
 	check.call(
 		tick.position.y < track.position.y and tick.end.y > track.end.y,
 		"目盛りは外枠の上下へはみ出す"
+	)
+
+
+## 報酬画面の攻め力(PartPreview.attack)の基準にする相手。
+##
+## **1体ぶんの最大であって、部屋の和ではない**。攻め力は「1接触で相手から削れるrps」
+## なので、頭数を足し込むと3体の部屋で攻め力が1/3に見え、「乱戦ほど攻め札が無価値」
+## という逆の嘘になる(部屋の脅威 room_toughness が和なのは「この部屋を抜けられるか」
+## の話で、1回の噛み合いの相手はそのうちの1体でしかない)。
+##
+## 進める先が無ければ -1.0。決戦のあとがそれで、そこでは攻めの行を出さない。
+func _test_hardest_is_one_body_not_the_room(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260806
+	var tree := MapTree.generate(rng)
+
+	var hardest := ThreatMeter.reachable_hardest_toughness(tree)
+	# 進める先の全個体を素で舐めた最大と一致すること(和でも平均でもない)。
+	var expected := -1.0
+	var total := 0.0
+	var bodies := 0
+	for coord in tree.next_coords():
+		var node: MapTree.MapNode = tree.nodes[coord]
+		if not node.has_encounter():
+			continue
+		for stats in ThreatMeter.stats_of(node.enemies):
+			expected = maxf(expected, PartPreview.toughness(stats))
+			total += PartPreview.toughness(stats)
+			bodies += 1
+	check.call(bodies > 1, "検査に使う段に相手が複数居る: %d体" % bodies)
+	check.call(
+		absf(hardest - expected) < EPS,
+		"進める先のいちばん硬い1体: %.4f (期待 %.4f)" % [hardest, expected]
+	)
+	check.call(
+		hardest < total - EPS,
+		"頭数ぶんの和ではない: 最大%.4f < 和%.4f" % [hardest, total]
+	)
+
+	# 進める先が無い(ゴールに立っている)なら基準の相手も無い。
+	var goal := MapTree.generate(rng)
+	goal.current_coord = MapTree.GOAL_COORD
+	check.call(
+		goal.next_coords().is_empty()
+		and ThreatMeter.reachable_hardest_toughness(goal) < 0.0,
+		"進める先が無ければ基準の相手も無い(-1)"
+	)
+	check.call(
+		ThreatMeter.reachable_hardest_toughness(null) < 0.0,
+		"マップが無ければ基準の相手も無い(-1)"
 	)
 
 
