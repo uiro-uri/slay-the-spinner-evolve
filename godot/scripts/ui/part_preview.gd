@@ -43,8 +43,31 @@ extends RefCounted
 ## 相手が分かっているぶん寿命に意味がある。カードの巨大化札は効果テキストが
 ## 「大きくなるぶん自然減衰が速まる」と言い続けるので、代償が消えるわけではない。
 ##
-## 硬さと打たれ強さは**変化しない札でも常に出す**。「この札では硬さが伸びない」こと自体が
-## 選択に必要な情報で、行が出たり消えたりするとカードの高さも揺れる。
+## **なぜ3行目に壁の軸が要るのか**(2026-08-06)
+## 硬さも打たれ強さも**接触(コマ同士の削り)の量**で、壁は1ミリも入っていない。
+## ところが壁は喪失の半分以上を占める:
+##  - コールドプレイ(seed=4821・9戦全勝でクリア)の自機rps喪失は、ラン合計で
+##    **壁61.1 対 削り52.5**。段6以降は毎戦で壁が削りを上回った
+##    (段6 8.8対4.5 / 段7 10.7対7.6 / 段8 12.0対10.3 / 決戦 20.3対14.8)。
+##  - `custom_part_catalog.gd` の LOW_CENTER の由来にも
+##    「壁でのrps喪失はプレイヤーの敗因の約半分を占める」とある。
+## それでも見積もりの2行はどちらも接触の量なので、**壁の代償を軽くする唯一の札**
+## RAGE_REFLECTION(wall_keep)は、報酬画面で
+## 「硬さ 2.76 / 打たれ強さ 106.0」と**2行とも変化なし**で出ていた。
+## 同じカードの効果文は「終盤は壁での喪失が削りに並ぶ、後半ほど効く」と書いている
+## ので、**カードが自分の数字と正反対のことを言っている**状態だった
+## (上のコールドプレイはこの札を2枚とも、見積もりを無視して効果文だけで取っている)。
+## 対戦画面の StatReadout には反発の行があるのでRAGEも多少は動いて見えるが、
+## **選ぶ場所である報酬画面にだけ壁の軸が無い**という切れ方をしていた。
+##
+## 打たれ強さと壁強さは wall_keep も hit_guard も0のうちは**同じ値になる**が、
+## それは「ラン開始時は接触にも壁にも同じ回数だけ耐えられる」という本当のことで、
+## 片方の札を取った瞬間に恒久的に割れる。並べる意味はそこにある——
+## 衝突軽減と怒りの反射を並べたとき、どちらがどちらの軸かが2行の対比で一目で読める。
+##
+## 硬さ・打たれ強さ・壁強さは**変化しない札でも常に出す**。「この札では硬さが伸びない」
+## こと自体が選択に必要な情報で、行が出たり消えたりするとカードの高さも揺れる
+## (行を1本足してもカードは371→403px、画面全体で521/720pxに収まることを実測済み)。
 ## 残機・無敵時間の行は、その札が動かすときだけ足す(コマの性能ではないため)。
 
 ## 硬さ・寿命・打たれ強さがゼロ除算にならないための下限。半径や回転減衰は@export_rangeで
@@ -85,6 +108,28 @@ static func endurance(stats: SpinnerStats) -> float:
 	return stats.rps * toughness(stats) / taken
 
 
+## 壁強さ = rps × 硬さ ÷ (1 − 壁での軽減)。**壁に何回耐えられるか**に比例する。
+## 打たれ強さ(接触版)と同じ形で、割る相手が hit_guard ではなく wall_keep になる。
+##
+## 壁1回の喪失は wall_absolute_share(既定0.6)で2つの式を混ぜたもの
+## (BattleResolver._wall_damaged_rps)。**支配的な絶対量の側**は
+##   absolute_wall_drain(進入速度, 質量, 半径, wall_violence) × (1 − wall_keep)
+##   = wall_violence × 進入速度 ÷ 硬さ × (1 − wall_keep)
+## なので、耐えられる回数は rps ÷ これ。**wall_violence と進入速度を共通因子として
+## 括り出す**と rps × 硬さ ÷ (1 − wall_keep) が残る——打たれ強さで相手・速さ・
+## violence を括り出したのと同じ手口で、**土俵にも速さにも依らない**量になる。
+##
+## 残り(比例の側)は rps × effective_wall_damping(base, wall_keep) の乗算なので、
+## 耐えられる回数は硬さに依らず対数で効く。ただし **rps↑・wall_keep↑ で増える向きは
+## 同じ**(effective_wall_damping は wall_keep 単調増加)なので、2つの式で符号が
+## 食い違うことはない。硬さの寄与だけが比例側で薄まる、という控えめな見積もりになる。
+static func wall_endurance(stats: SpinnerStats) -> float:
+	# wall_keep=1(壁で無損失)でのゼロ除算避け。カタログの上限は RAGE_WALL_KEEP_MAX=0.5
+	# なので実プレイでは届かないが、届いても inf を出さない(endurance と同じ扱い)。
+	var taken := maxf(1.0 - clampf(stats.wall_keep, 0.0, 1.0), _EPSILON)
+	return stats.rps * toughness(stats) / taken
+
+
 ## この札を取った後のステータス。元のstatsは変えない(プレビューなので破壊しない)。
 static func preview_stats(stats: SpinnerStats, part: CustomPart) -> SpinnerStats:
 	var after := stats.duplicate_stats()
@@ -108,6 +153,7 @@ static func rows(
 	var result: Array[Dictionary] = [
 		_row("STAT_TOUGHNESS", toughness(stats), toughness(after), 2),
 		_row("STAT_ENDURANCE", endurance(stats), endurance(after), 1),
+		_row("STAT_WALL_ENDURANCE", wall_endurance(stats), wall_endurance(after), 1),
 	]
 	# 残機札(SPARE_CORE)はコマの性能を一切変えないので、硬さ・打たれ強さだけでは
 	# 「何も起きない札」に見えてしまう。GameState側の効果をここで補う。

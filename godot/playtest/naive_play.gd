@@ -621,6 +621,7 @@ const _PREVIEW_LABELS := {
 	"STAT_TOUGHNESS": "硬さ",
 	"STAT_LIFETIME": "寿命",
 	"STAT_ENDURANCE": "打たれ強さ",
+	"STAT_WALL_ENDURANCE": "壁強さ",
 	"STAT_LIVES": "残機",
 	"STAT_GHOST": "無敵時間",
 }
