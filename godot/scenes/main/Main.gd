@@ -95,9 +95,13 @@ func _pending_enemy_stats() -> Array[SpinnerStats]:
 
 
 ## 負けたらゲームオーバー画面へ。勝てば報酬を選んでマップへ戻る。
-func _on_battle_finished(player_won: bool, knockout: bool) -> void:
+func _on_battle_finished(
+	player_won: bool, knockout: bool, enemy_tracks: Array
+) -> void:
 	if not player_won:
-		goto_gameover()
+		# 相手の軌跡を持って行く。ゲームオーバー画面の3択のうち2つは「相手をどう
+		# 扱うか」なのに、Battleごと差し替わるせいで相手の情報が画面から消えていた。
+		goto_gameover(enemy_tracks)
 		return
 	if GameState.map_tree.is_goal():
 		# ボスに勝ったらラン終了。クリア画面で締める。
@@ -127,11 +131,13 @@ func _on_gameclear_to_title() -> void:
 	goto_title()
 
 
-func goto_gameover() -> void:
+## enemy_tracksは負けた相手の軌跡(Battle.finished が渡す)。
+## 既定の空配列は「軌跡が無い＝行を出さない」。
+func goto_gameover(enemy_tracks: Array = []) -> void:
 	var gameover := _swap_screen(GAMEOVER_SCENE)
 	gameover.continue_requested.connect(_on_continue_requested)
 	gameover.give_up_requested.connect(_on_give_up_requested)
-	gameover.setup(GameState.continues_left)
+	gameover.setup(GameState.continues_left, enemy_tracks)
 
 
 ## コンティニュー: 回数を1消費し、同じマップ位置で戦闘へ戻る。相手を据え置くか

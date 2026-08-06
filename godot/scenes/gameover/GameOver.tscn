@@ -29,6 +29,11 @@ theme_override_font_sizes/font_size = 48
 text = "GAMEOVER_TITLE"
 horizontal_alignment = 1
 
+[node name="MarginLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "GAMEOVER_MARGIN"
+horizontal_alignment = 1
+
 [node name="ContinuesLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "GAMEOVER_CONTINUES_LEFT"

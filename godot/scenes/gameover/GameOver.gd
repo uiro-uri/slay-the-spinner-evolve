@@ -10,6 +10,7 @@ signal continue_requested(same_opponent: bool)
 signal give_up_requested
 
 @onready var _continues_label: Label = $CenterContainer/VBoxContainer/ContinuesLabel
+@onready var _margin_label: Label = $CenterContainer/VBoxContainer/MarginLabel
 @onready var _rematch_button: Button = $CenterContainer/VBoxContainer/RematchButton
 @onready var _continue_button: Button = $CenterContainer/VBoxContainer/ContinueButton
 @onready var _give_up_button: Button = $CenterContainer/VBoxContainer/GiveUpButton
@@ -21,11 +22,19 @@ func _ready() -> void:
 	_give_up_button.pressed.connect(_on_give_up_pressed)
 
 
-## 残りコンティニュー回数を受け取り、表示とボタンの活殺を決める。
+## 残りコンティニュー回数と、負けた相手が残していた回転を受け取る。
 ## 残0ならコンティニューは選べず、あきらめるだけになる。
-func setup(remaining: int) -> void:
+##
+## enemy_tracks を出すのは、この画面の3択のうち2つ(同じ相手にもう一度／
+## 相手を替えて挑む)が**相手をどう扱うか**の選択だから。相手にどこまで届いて
+## いたかは戦闘画面のリザルトにしか出ておらず、Mainが画面を差し替えた瞬間に
+## 消えていた=残機の数だけを見て3択させていた。空配列(軌跡なし)なら
+## 行ごと隠す(RemainingRpsText.opponent_margin_line が空文字を返す)。
+func setup(remaining: int, enemy_tracks: Array = []) -> void:
 	# 残数ラベルは{0}を差し込むので、キーの自動翻訳ではなく手で組み立てる。
 	_continues_label.text = tr("GAMEOVER_CONTINUES_LEFT").format([remaining])
+	_margin_label.text = RemainingRpsText.opponent_margin_line(enemy_tracks)
+	_margin_label.visible = not _margin_label.text.is_empty()
 	var can_continue := remaining > 0
 	_rematch_button.visible = can_continue
 	_rematch_button.disabled = not can_continue

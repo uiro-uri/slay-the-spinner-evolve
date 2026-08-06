@@ -20,6 +20,7 @@ func run(check: Callable) -> void:
 	_test_near_miss_shows_both_faces(check)
 	_test_empty_hides(check)
 	_test_locales(check)
+	_test_opponent_margin_line(check)
 	TranslationServer.set_locale(saved_locale)
 
 
@@ -132,6 +133,58 @@ func _test_locales(check: Callable) -> void:
 	check.call(en.contains("you"), "en: 'you'を含む: %s" % en)
 	check.call(en.contains("them"), "en: 'them'を含む: %s" % en)
 	check.call(not en.contains("BATTLE_RPS_REMAINING"), "en: キーが素通りしていない: %s" % en)
+
+
+## 敗北画面へ持ち越す1行(opponent_margin_line)。決着リザルトの remaining_line と
+## 同じ totals/percent から引くので、値の作り方はそちらのテストが押さえている。
+## ここで縛るのはこの行に固有の3点:
+##   (1) 相手の数字**だけ**を出す(自分は負けた側で必ず0付近＝3択の材料にならない)
+##   (2) 実数と割合の両方を出す(0.2/38.6 のような「割合0%だがあと一撃」が
+##       この画面でこそ効く。片方だけでは あきらめる/挑む を分けられない)
+##   (3) 軌跡が無ければ空文字＝ラベルごと隠す
+func _test_opponent_margin_line(check: Callable) -> void:
+	TranslationServer.set_locale("ja")
+
+	# コールドプレイで実際に見た決着: 相手 1.9/38.6。ここを見て残機を払った。
+	var line := RemainingRpsText.opponent_margin_line([_frames([38.6, 1.9])])
+	check.call(line.contains("1.9"), "相手の残り実数が出る: %s" % line)
+	check.call(line.contains("5"), "相手の割合1.9/38.6=5%が出る: %s" % line)
+	# 自分の側は載せない。負けた側の残りは常に0付近で、載せると
+	# 「0.0(0%)」が毎回並んで相手の数字を薄めるだけになる。
+	check.call(not line.contains("自分"), "自分の側は出さない: %s" % line)
+
+	# 割合が0%へ丸まる決着でも実数が残る＝「あと一撃」と「歯が立たない」が分かれる。
+	var near := RemainingRpsText.opponent_margin_line([_frames([40.1, 0.2])])
+	var untouched := RemainingRpsText.opponent_margin_line([_frames([40.1, 0.0])])
+	check.call(near.contains("0.2"), "実数0.2が残る: %s" % near)
+	check.call(near.contains("(0%)"), "割合は0%へ丸まる: %s" % near)
+	check.call(near != untouched, "残り0.2と残り0.0が同じ文にならない: %s / %s" % [near, untouched])
+
+	# 乱戦は頭数ぶん畳む。畳むのはこの関数の中(Battleは軌跡を素通しするだけ)。
+	# 全滅していない部屋で負けた場合、残っているのは頭数ぶんの和。
+	var melee_line := RemainingRpsText.opponent_margin_line([
+		_frames([20.0, 0.0]), _frames([18.0, 9.0])
+	])
+	check.call(melee_line.contains("9.0"), "乱戦は頭数ぶんの和で出る: %s" % melee_line)
+	check.call(melee_line.contains("24"), "割合も和で 9/38=24%: %s" % melee_line)
+
+	check.call(
+		RemainingRpsText.opponent_margin_line([]) == "",
+		"軌跡なしは空文字(ラベルごと隠す)"
+	)
+	check.call(
+		RemainingRpsText.opponent_margin_line([_frames([18.0, 6.0]), []]) == "",
+		"1体でもフレーム欠落なら空文字(残りの1体だけで満タンを縮めない)"
+	)
+
+	# 両言語に訳があること。訳抜けならキーが素通りして気付ける。
+	check.call(line.contains("相手"), "ja: '相手'を含む: %s" % line)
+	check.call(not line.contains("GAMEOVER_MARGIN"), "ja: キーが素通りしていない: %s" % line)
+	TranslationServer.set_locale("en")
+	var en := RemainingRpsText.opponent_margin_line([_frames([38.6, 1.9])])
+	check.call(en.contains("still spinning"), "en: 'still spinning'を含む: %s" % en)
+	check.call(en.contains("1.9"), "en: 実数が出る: %s" % en)
+	check.call(not en.contains("GAMEOVER_MARGIN"), "en: キーが素通りしていない: %s" % en)
 
 
 ## rpsの並びから軌跡(Snapshotの配列)を作る。位置・速度はこの行が読まないので固定値。
