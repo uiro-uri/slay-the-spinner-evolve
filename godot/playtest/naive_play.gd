@@ -256,12 +256,10 @@ func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force:
 		str(pos), vel.length(), int(rad_to_deg(vel.angle())), clampf(force, 0.0, 1.0)])
 	for i in results.size():
 		var r: Dictionary = results[i]
-		var why := "噛み合う" if bool(r["contact"]) else (
-			"外す(壁か柱で打ち切り)" if bool(r["cut_short"]) else "外す")
 		var pp: Vector2 = r["player_point"]
 		var ep: Vector2 = r["enemy_point"]
 		print("  enemy%d: %s  一番近づくのは %.2fs / 縁の隙間 %.2f / 自分(%.2f, %.2f) 相手(%.2f, %.2f)" % [
-			i + 1, why, r["time"], r["gap"], pp.x, pp.y, ep.x, ep.y])
+			i + 1, lead_text(r), r["time"], r["gap"], pp.x, pp.y, ep.x, ep.y])
 	var best := RendezvousPreview.primary_index(results)
 	if best >= 0:
 		print("  → 実UIが輪で見せるのは enemy%d のぶん" % [best + 1])
@@ -1114,6 +1112,31 @@ static func no_contact_note(result: BattleResult) -> String:
 	):
 		return "(接触ゼロ: 自分が落とした敵が1体も居ない。自滅・同士討ちなので撃破ボーナス対象外)"
 	return ""
+
+
+## 打ち切りの訳キー→CLIの日本語。ロケールに関係なくCLIは日本語で書く
+## (_AXIS_LABELS と同じ流儀)ので、TranslationServer は通さない。**キーの
+## 面倒だけを見る表**で、どちらが届いたかの判定は持たない。
+const _LEAD_CUT_LABELS := {
+	"BATTLE_LEAD_CUT_PLAYER": "自分が先に壁・柱へ届く",
+	"BATTLE_LEAD_CUT_ENEMY": "相手が先に壁・柱へ届く",
+	"BATTLE_LEAD_CUT_BOTH": "両者とも壁・柱へ届く",
+}
+
+
+## 先読み1件の見出し。噛み合うか・外すか・**どちら側の壁で打ち切られたか**。
+##
+## 判定は実UIと同じ RendezvousPreview.hint_key を通す。CLIが自前で「壁か柱で
+## 打ち切り」と書いていた頃は、どちら側が届いたのかが実UIにもCLIにも出て
+## いなかった——満引きの罰(自分が先に壁へ着く)と、待てば噛み合う形(相手が
+## 先に壁へ着く)が同じ文言になっていた。
+static func lead_text(lead: Dictionary) -> String:
+	if bool(lead.get("contact", false)):
+		return "噛み合う"
+	var key := RendezvousPreview.hint_key(lead)
+	if key == "":
+		return "外す"
+	return "外す(%s)" % _LEAD_CUT_LABELS[key]
 
 
 ## 勝利成長の表示。回転が上限(RPS_CAP)に達すると成長量は0なのに、従来は

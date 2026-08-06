@@ -13,6 +13,13 @@ extends Node2D
 ## Palette.AIM に寄せて予告(赤)と対の彩度に揃える。
 const ARROW_COLOR := Palette.AIM
 
+## 打ち切りの印(破線の外輪)の見た目。コマの輪の外側に置く余白・破線の本数・
+## 1本ぶんの角度。破線にするのは実線の輪が2本並ぶと「どちらが何か」が
+## 読めなくなるため。
+const CUT_MARK_MARGIN := 0.12
+const CUT_MARK_DASHES := 8
+const CUT_MARK_DASH_RAD := TAU / 16.0
+
 ## これ以上引いても速くならない上限(ユニット)。full pull(=この距離)で初速がLaunchSpeed.MAXになる。
 @export_range(0.5, 10.0, 0.1) var max_pull: float = 4.0
 
@@ -157,6 +164,11 @@ func _draw() -> void:
 ## 噛み合うときだけ線を金色の実線にして、輪も塗る。当たり判定そのものではなく
 ## 「予告の見えているとおりに飛べば触れる」という読みなので、予告の揺れぶんは
 ## 揺れる(Battleが揺れた表示値を渡している)。
+##
+## 先読みが壁・柱で打ち切られた側には破線の外輪を重ねる。打ち切りの輪は
+## 「一番近づく点」ではなく「ここで読むのをやめた点」なので、無印だと
+## **惜しくも外した**と同じ絵になる(コールドプレイ2026-08-06)。どちら側が
+## 届いたかは RendezvousPreview が決める——ここは印を置くだけ。
 func _draw_lead() -> void:
 	if _lead.is_empty():
 		return
@@ -174,3 +186,21 @@ func _draw_lead() -> void:
 	theirs.a = 0.85 if contact else 0.45
 	draw_arc(pp, _lead_player_radius, 0.0, TAU, 32, mine, 0.06)
 	draw_arc(ep, _lead_enemy_radius, 0.0, TAU, 32, theirs, 0.06)
+
+	if RendezvousPreview.cut_player(_lead):
+		_draw_cut_mark(pp, _lead_player_radius)
+	if RendezvousPreview.cut_enemy(_lead):
+		_draw_cut_mark(ep, _lead_enemy_radius)
+
+
+## 「ここで先読みを打ち切った」の破線の外輪。コマの輪より一回り大きくして
+## 重ならないようにし、色は見積もりの「下がった値」と同じ Palette.STAT_DOWN
+## ——自機色(緑)・敵色(赤)のどちらとも別の色でないと、どちらの輪に印が
+## 付いているのか読めない。
+func _draw_cut_mark(at: Vector2, radius: float) -> void:
+	var mark := Palette.STAT_DOWN
+	mark.a = 0.9
+	var ring := radius + CUT_MARK_MARGIN
+	for i in CUT_MARK_DASHES:
+		var from := TAU * float(i) / float(CUT_MARK_DASHES)
+		draw_arc(at, ring, from, from + CUT_MARK_DASH_RAD, 4, mark, 0.05)
