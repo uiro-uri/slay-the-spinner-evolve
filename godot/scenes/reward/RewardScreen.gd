@@ -66,6 +66,31 @@ func _build_card(part: CustomPart) -> Control:
 	text.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(text)
 
+	# 上限に達して動かなくなった軸の注記。効果文は上限に達した後も
+	# 「直径 ×1.25（上限 2）＆質量 ×1.15（上限 8）」と両方を謳い続けるが、
+	# 既に直径が上限のビルドでは半分が死んでいる。止まっている軸が無ければ
+	# 何も足さない。詳細は CustomPart.capped_axes の冒頭コメント。
+	var capped_label: Label = null
+	if _stats != null:
+		var capped_text := part.capped_note(_stats)
+		if capped_text != "":
+			capped_label = Label.new()
+			capped_label.text = capped_text
+			capped_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			capped_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			capped_label.add_theme_font_size_override("font_size", 12)
+			# 見積もりの「下がった値」と同じ色。良し悪しは色で見せる約束
+			# (_build_preview_row と同じ手口)なので、レアの明るい地では
+			# 暗色の縁取りを足して読ませる。dark(暗色文字)には入れない
+			# ——自前の色を持つ行は見積もりの値と同じ扱いにする。
+			capped_label.add_theme_color_override("font_color", Palette.STAT_DOWN)
+			if is_rare:
+				capped_label.add_theme_color_override(
+					"font_outline_color", Palette.TEXT_OUTLINE
+				)
+				capped_label.add_theme_constant_override("outline_size", 3)
+			box.add_child(capped_label)
+
 	# 「取るとどうなるか」の見積もり。効果テキストは倍率までしか言わないので、
 	# 勝敗を決める複合量(硬さ・打たれ強さ)がどちらへ動くかをここで見せる。詳細は
 	# scripts/ui/part_preview.gd の冒頭コメント。

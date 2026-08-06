@@ -95,6 +95,28 @@ const _STAT_NAMES := {
 	Stat.RPS: "RPS",
 }
 
+## STAT_MULTIPLY札が触る SpinnerStats のプロパティ名。上限到達の判定(capped_axes)が
+## 「実際に動いたか」を読むために使う。_read/_write と同じ対応表だが、あちらは
+## match で値を返す形なので軸名の一覧としては引けない。
+const _STAT_FIELDS := {
+	Stat.MASS: "mass",
+	Stat.RADIUS: "radius",
+	Stat.FRICTION: "friction",
+	Stat.RESTITUTION: "restitution",
+	Stat.RPS: "rps",
+}
+
+## 上限到達の注記に出す軸の呼び名(翻訳キー)。効果文(describe)が使っている語に
+## 揃える——注記は「カードにそう書いてあるのに動かない」を指すものなので、
+## 効果文が「直径」と言っている軸を注記が「大きさ」と呼ぶと結び付かない。
+const _STAT_AXIS_KEYS := {
+	Stat.MASS: "PART_AXIS_MASS",
+	Stat.RADIUS: "PART_AXIS_RADIUS",
+	Stat.FRICTION: "PART_AXIS_FRICTION",
+	Stat.RESTITUTION: "PART_AXIS_RESTITUTION",
+	Stat.RPS: "PART_AXIS_RPS",
+}
+
 @export var id: int = 0
 
 ## パーツ名の翻訳キー。
@@ -469,6 +491,90 @@ static func _stats_equal(a: SpinnerStats, b: SpinnerStats) -> bool:
 static func _nearly_same(a: float, b: float) -> bool:
 	var scale := maxf(maxf(absf(a), absf(b)), 1.0)
 	return absf(a - b) <= MEANINGFUL_CHANGE_RATIO * scale
+
+
+## この札が「動かす」と謳っている軸: [SpinnerStatsのプロパティ名, 軸名の翻訳キー]。
+##
+## 効果文(describe)が名前を挙げている軸と1対1で対応させること。上限到達の注記は
+## 「カードにそう書いてあるのに動かない」を指すためのものなので、効果文に出ない軸を
+## ここへ足すと注記そのものが嘘になる。
+## 残機(SET_LIVES)とゴースト(GHOST)はコマの軸を1本も動かさず上限も持たないので空。
+func _claimed_axes() -> Array:
+	match effect:
+		Effect.MOMENTUM:
+			return [
+				["friction", "PART_AXIS_FRICTION"],
+				["spin_decay", "PART_AXIS_SPIN_DECAY"],
+			]
+		Effect.GUARD:
+			return [["hit_guard", "PART_AXIS_HIT_GUARD"]]
+		Effect.EDGE:
+			return [["edge", "PART_AXIS_EDGE"]]
+		Effect.DRILL:
+			return [["drill", "PART_AXIS_DRILL"]]
+		Effect.GRIP:
+			return [["slope_grip", "PART_AXIS_GRIP"]]
+		Effect.GROWTH:
+			return [
+				["radius", "PART_AXIS_RADIUS"],
+				["mass", "PART_AXIS_MASS"],
+			]
+		Effect.SPIN_UP:
+			return [["rps", "PART_AXIS_RPS"]]
+		Effect.RAGE:
+			return [
+				["restitution", "PART_AXIS_RESTITUTION"],
+				["wall_keep", "PART_AXIS_WALL_KEEP"],
+			]
+		Effect.STAT_MULTIPLY:
+			return [[_STAT_FIELDS[stat], _STAT_AXIS_KEYS[stat]]]
+	return []
+
+
+## 上限に達していて「この札では動かない」軸の一覧(軸名の翻訳キー)。
+##
+## 一次証拠(コールドプレイ 2026-08-06, seed=48231): GIANT_GROWTH を積み続けて
+## 段5で直径が上限2.00に達した後も、段6・段7・段8の報酬に同じ札が出続けた。
+## カードの効果文は「直径 ×1.25（上限 2）＆質量 ×1.15（上限 8）」と言い続けるが、
+## そのビルドでは**直径側はもう1ミリも動かない**。見積もりの行(硬さ・打たれ強さ)は
+## 質量ぶんだけ正しく伸びるので数字が嘘をつくわけではないが、**伸びが半分になった
+## 理由がどこにも出ない**ので、上限に達したことに最後まで気づかないまま同じ札を
+## 取り続けることになる。
+##
+## 全部の軸が止まった完全な死に札は would_change_anything が提示前に弾くので、
+## この注記が実際に出るのは**複数の軸を持つ札の片側だけが止まったとき**
+## ——GROWTH(直径/質量)・RAGE(反発/壁軽減)・MOMENTUM(摩擦/回転減衰)の3種だけ。
+## 単軸の札でここが空でなければそれは死に札で、そもそも提示されない。
+##
+## 判定は would_change_anything と同じく**複製へ実際に apply_to して比べる**。
+## 上限の予測式を別に持つと、効果を変えたときに注記だけが古い嘘になる
+## (「apply_toと別実装の予測ロジックを持たない」は死にカード判定と同じ約束)。
+## 閾値も同じ _nearly_same(相対1%)を共有する——死にカード判定では「動かない」のに
+## 注記では「動く」という食い違いを作らないため。
+func capped_axes(stats: SpinnerStats) -> PackedStringArray:
+	var capped := PackedStringArray()
+	var axes := _claimed_axes()
+	if axes.is_empty() or stats == null:
+		return capped
+	var probe := stats.duplicate_stats()
+	apply_to(probe)
+	for axis in axes:
+		var field: String = axis[0]
+		if _nearly_same(float(probe.get(field)), float(stats.get(field))):
+			capped.append(axis[1])
+	return capped
+
+
+## 上限に達した軸を伝える1行。止まっている軸が無ければ空文字を返し、
+## 呼び手はラベルごと出さない(「上限に達した軸: なし」は無意味な雑音)。
+func capped_note(stats: SpinnerStats) -> String:
+	var axes := capped_axes(stats)
+	if axes.is_empty():
+		return ""
+	var names := PackedStringArray()
+	for key in axes:
+		names.append(tr(key))
+	return tr("PART_CAPPED_NOTE").format([tr("PART_CAPPED_JOIN").join(names)])
 
 
 ## レアカードの金色スタイルボックス。報酬選択とマップ一覧で共有する。

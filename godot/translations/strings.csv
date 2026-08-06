@@ -122,6 +122,19 @@ PART_NOTE_DRILL,"The bonus is based on your own strike, not the foe's armor — 
 PART_NOTE_GRIP,"Dragged back to the middle, so the wall is farther away and you arrive slower — it cuts wall damage before it happens, but you can no longer hold the rim",中央へ引き戻されるので壁が遠くなり、届いても遅い。壁の喪失を受ける前に減らす代わり、縁に留まる走りはできなくなる
 PART_NOTE_GHOST,"Your opening hit lands first — then slip through counterattacks and pile-ups unharmed, hit-and-run",初撃は当たってから発動。直後の反撃や乱戦のもみくちゃを無傷でやり過ごすヒット＆ラン
 PART_NOTE_RAGE,"Modest early while wall hits are rare — in later stages spin lost to walls rivals collision drain, so it pays off late",壁被弾の少ない序盤は地味だが、終盤は壁で失う回転が削りに並ぶほど膨らむ。後半ほど効く
+PART_AXIS_MASS,mass,質量
+PART_AXIS_RADIUS,diameter,直径
+PART_AXIS_FRICTION,friction,摩擦
+PART_AXIS_RESTITUTION,bounce,反発
+PART_AXIS_RPS,spin,回転
+PART_AXIS_SPIN_DECAY,spin decay,回転減衰
+PART_AXIS_WALL_KEEP,wall reduction,壁での軽減
+PART_AXIS_HIT_GUARD,hit reduction,衝突軽減
+PART_AXIS_EDGE,drain boost,削り増強
+PART_AXIS_DRILL,pierce,貫通削り
+PART_AXIS_GRIP,slope pull,傾斜の効き
+PART_CAPPED_NOTE,{0} is already at the cap — this part will not raise it further,{0}はすでに上限に達している（この札ではもう伸びない）
+PART_CAPPED_JOIN,", ",・
 STAT_MASS,Weight,重さ
 STAT_RADIUS,Size,大きさ
 STAT_RESTITUTION,Bounce,反発

@@ -627,6 +627,23 @@ const _PREVIEW_LABELS := {
 	"STAT_GHOST": "無敵時間",
 }
 
+## 上限到達の注記(CustomPart.capped_axes)に出す軸の呼び名。実UIの
+## translations/strings.csv の PART_AXIS_* と同じ語を置く
+## (_PREVIEW_LABELS と同じ理由: キーのままだとどの軸が止まったか読めない)。
+const _AXIS_LABELS := {
+	"PART_AXIS_MASS": "質量",
+	"PART_AXIS_RADIUS": "直径",
+	"PART_AXIS_FRICTION": "摩擦",
+	"PART_AXIS_RESTITUTION": "反発",
+	"PART_AXIS_RPS": "回転",
+	"PART_AXIS_SPIN_DECAY": "回転減衰",
+	"PART_AXIS_WALL_KEEP": "壁での軽減",
+	"PART_AXIS_HIT_GUARD": "衝突軽減",
+	"PART_AXIS_EDGE": "削り増強",
+	"PART_AXIS_DRILL": "貫通削り",
+	"PART_AXIS_GRIP": "傾斜の効き",
+}
+
 
 static func card_preview_text(
 	stats: SpinnerStats, part: CustomPart, continues: int = -1, ghost_seconds: float = 0.0
@@ -638,7 +655,30 @@ static func card_preview_text(
 		var key: String = row["label_key"]
 		cells.append("%s %s" % [
 			_PREVIEW_LABELS.get(key, key), PartPreview.format_row(row)])
-	return " / ".join(cells)
+	var text := " / ".join(cells)
+	var capped := card_capped_text(stats, part)
+	if capped != "":
+		text += "  " + capped
+	return text
+
+
+## 上限に達して動かなくなった軸の注記(実UIが報酬カードに出す
+## CustomPart.capped_note のCLI版)。止まっている軸が無ければ空文字。
+##
+## **ハーネスと実ゲームの情報量は対等に保つ約束**(card_preview_text 参照)。
+## 効果文は上限に達した後も「直径 ×1.25(上限2.00)・質量 ×1.15(上限8.00)」と
+## 両方を謳い続けるので、これが無いとコールドプレイだけが「もう直径は
+## 伸びない」ことを知らないまま同じ札を取り続ける。
+static func card_capped_text(stats: SpinnerStats, part: CustomPart) -> String:
+	if stats == null or part == null:
+		return ""
+	var axes := part.capped_axes(stats)
+	if axes.is_empty():
+		return ""
+	var names := []
+	for key in axes:
+		names.append(_AXIS_LABELS.get(key, key))
+	return "※%sはすでに上限(この札ではもう伸びない)" % "・".join(names)
 
 
 ## カードの効果を実効果と一致する日本語で出す(CustomPart.describe()のCLI版)。
