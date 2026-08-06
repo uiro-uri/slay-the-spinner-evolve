@@ -29,7 +29,11 @@ func run(check: Callable) -> void:
 	_test_primary_index(check)
 	_test_agrees_with_resolver(check)
 	_test_pillars_cut_preview(check)
+	_test_cut_side(check)
+	_test_cut_hint_key(check)
+	_test_cut_translations(check)
 	_test_launch_controller_wires_lead(check)
+	_test_cut_mark_wired(check)
 
 
 func _stats(radius: float, friction: float = 0.0, grip: float = 1.0) -> SpinnerStats:
@@ -488,6 +492,150 @@ func _test_pillars_cut_preview(check: Callable) -> void:
 	)
 
 
+## 打ち切りは**どちら側が届いたのか**まで返す。自分が先に届く(＝満引きの罰)と
+## 相手が先に届く(＝待てば跳ね返って噛み合う)は打ち手が反対なので、同じ絵・
+## 同じ文言にしてはいけない。
+func _test_cut_side(check: Callable) -> void:
+	var center := Vector2(5, 5)
+
+	# 自分だけが縁へ突っ込む。相手は最初から縁の外側扱い(=数えない)で止まっている。
+	var mine := RendezvousPreview.closest_approach(
+		center, Vector2(0, -8), _stats(0.5),
+		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+	)
+	check.call(bool(mine["cut_short"]), "打ち切りの側: 自分が壁へ届いたら打ち切る")
+	check.call(
+		int(mine["cut_by"]) == int(RendezvousPreview.CutBy.PLAYER),
+		"打ち切りの側: 自分だけならPLAYER (cut_by=%d)" % int(mine["cut_by"])
+	)
+	check.call(RendezvousPreview.cut_player(mine), "打ち切りの側: cut_playerが立つ")
+	check.call(not RendezvousPreview.cut_enemy(mine), "打ち切りの側: cut_enemyは立たない")
+
+	# 相手だけが縁へ突っ込む。自分は中央でほとんど動かず、二人は離れていく。
+	var theirs := RendezvousPreview.closest_approach(
+		center, Vector2(0.1, 0), _stats(0.5),
+		Vector2(5, 2), Vector2(0, -8), _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+	)
+	check.call(bool(theirs["cut_short"]), "打ち切りの側: 相手が壁へ届いても打ち切る")
+	check.call(
+		int(theirs["cut_by"]) == int(RendezvousPreview.CutBy.ENEMY),
+		"打ち切りの側: 相手だけならENEMY (cut_by=%d)" % int(theirs["cut_by"])
+	)
+
+	# 左右対称に離れていく。同じ刻みで両者が届くので、片方を見つけた時点で
+	# 抜けている実装だと片側しか立たない。
+	var both := RendezvousPreview.closest_approach(
+		Vector2(4, 5), Vector2(-8, 0), _stats(0.5),
+		Vector2(6, 5), Vector2(8, 0), _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+	)
+	check.call(
+		int(both["cut_by"]) == int(RendezvousPreview.CutBy.BOTH),
+		"打ち切りの側: 同じ刻みで両者が届いたらBOTH (cut_by=%d)" % int(both["cut_by"])
+	)
+
+	# 打ち切っていない結果は必ずNONE。噛み合う結果・ただの外し・壁を見ない設定。
+	var hit := RendezvousPreview.closest_approach(
+		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
+		Vector2(9, 5), Vector2(-6, 0), _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+	)
+	check.call(bool(hit["contact"]), "打ち切りの側: 前提として噛み合う配置")
+	check.call(
+		int(hit["cut_by"]) == int(RendezvousPreview.CutBy.NONE),
+		"打ち切りの側: 噛み合う結果はNONE"
+	)
+	var no_wall := RendezvousPreview.closest_approach(
+		center, Vector2(0, -8), _stats(0.5),
+		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 3.0
+	)
+	check.call(
+		not bool(no_wall["cut_short"]) and int(no_wall["cut_by"]) == 0,
+		"打ち切りの側: 壁を見ない設定ではNONEのまま"
+	)
+
+
+## 訳キーへの畳み込み。「言うことが無ければ空文字」＝呼び手が行ごと出さない。
+func _test_cut_hint_key(check: Callable) -> void:
+	var center := Vector2(5, 5)
+	var mine := RendezvousPreview.closest_approach(
+		center, Vector2(0, -8), _stats(0.5),
+		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+	)
+	check.call(
+		RendezvousPreview.hint_key(mine) == "BATTLE_LEAD_CUT_PLAYER",
+		"打ち切りの文: 自分側のキー (%s)" % RendezvousPreview.hint_key(mine)
+	)
+	var theirs := RendezvousPreview.closest_approach(
+		center, Vector2(0.1, 0), _stats(0.5),
+		Vector2(5, 2), Vector2(0, -8), _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+	)
+	check.call(
+		RendezvousPreview.hint_key(theirs) == "BATTLE_LEAD_CUT_ENEMY",
+		"打ち切りの文: 相手側のキー (%s)" % RendezvousPreview.hint_key(theirs)
+	)
+	var both := RendezvousPreview.closest_approach(
+		Vector2(4, 5), Vector2(-8, 0), _stats(0.5),
+		Vector2(6, 5), Vector2(8, 0), _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+	)
+	check.call(
+		RendezvousPreview.hint_key(both) == "BATTLE_LEAD_CUT_BOTH",
+		"打ち切りの文: 両者のキー (%s)" % RendezvousPreview.hint_key(both)
+	)
+
+	# 噛み合う結果とただの外しは無言。ここが鳴ると「当たる」と描いた狙いに
+	# 警告が出る＝先読みが自分で自分を打ち消す。
+	var hit := RendezvousPreview.closest_approach(
+		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
+		Vector2(9, 5), Vector2(-6, 0), _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+	)
+	check.call(RendezvousPreview.hint_key(hit) == "", "打ち切りの文: 噛み合うなら無言")
+	var miss := RendezvousPreview.closest_approach(
+		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
+		Vector2(9, 8), Vector2(-6, 0), _stats(0.5),
+		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+	)
+	check.call(not bool(miss["contact"]), "打ち切りの文: 前提として外す配置")
+	check.call(
+		RendezvousPreview.hint_key(miss) == "",
+		"打ち切りの文: 打ち切っていない外しは無言"
+	)
+	check.call(RendezvousPreview.hint_key({}) == "", "打ち切りの文: 空の先読みは無言")
+	check.call(
+		not RendezvousPreview.cut_player({}) and not RendezvousPreview.cut_enemy({}),
+		"打ち切りの側: 空の先読みはどちらも立たない"
+	)
+
+
+## 3つの訳キーが日英とも埋まっていること。キーのまま出るとプレイヤーには
+## 「BATTLE_LEAD_CUT_PLAYER」という呪文が見える。
+func _test_cut_translations(check: Callable) -> void:
+	var keys := ["BATTLE_LEAD_CUT_PLAYER", "BATTLE_LEAD_CUT_ENEMY", "BATTLE_LEAD_CUT_BOTH"]
+	var saved := TranslationServer.get_locale()
+	for locale in ["ja", "en"]:
+		TranslationServer.set_locale(locale)
+		for key in keys:
+			var got := TranslationServer.translate(key)
+			check.call(got != key and got.length() > 0, "打ち切りの訳: %s/%s" % [locale, key])
+	# 3つが同じ文言だと「どちらが届いたのか」を出した意味がない。
+	TranslationServer.set_locale("ja")
+	var texts := []
+	for key in keys:
+		texts.append(TranslationServer.translate(key))
+	check.call(
+		texts[0] != texts[1] and texts[1] != texts[2] and texts[0] != texts[2],
+		"打ち切りの訳: 3つの文言が互いに違う"
+	)
+	TranslationServer.set_locale(saved)
+
+
 ## 配線。LaunchController も Battle も自動読み込み(AudioManager/GameState)に
 ## 依存していて **`--script` のヘッドレスでは実体化できない**(journal 2026-08-05
 ## で実測済み)ので、ここはソースを読んで配線を照合する。実UIでの描画確認は
@@ -547,6 +695,59 @@ func _test_launch_controller_wires_lead(check: Callable) -> void:
 	check.call(
 		_function_body(battle_src, "func build_request(").contains("_stage_strength()"),
 		"配線: 本番のリクエストも先読みと同じ傾斜の関数を通る"
+	)
+
+
+## 打ち切りの印と1行の配線。判定を画面まで引かないと、cut_by は「誰も見ない
+## 正しい値」になる(この変更のまるごとが空回りする形)。
+func _test_cut_mark_wired(check: Callable) -> void:
+	var src := FileAccess.get_file_as_string("res://scenes/battle/LaunchController.gd")
+	var draw_lead := _function_body(src, "func _draw_lead() -> void:")
+	check.call(draw_lead.length() > 0, "打ち切りの印: _draw_lead の本体を取れた")
+	check.call(
+		draw_lead.contains("RendezvousPreview.cut_player(_lead)")
+			and draw_lead.contains("RendezvousPreview.cut_enemy(_lead)"),
+		"打ち切りの印: どちらの輪に印を置くかは RendezvousPreview が決める"
+	)
+	check.call(
+		draw_lead.contains("_draw_cut_mark("), "打ち切りの印: 印を描く関数を呼ぶ"
+	)
+	var mark := _function_body(src, "func _draw_cut_mark(at: Vector2, radius: float) -> void:")
+	check.call(
+		mark.contains("Palette.STAT_DOWN"),
+		"打ち切りの印: 色は Palette 由来(自機色・敵色のどちらでもない)"
+	)
+	# 印の色が輪の色と同じだと、印が付いているかどうかが見て分からない。
+	check.call(
+		Palette.STAT_DOWN != Palette.AIM and Palette.STAT_DOWN != Palette.ENEMY,
+		"打ち切りの印: 印の色は自機色とも敵色とも別"
+	)
+
+	var battle_src := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
+	var aim := _function_body(battle_src, "func _on_aim_changed(origin: Vector2, velocity: Vector2) -> void:")
+	check.call(aim.length() > 0, "打ち切りの文: _on_aim_changed の本体を取れた")
+	check.call(
+		aim.contains("_set_lead_hint(RendezvousPreview.hint_key("),
+		"打ち切りの文: 実UIの1行は hint_key を通る(自前の判定を持たない)"
+	)
+	# 先読みが消える経路では行も消えること。残ると「もう当てはまらない警告」が居座る。
+	check.call(
+		aim.count("_set_lead_hint(\"\")") >= 2,
+		"打ち切りの文: 先読みを消す経路では行も消す"
+	)
+	# 発射の瞬間に消える(決着後は同じ行へ相手の内訳が入る)。
+	check.call(
+		_function_body(battle_src, "func _begin(player_pos: Vector2, player_vel: Vector2) -> void:")
+			.contains("_dealt_label.text = \"\""),
+		"打ち切りの文: 発射で消える"
+	)
+
+	# CLIも同じ判定を通ること(ハーネスと実UIの情報量を対等に保つ約束)。
+	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
+	check.call(
+		_function_body(cli, "static func lead_text(lead: Dictionary) -> String:")
+			.contains("RendezvousPreview.hint_key(lead)"),
+		"打ち切りの文: CLIも hint_key を通る"
 	)
 
 

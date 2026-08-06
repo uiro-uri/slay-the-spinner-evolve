@@ -45,6 +45,7 @@ func run(check: Callable) -> void:
 	_test_naive_play_bseed_pin(check)
 	_test_naive_play_group_persistence(check)
 	_test_naive_play_spaces_group(check)
+	_test_naive_play_lead_text(check)
 
 
 func _request() -> BattleRequest:
@@ -1333,3 +1334,50 @@ func _test_naive_play_group_persistence(check: Callable) -> void:
 	check.call(
 		NaivePlay.group_from_names(["ENEMY_9_9"], fallback) == fallback,
 		"naive_play: 知らない名前が混ざったら丸ごとノード生成時の個体へ戻す")
+
+
+## 先読み1件の見出し。噛み合う/外す/どちら側の壁で打ち切ったか。
+##
+## CLIが自前の判定を持たないこと(RendezvousPreview.hint_key を通ること)まで縛る。
+## 別実装の予測を持つと、実UIとCLIが違うことを言い始めても誰も気づかない
+## ——カードの上限注記(card_capped_text)で同じ約束を置いたのと同じ理由。
+func _test_naive_play_lead_text(check: Callable) -> void:
+	var NaivePlay = load("res://playtest/naive_play.gd")
+
+	check.call(
+		String(NaivePlay.lead_text({"contact": true, "cut_by": 0})) == "噛み合う",
+		"naive_play: 噛み合う先読みはそう出る")
+	check.call(
+		String(NaivePlay.lead_text({"contact": false, "cut_by": 0})) == "外す",
+		"naive_play: 打ち切っていない外しは理由を足さない")
+
+	var mine := String(NaivePlay.lead_text(
+		{"contact": false, "cut_by": int(RendezvousPreview.CutBy.PLAYER)}))
+	var theirs := String(NaivePlay.lead_text(
+		{"contact": false, "cut_by": int(RendezvousPreview.CutBy.ENEMY)}))
+	var both := String(NaivePlay.lead_text(
+		{"contact": false, "cut_by": int(RendezvousPreview.CutBy.BOTH)}))
+	check.call(mine.contains("自分"), "naive_play: 自分が先に届く打ち切りはそう出る (%s)" % mine)
+	check.call(theirs.contains("相手"), "naive_play: 相手が先に届く打ち切りはそう出る (%s)" % theirs)
+	check.call(both.contains("両者"), "naive_play: 両者の打ち切りはそう出る (%s)" % both)
+	check.call(
+		mine != theirs and theirs != both and mine != both,
+		"naive_play: どちらが届いたかで文言が変わる")
+
+	# CLIは実UIの訳キーと1対1の表を持つ(判定は持たない)。キーが増減したら気づく。
+	var labels: Dictionary = NaivePlay._LEAD_CUT_LABELS
+	var keys := ["BATTLE_LEAD_CUT_PLAYER", "BATTLE_LEAD_CUT_ENEMY", "BATTLE_LEAD_CUT_BOTH"]
+	var covered := labels.size() == keys.size()
+	for key in keys:
+		if not labels.has(key):
+			covered = false
+	check.call(covered, "naive_play: 打ち切りの表は実UIの訳キーと過不足なく対応する")
+
+	# ロケールを英語に切り替えてもCLIは日本語のまま(_AXIS_LABELS と同じ流儀)。
+	var saved := TranslationServer.get_locale()
+	TranslationServer.set_locale("en")
+	check.call(
+		String(NaivePlay.lead_text(
+			{"contact": false, "cut_by": int(RendezvousPreview.CutBy.PLAYER)})) == mine,
+		"naive_play: CLIの文言はロケールに依らない")
+	TranslationServer.set_locale(saved)

@@ -727,9 +727,16 @@ func _on_aim_moved(origin: Vector2) -> void:
 ## 発射(_on_launched)は今までどおり確定値で解決されるので、ここは表示専用。
 ##
 ## 乱戦では最初に噛み合う相手1体だけを見せる(RendezvousPreview.primary_index)。
+##
+## 先読みが壁・柱で打ち切られたときは、その旨を1行で言う(RendezvousPreview.hint_key)。
+## 輪の印だけでは「打ち切り」と「惜しい外し」の絵の差が小さく、しかも打ち手が
+## 反対(引きを弱める/そのまま撃つ)なので、言葉でも分ける。
 func _on_aim_changed(origin: Vector2, velocity: Vector2) -> void:
-	if _result != null or not show_lead_preview or velocity.length() <= 0.0:
+	if _result != null:
+		return
+	if not show_lead_preview or velocity.length() <= 0.0:
 		_launcher.set_lead({}, 0.0, 0.0)
+		_set_lead_hint("")
 		return
 	var start := _clamp_launch(origin)
 	var results: Array[Dictionary] = []
@@ -744,10 +751,22 @@ func _on_aim_changed(origin: Vector2, velocity: Vector2) -> void:
 	var index := RendezvousPreview.primary_index(results)
 	if index < 0:
 		_launcher.set_lead({}, 0.0, 0.0)
+		_set_lead_hint("")
 		return
 	_launcher.set_lead(
 		results[index], _player.stats.radius, _enemies[index].stats.radius
 	)
+	_set_lead_hint(RendezvousPreview.hint_key(results[index]))
+
+
+## 先読みの打ち切りの1行。決着まで空いている相手側の内訳行を借りる
+## (土俵の名前が自分側の内訳行を借りているのと同じ理由・同じ寿命で、
+## _begin() が発射の瞬間に消し、決着後は内訳が同じ行へ入る)。
+## 空文字なら行ごと消える。訳はControlの自動翻訳に任せるのでキーをそのまま入れる。
+func _set_lead_hint(key: String) -> void:
+	if _dealt_label == null:
+		return
+	_dealt_label.text = key
 
 
 ## 土俵の傾斜。フィールドが入っていればそちら、無ければシーンの@export

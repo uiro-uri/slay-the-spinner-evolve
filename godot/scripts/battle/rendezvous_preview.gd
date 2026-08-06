@@ -29,7 +29,20 @@ extends RefCounted
 ## 扱うのが要で、コールドプレイ2026-08-05の段1(FIELD_PILLARS)はまさに、
 ## 柱の縁で敵が弾かれて予告した交差が起きなかった形だった。
 ##
+## 打ち切りは**どちら側が届いたのか**まで返す(cut_by)。ここが要る理由は
+## コールドプレイ2026-08-06: 満引き(force=1.0)で段1〜6を勝ち上がったあと段7で
+## 2連敗し、力を0.2へ落とした3回目で勝った。満引きの罰は「相手より先に壁へ着く」
+## ことなのに、**打ち切りは実UIでは無言**で、輪は「惜しくも外した」ときと
+## 見分けがつかない。「外れる」と「そもそも相手に届く前に壁だ」は打ち手が
+## まったく違う(狙いを動かす/引きを弱める)ので、同じ絵にしてはいけない。
+## journal に4サイクル連続で載っている「force を初見が逆に学習する」は、
+## 引きを強くするほどこの打ち切りに入りやすくなる、の裏返しでもある。
+##
 ## Nodeにもシーンにも依存しない純粋な静的関数なので、ヘッドレスから直接テストできる。
+
+
+## 先読みを打ち切った側。PLAYER|ENEMY のビット和なので BOTH は両方の論理和。
+enum CutBy { NONE = 0, PLAYER = 1, ENEMY = 2, BOTH = 3 }
 
 
 ## 先読みする既定の秒数。壁までの1本目の道のりを見るのに足りて、
@@ -78,6 +91,7 @@ static func advance(
 ##   gap           縁と縁の距離。負なら食い込み(=接触)
 ##   contact       本番と同じ述語(SpinnerPhysics.is_colliding)で噛み合ったか
 ##   cut_short     壁か柱へ届いて先読みを打ち切ったか
+##   cut_by        打ち切った側(CutBy)。cut_shortがfalseなら必ずNONE
 static func closest_approach(
 	player_pos: Vector2,
 	player_vel: Vector2,
@@ -111,6 +125,7 @@ static func closest_approach(
 		"gap": pp.distance_to(ep) - touch,
 		"contact": false,
 		"cut_short": false,
+		"cut_by": CutBy.NONE,
 	}
 	# 壁・柱は「入った瞬間」で打ち切る=**発射時に既に接しているものは数えない**。
 	# 発射位置は柱の縁へ寄せてクランプされる(FieldData.clamp_placement)ので、
@@ -159,8 +174,15 @@ static func closest_approach(
 
 		var p_now := _blocked(pp, player_stats.radius, center, inradius, obstacles)
 		var e_now := _blocked(ep, enemy_stats.radius, center, inradius, obstacles)
-		if (p_now and not p_blocked) or (e_now and not e_blocked):
+		# 同じ刻みで両者が届くこともあるので、片方を見つけた時点では抜けない。
+		var cut := int(CutBy.NONE)
+		if p_now and not p_blocked:
+			cut |= int(CutBy.PLAYER)
+		if e_now and not e_blocked:
+			cut |= int(CutBy.ENEMY)
+		if cut != int(CutBy.NONE):
 			best["cut_short"] = true
+			best["cut_by"] = cut
 			return best
 		p_blocked = p_now
 		e_blocked = e_now
@@ -180,6 +202,40 @@ static func _blocked(
 		if pos.distance_to(Vector2(o.x, o.y)) <= o.z + radius:
 			return true
 	return false
+
+
+## closest_approach の結果が「自分が先に壁か柱へ届いた」ぶんで打ち切られたか。
+## 描画側が輪を印付けるのに使う。噛み合う結果には打ち切りが立たないので、
+## 触れる狙いに警告が出ることはない。
+static func cut_player(lead: Dictionary) -> bool:
+	return int(lead.get("cut_by", CutBy.NONE)) & int(CutBy.PLAYER) != 0
+
+
+## 同じく「相手が先に届いた」ぶんか。
+static func cut_enemy(lead: Dictionary) -> bool:
+	return int(lead.get("cut_by", CutBy.NONE)) & int(CutBy.ENEMY) != 0
+
+
+## 打ち切りを1行で言う訳キー。言うことが無ければ空文字＝呼び手は行ごと出さない。
+##
+## 「外す」と「打ち切り」を分けるのが目的なので、**噛み合う結果では必ず空**に
+## なる。ここに contact の門は置かない: closest_approach は contact で先に返り
+## cut_by を NONE のまま残すので、門を足しても答えが変わらない枝が1本増える
+## だけになる(journal に何度も出る「防御的な既定値は書いた瞬間にテストへ映らない
+## 枝になる」)。「噛み合う結果は必ず cut_by=NONE」の方をテストが名指しで縛る。
+##
+## 側で文言を分けるのは、打ち手が反対だから: 自分が先に届くなら引きを弱めるか
+## 近くから撃つ、相手が先に届くなら跳ね返りを待つ(＝そのまま撃ってよい)。
+static func hint_key(lead: Dictionary) -> String:
+	var mine := cut_player(lead)
+	var theirs := cut_enemy(lead)
+	if mine and theirs:
+		return "BATTLE_LEAD_CUT_BOTH"
+	if mine:
+		return "BATTLE_LEAD_CUT_PLAYER"
+	if theirs:
+		return "BATTLE_LEAD_CUT_ENEMY"
+	return ""
 
 
 ## 乱戦で先読みを1つだけ見せるための選び方。**触れるものがあれば一番早く
