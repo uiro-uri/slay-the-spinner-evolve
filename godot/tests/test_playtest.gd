@@ -1011,6 +1011,12 @@ func _test_naive_play_defeat_prompt(check: Callable) -> void:
 		"retry" in p and "残り2" in p,
 		"naive_play: 敗北案内は消費後に残る残機を明示する")
 	check.call("giveup" in p, "naive_play: 敗北案内はgiveupも常に出す")
+	# 実UIのゲームオーバー画面は「同じ相手にもう一度」と「相手を替えて挑む」を
+	# 対等なボタン2つで並べている。案内が引き直す側(--bseed)しか出していないと、
+	# CLIだけ据え置きの側が存在しないゲームになる(実際、コールドプレイは3サイクル
+	# 続けて据え置きに触れられなかった)。両方の綴りを名指しで縛る。
+	check.call("--same" in p, "naive_play: 敗北案内は据え置き(--same)も出す")
+	check.call("--bseed" in p, "naive_play: 敗北案内は引き直し(--bseed)も出す")
 	var zero: String = NaivePlay.defeat_prompt(0)
 	check.call(
 		not "retry" in zero and "giveup" in zero,

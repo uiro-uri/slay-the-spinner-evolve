@@ -14,7 +14,12 @@ extends Node2D
 
 ## knockoutは「接触(衝突削り/壁)で決着を付けた勝利」か(BattleResult.finished_by_knockout)。
 ## Mainが撃破ボーナス(勝利成長の増額)の判定に使う。敗北時は常に偽。
-signal finished(player_won: bool, knockout: bool)
+##
+## enemy_tracksは決着までの相手の軌跡(BattleResult.enemy_tracks)。Mainがゲームオーバー
+## 画面へ渡す——この画面はBattleごと差し替わるので、リザルトに出した
+## 「あとどれだけだったか」は敗北の瞬間に消えてしまう
+## (RemainingRpsText.opponent_margin_line 参照)。軌跡を持たない結果では空配列。
+signal finished(player_won: bool, knockout: bool, enemy_tracks: Array)
 
 const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark.tscn")
 const DAMAGE_NUMBER: PackedScene = preload("res://scenes/battle/DamageNumber.tscn")
@@ -1189,7 +1194,11 @@ func _finish() -> void:
 	# フェードが余韻より長くチューニングされていても切れないよう、残っていれば待つ。
 	if fade != null and fade.is_valid() and fade.is_running():
 		await fade.finished
-	finished.emit(player_won, _result.finished_by_knockout())
+	# 相手の軌跡はそのまま渡す。頭数の畳み方も割合の出し方も
+	# RemainingRpsText の側にあり(テストがそこに掛かっている)、ここは素通し。
+	# 負けたときだけ使われるが勝敗で分けずに常に渡す＝この値が嘘をつくなら
+	# リザルトの _remain_label も同時に嘘をつく、という結び付きを保つ。
+	finished.emit(player_won, _result.finished_by_knockout(), _result.enemy_tracks)
 
 
 ## この戦闘がボス(ゴール)戦か。ボス勝利は成長せずクリア画面へ直行するので、

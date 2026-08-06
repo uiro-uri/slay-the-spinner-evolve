@@ -98,6 +98,42 @@ static func remaining_line(player_frames: Array, enemy_tracks: Array) -> String:
 	])
 
 
+## 敗北画面に出す「相手はどれだけ残して立っていたか」の1行。
+##
+## remaining_line は決着リザルト(戦闘画面)の行で、**負けた瞬間に一緒に消える**。
+## Main は goto_gameover() で画面ごと差し替えるので、プレイヤーが
+## 「同じ相手にもう一度／相手を替えて挑む／あきらめる」を選ぶ画面には
+## 残機の数しか出ていない。3択のうち2つは**相手をどう扱うか**の選択なのに、
+## その相手にどこまで届いていたかが画面から消えている。
+##
+## 2026-08-06 のコールドプレイでは決戦で敗北し、相手の残りは 1.9/38.6(5%)だった。
+## あきらめずに残機を払ったのは**この数字を見たから**で、CLIには出ていたが
+## 実UIでは戦闘画面を離れた時点で失われる情報だった。
+##
+## 自分の側は出さない。負けた側なので必ず0付近で、3択の判断材料にならない
+## (remaining_line が両側を並べるのは「勝ったときも出す」行だからで、
+## こちらは敗北専用)。頭数は totals と同じく畳む＝答えるべき問いは
+## 「この部屋はあとどれだけ残っていたか」。
+##
+## 受け取るのは BattleResult.enemy_tracks そのもの。畳むのは**ここ**で、
+## 呼び手(Battle→Main→GameOver)は軌跡を素通しするだけにしてある。畳んだ後の
+## Dictionaryを渡す形にすると、頭数の畳み方がテストの無い層(Battle)へ漏れて、
+## そこを壊してもテストが赤くならない(実際にサボタージュで素通りした)。
+##
+## 軌跡を持たない結果(totalsが空)なら空文字＝ラベルは見えないまま。
+## 値の取り出しに get(既定0.0)を使うのは防御ではなく**この門を可視にするため**で、
+## 門を外すと空文字ではなく「0.0(0%)」が出てテストが落ちる。角括弧で引くと
+## 門を外した瞬間に実行時エラーになり、GDScriptは関数を中断して既定値("")を
+## 返す＝門があるときと**同じ結果**になり、門がテストに映らない枝になる。
+static func opponent_margin_line(enemy_tracks: Array) -> String:
+	var theirs := totals(enemy_tracks)
+	if theirs.is_empty():
+		return ""
+	return TranslationServer.translate("GAMEOVER_MARGIN").format([
+		_fmt(float(theirs.get("final", 0.0))), percent(theirs),
+	])
+
+
 ## 表示用の数値。RpsLossText と同じ小数1桁固定にして、リザルトの縦並びで桁が揃う。
 static func _fmt(value: float) -> String:
 	return "%.1f" % maxf(value, 0.0)

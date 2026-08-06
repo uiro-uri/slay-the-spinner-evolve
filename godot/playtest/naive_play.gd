@@ -933,7 +933,7 @@ static func enter_block_reason(state: Dictionary) -> String:
 			return "乱戦の報酬があと%d回残っている。reward → pick で受け取ってから" % int(left)
 		return "勝利済み。reward → pick でノードを確定してから"
 	if state.get("must_retry", false):
-		return "敗北済み。retry --bseed=<新B> で残機を消費するか giveup"
+		return "敗北済み。retry --same か retry --bseed=<新B> で残機を消費するか giveup"
 	return "交戦中。launch で戦う(予告の再抽選はできない)か giveup"
 
 
@@ -943,7 +943,7 @@ static func launch_block_reason(state: Dictionary) -> String:
 	if state.get("pending") == null:
 		return "交戦中のノードがない。enter してから launch"
 	if state.get("must_retry", false):
-		return "敗北済み。retry --bseed=<新B> で残機を消費するか giveup"
+		return "敗北済み。retry --same か retry --bseed=<新B> で残機を消費するか giveup"
 	if state.get("won", false):
 		return "勝利済み。reward → pick でノードを確定する"
 	return ""
@@ -958,7 +958,7 @@ static func reward_block_reason(state: Dictionary) -> String:
 	if state.get("pending") == null:
 		return "交戦中のノードがない。enter → launch で勝ってから"
 	if state.get("must_retry", false):
-		return "敗北済み。報酬はない。retry --bseed=<新B> で残機を消費するか giveup"
+		return "敗北済み。報酬はない。retry --same か retry --bseed=<新B> で残機を消費するか giveup"
 	if state.has("won") and not state["won"]:
 		return "まだ勝っていない。launch で勝ってから reward"
 	return ""
@@ -967,10 +967,23 @@ static func reward_block_reason(state: Dictionary) -> String:
 ## 敗北直後の案内。retryは残機を1消費するので、消費前の所持数だけを出すと
 ## 「(残機3)→retryすると残り2」と数字が食い違って見える。消費後に残る数まで
 ## 書く。残機0はretryできない(される前に拒否される)のでgiveupだけを案内する。
+##
+## **2択を両方出す**。実UIのゲームオーバー画面は「同じ相手にもう一度」と
+## 「相手を替えて挑む」を対等なボタン2つで並べているのに、ここは
+## `retry --bseed=<新B>`(＝引き直す側)しか案内していなかった。結果、
+## コールドプレイは3サイクル続けて据え置きの側に一度も触れられず
+## (journal 2026-08-05／08-06 の「次こそ据え置きの方を使うこと」が2回とも
+## 果たせていない)、負けた相手にもう一度挑むという機構が
+## **実装されているのに一度も試されない**ままだった。ハーネスと実UIの
+## 情報量は対等に保つ、という約束(part_preview/naive_play の既存の縛り)の
+## いちばん効く場所がここ。
 static func defeat_prompt(continues: int) -> String:
 	if continues <= 0:
 		return "→ 残機なし。giveup で終了"
-	return "→ retry --bseed=<新B> (残機%d、1消費して残り%d) か giveup" % [continues, continues - 1]
+	return (
+		"→ retry --same (同じ相手・同じ予告で再戦) か retry --bseed=<新B> (相手を替える)"
+		+ " (残機%d、どちらも1消費して残り%d) か giveup" % [continues, continues - 1]
+	)
 
 
 ## 交戦中ノードの敵グループ。retryで個体を入れ替えた場合はstate["enemies"]の
