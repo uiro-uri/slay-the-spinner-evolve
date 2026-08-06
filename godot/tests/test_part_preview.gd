@@ -8,6 +8,12 @@ extends RefCounted
 ## (5) コマの性能を変えない札(残機・ゴースト)でも見積もりが空にならないこと、
 ## (6) RewardScreen/Mainの配線と訳の存在。
 ##
+## (8) **3行目が壁の軸であること**。硬さ・打たれ強さはどちらも接触の量なので、
+## 壁へ効く唯一の札(RAGE_REFLECTION)が2行とも「変化なし」で出ていた——効果文が
+## 「終盤は壁での喪失が削りに並ぶ」と書いている札が、数字では何も起きない札に
+## 見えていた。壁はラン合計で削りを上回る(コールドプレイ seed=4821 で
+## 壁61.1 対 削り52.5)ので、壁の札と接触の札が**別々の行を動かす**ことを見る。
+##
 ## (7) **2行目が寿命でないこと**。寿命は自然減衰の軸で、実測では決着にほぼ効かない
 ## (敵の敗因の自然減衰は全レベル0.0%)のに、カード間で最も大きく動く行だった。
 ## 結果として最下位の札(FULL_STEAM_AHEAD)が最も得に見え、1位の札(GIANT_GROWTH)が
@@ -23,6 +29,7 @@ func run(check: Callable) -> void:
 	_test_preview_does_not_mutate(check)
 	_test_growth_shows_both_gains(check)
 	_test_second_row_tracks_drain_not_decay(check)
+	_test_wall_row_tracks_wall_loss(check)
 	_test_rows_always_show_the_deciding_pair(check)
 	_test_non_stat_parts_still_show_something(check)
 	_test_format_hides_unchanged(check)
@@ -207,6 +214,95 @@ func _test_second_row_tracks_drain_not_decay(check: Callable) -> void:
 	)
 
 
+## 3行目が「壁で削られる側」を測っていること。壁強さは
+## **壁1回で削られるrpsに何回耐えられるか**に比例していなければならない。
+##
+## 打たれ強さ(接触)と同じく、物理側(absolute_wall_drain × (1−wall_keep))から
+## 耐久回数を組み直して比を突き合わせる。表示だけ別式にすると嘘になる。
+##
+## 動機は part_preview.gd の冒頭コメント: 壁は喪失の半分以上(コールドプレイ
+## seed=4821 でラン合計 壁61.1 対 削り52.5)なのに、壁へ効く唯一の札
+## RAGE_REFLECTION が2行とも「変化なし」で出ていた。
+func _test_wall_row_tracks_wall_loss(check: Callable) -> void:
+	var a := _player()
+	var b := _player()
+	b.mass = 2.4
+	b.radius = 0.9
+	b.rps = 21.0
+	b.wall_keep = 0.34
+	# 進入速度と wall_violence は任意でよい(壁強さの定義から約分されるため、
+	# ここで違う値を入れても比が変わらないことが主張そのもの)。
+	var by_physics := _wall_hits_survived(b, 7.0, 0.35) / _wall_hits_survived(a, 7.0, 0.35)
+	var by_preview := PartPreview.wall_endurance(b) / PartPreview.wall_endurance(a)
+	check.call(
+		is_equal_approx(by_physics, by_preview),
+		"壁強さの比 = 耐えられる壁の回数の比 (物理 %.4f / 表示 %.4f)" % [by_physics, by_preview]
+	)
+	var other := _wall_hits_survived(b, 2.5, 0.9) / _wall_hits_survived(a, 2.5, 0.9)
+	check.call(
+		is_equal_approx(other, by_preview),
+		"壁強さの比は進入速度・wall_violenceに依らない (%.4f / %.4f)" % [other, by_preview]
+	)
+
+	# 混ざるもう片方(比例の側)とも向きが食い違わないこと。effective_wall_damping は
+	# wall_keep 単調増加＝1回の壁で残るrpsが増える。ここが逆を向いていると、
+	# 壁強さの行は「支配的な側だけ正しい見積もり」ですらなくなる。
+	var kept_more := SpinnerPhysics.effective_wall_damping(0.75, 0.34)
+	var kept_less := SpinnerPhysics.effective_wall_damping(0.75, 0.0)
+	check.call(
+		kept_more > kept_less,
+		"比例の側も壁での軽減で残りrpsが増える向き (%.4f > %.4f)" % [kept_more, kept_less]
+	)
+
+	# 壁の札(RAGE)と接触の札(GUARD)が**別々の行を動かす**こと。ここが眼目で、
+	# 以前はRAGEが硬さ・打たれ強さの両方を凍らせたまま「何も起きない札」に見えていた。
+	# 行が消えたサボタージュで「'better' が無い」のスクリプトエラーになると、関数が
+	# そこで中断してこの先の検査が黙って飛ぶ。行の存在ごと1つのcheckで見る
+	# (_better は行が無ければ 99 を返し、どの期待値とも一致しない)。
+	var rage := _find_effect(CustomPart.Effect.RAGE)
+	check.call(rage != null, "カタログに怒りの反射札がある")
+	if rage != null:
+		var rows := PartPreview.rows(_player(), rage, 3, 0.0)
+		var wall_row := _row_of(rows, "STAT_WALL_ENDURANCE")
+		check.call(
+			_better(rows, "STAT_WALL_ENDURANCE") == 1,
+			"怒りの反射: 壁強さの行が伸びる側で出る (%s)" % (
+				"行が無い" if wall_row.is_empty()
+				else "%.1f→%.1f" % [wall_row["before"], wall_row["after"]])
+		)
+		check.call(
+			_better(rows, "STAT_ENDURANCE") == 0,
+			"怒りの反射: 打たれ強さ(接触)は動かない＝2つの行が別の軸を測っている"
+		)
+	var absorber := _find_effect(CustomPart.Effect.GUARD)
+	if absorber != null:
+		var rows := PartPreview.rows(_player(), absorber, 3, 0.0)
+		check.call(
+			_better(rows, "STAT_WALL_ENDURANCE") == 0
+			and _better(rows, "STAT_ENDURANCE") == 1,
+			"衝突軽減: 打たれ強さだけが伸びて壁強さは動かない(壁には効かない札)"
+		)
+
+	# ゼロ除算でinf/nanを出さない(将来の札がwall_keepを1.0にしても壊れない)。
+	var immune := _player()
+	immune.wall_keep = 1.0
+	check.call(
+		is_finite(PartPreview.wall_endurance(immune))
+		and PartPreview.wall_endurance(immune) > PartPreview.wall_endurance(_player()),
+		"壁強さ: 軽減1.0でもinf/nanにならない (%.1f)" % PartPreview.wall_endurance(immune)
+	)
+
+
+## 壁1回で削られるrpsから逆算した「耐えられる壁の回数」。物理の関数だけで組む。
+## 混合(wall_absolute_share)のうち支配的な絶対量の側を使う——BattleResolver の
+## _wall_damaged_rps が absolute へ寄せている式そのもの。
+func _wall_hits_survived(stats: SpinnerStats, normal_speed: float, violence: float) -> float:
+	var drain := SpinnerPhysics.absolute_wall_drain(
+		normal_speed, stats.mass, stats.radius, violence
+	) * (1.0 - stats.wall_keep)
+	return stats.rps / drain
+
+
 ## 1回の接触で削られるrpsから逆算した「耐えられる接触回数」。物理の関数だけで組む。
 func _hits_survived(
 	stats: SpinnerStats, foe_mass: float, foe_speed: float, violence: float
@@ -226,13 +322,15 @@ func _test_rows_always_show_the_deciding_pair(check: Callable) -> void:
 	var stale: Array[String] = []
 	for part in CustomPartCatalog.all():
 		var rows := PartPreview.rows(stats, part, 3, 0.0)
-		if _row_of(rows, "STAT_TOUGHNESS").is_empty() or _row_of(rows, "STAT_ENDURANCE").is_empty():
+		if (_row_of(rows, "STAT_TOUGHNESS").is_empty()
+				or _row_of(rows, "STAT_ENDURANCE").is_empty()
+				or _row_of(rows, "STAT_WALL_ENDURANCE").is_empty()):
 			missing.append(part.title_key)
 		if not _row_of(rows, "STAT_LIFETIME").is_empty():
 			stale.append(part.title_key)
 	check.call(
 		missing.is_empty(),
-		"全ての札で硬さ・打たれ強さの行が出る (欠け: %s)" % ", ".join(missing)
+		"全ての札で硬さ・打たれ強さ・壁強さの行が出る (欠け: %s)" % ", ".join(missing)
 	)
 	check.call(
 		stale.is_empty(),
@@ -350,10 +448,18 @@ func _test_translations(check: Callable) -> void:
 	var saved := TranslationServer.get_locale()
 	for locale in ["en", "ja"]:
 		TranslationServer.set_locale(locale)
-		for key in ["STAT_TOUGHNESS", "STAT_ENDURANCE",
+		for key in ["STAT_TOUGHNESS", "STAT_ENDURANCE", "STAT_WALL_ENDURANCE",
 				"REWARD_PREVIEW_HEADING", "REWARD_PREVIEW_HINT"]:
 			var got := TranslationServer.translate(key)
 			check.call(got != key, "%s: %s の訳がある (%s)" % [locale, key, got])
+	# 注記は3つの行を全部説明していること。行だけ増えて説明が2つのままだと、
+	# 「壁強さ」が何の回数なのか画面のどこにも出ない。
+	TranslationServer.set_locale("ja")
+	var hint_ja := TranslationServer.translate("REWARD_PREVIEW_HINT")
+	check.call(
+		hint_ja.contains("硬さ") and hint_ja.contains("打たれ強さ") and hint_ja.contains("壁強さ"),
+		"注記が3つの行を全部説明している (%s)" % hint_ja
+	)
 	TranslationServer.set_locale(saved)
 
 
@@ -363,6 +469,13 @@ func _find_effect(effect: CustomPart.Effect) -> CustomPart:
 		if part.effect == effect:
 			return part
 	return null
+
+
+## 行の変化の向き。行そのものが無ければ 99(どの期待値とも一致しない値)を返す。
+## 「行が消えた」を「向きが違う」と同じ1つの失敗として出すための踏み台。
+func _better(rows: Array[Dictionary], label_key: String) -> int:
+	var row := _row_of(rows, label_key)
+	return 99 if row.is_empty() else int(row["better"])
 
 
 func _row_of(rows: Array[Dictionary], label_key: String) -> Dictionary:
