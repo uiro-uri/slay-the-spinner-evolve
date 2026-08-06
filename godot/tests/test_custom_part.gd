@@ -734,11 +734,52 @@ func _test_growth(check: Callable) -> void:
 		growth.apply_to(s)
 	check.call(
 		s.radius <= CustomPartCatalog.RADIUS_CAP + EPS,
-		"巨大化: 直径が上限%.1fで止まる (%.3f)" % [CustomPartCatalog.RADIUS_CAP, s.radius]
+		"巨大化: 直径が上限%.2fで止まる (%.3f)" % [CustomPartCatalog.RADIUS_CAP, s.radius]
 	)
 	check.call(
 		s.mass <= CustomPartCatalog.MASS_CAP + EPS,
 		"巨大化: 質量が上限%.1fで止まる (%.3f)" % [CustomPartCatalog.MASS_CAP, s.mass]
+	)
+
+	# 直径の頭打ちは**基礎ステータスから2枚ぶん**であること(RADIUS_CAPの経緯参照)。
+	# 硬さ = 質量×半径² は半径の2乗で効くので、重ねられる枚数がそのまま複利の指数に
+	# なる。1枚あたりの限界効果だけを見て倍率を決めていた頃は5枚まで積めて、
+	# measure_parts(Lv3)でΔ+3枚 +96.0pt(次点RAREの3倍)の暴走札になっていた。
+	# 「1枚では届かない・2枚で頭打ち」を両側から縛る。片側だけだと、上限を戻しても
+	# 上限を消しても素通りする。
+	var one := SpinnerStats.default_player()
+	growth.apply_to(one)
+	check.call(
+		one.radius < CustomPartCatalog.RADIUS_CAP - EPS,
+		"巨大化: 1枚では直径上限に届かない (%.3f < %.2f)" % [
+			one.radius, CustomPartCatalog.RADIUS_CAP]
+	)
+	var two := SpinnerStats.default_player()
+	growth.apply_to(two)
+	growth.apply_to(two)
+	check.call(
+		two.radius >= CustomPartCatalog.RADIUS_CAP - EPS,
+		"巨大化: 2枚で直径上限に達する (%.3f >= %.2f)" % [
+			two.radius, CustomPartCatalog.RADIUS_CAP]
+	)
+	# 3枚目以降は直径がまったく動かず、質量だけが伸びる=複利が指数から外れる。
+	var three := two.duplicate_stats()
+	growth.apply_to(three)
+	check.call(
+		is_equal_approx(three.radius, two.radius) and three.mass > two.mass,
+		"巨大化: 3枚目は直径が動かず質量だけ伸びる (r %.3f→%.3f / m %.3f→%.3f)" % [
+			two.radius, three.radius, two.mass, three.mass]
+	)
+	# 質量が伸びる以上、上限後も死にカードにはならない(提示は続く)。代わりに
+	# 前サイクルの上限注記が「直径はもう伸びない」と言う——伸びない理由が
+	# 画面に出た状態で選べることが、この上限の前提になっている。
+	check.call(
+		growth.would_change_anything(three),
+		"巨大化: 直径上限後も質量が伸びるので死にカードにはならない"
+	)
+	check.call(
+		"PART_AXIS_RADIUS" in growth.capped_axes(three),
+		"巨大化: 直径上限後は上限注記が直径を挙げる (%s)" % str(growth.capped_axes(three))
 	)
 
 	# 説明(ja)が両方の倍率を出し、注記が代償(自然減衰)に触れること。
