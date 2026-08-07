@@ -82,6 +82,36 @@ static func reachable_shares(tree: MapTree, player: SpinnerStats) -> Dictionary:
 	return out
 
 
+## 進める先の部屋に居る**1体ぶんの硬さの最大値**。相手が居なければ -1.0。
+##
+## 報酬画面の攻め力(PartPreview.attack)の基準にする相手。攻め力は
+## 「1接触で相手から削れるrps」なので、基準も**1体**でなければならない
+## ——部屋の脅威(room_toughness)が頭数ぶんの和なのは「この部屋を抜けられるか」の
+## 話だからで、1回の噛み合いの相手はそのうちの1体でしかない。和を渡すと
+## 3体の部屋で攻め力が1/3に見え、乱戦ほど攻め札が無価値だという逆の嘘になる。
+##
+## 進める先ぜんぶのうち**いちばん硬い1体**を採るのは、どのノードへ進むかが
+## まだ決まっていないから(報酬はマップへ戻る手前で選ぶ)。最も硬い相手を基準に
+## すれば見積もりは控えめに出る——攻め札を過大評価して「通るはずが通らない」
+## という外し方をしない向きに倒す。
+##
+## reachable_shares と同じく**進める先の戦闘ノードだけ**を見る。遠いノードを
+## 混ぜないのはあちらと同じ理由で、そこへ着く頃には今のビルドとの比が嘘になる。
+static func reachable_hardest_toughness(tree: MapTree) -> float:
+	var hardest := -1.0
+	if tree == null:
+		return hardest
+	for coord in tree.next_coords():
+		if not tree.nodes.has(coord):
+			continue
+		var node: MapTree.MapNode = tree.nodes[coord]
+		if not node.has_encounter():
+			continue
+		for stats in stats_of(node.enemies):
+			hardest = maxf(hardest, PartPreview.toughness(stats))
+	return hardest
+
+
 ## メーターの外枠。ノード中心と(ホバーで膨らんだあとの)半径から決まる。
 ## node_radius と center は既に縦画面の拡大率が掛かった実効値、draw_scale は
 ## 装飾px(オフセットや太さ)に掛けるぶん —— MapScreen の PIP_OFFSET と同じ流儀。

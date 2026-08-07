@@ -30,6 +30,9 @@ func run(check: Callable) -> void:
 	_test_growth_shows_both_gains(check)
 	_test_second_row_tracks_drain_not_decay(check)
 	_test_wall_row_tracks_wall_loss(check)
+	_test_attack_row_matches_physics(check)
+	_test_attack_row_needs_an_opponent(check)
+	_test_attack_row_is_the_only_home_of_the_offence_cards(check)
 	_test_rows_always_show_the_deciding_pair(check)
 	_test_non_stat_parts_still_show_something(check)
 	_test_format_hides_unchanged(check)
@@ -419,8 +422,12 @@ func _test_screen_wiring(check: Callable) -> void:
 		"RewardScreen.gdがビルドを受け取っているときに見積もりを出す(到達可能な条件)"
 	)
 	check.call(
-		screen.contains("PartPreview.rows(_stats, part, _continues, _ghost_seconds)"),
+		screen.contains("_stats, part, _continues, _ghost_seconds, _opponent_toughness"),
 		"RewardScreen.gdが見積もりをPartPreviewから得る(受け取った値をそのまま渡す)"
+	)
+	check.call(
+		screen.contains("_opponent_toughness = opponent_toughness"),
+		"RewardScreen.gdがsetup()で攻めの基準になる相手を受け取る"
 	)
 	check.call(
 		screen.contains("PartPreview.format_row("),
@@ -436,6 +443,19 @@ func _test_screen_wiring(check: Callable) -> void:
 		and main.contains("total_ghost_seconds(GameState.acquired_part_ids)"),
 		"Main.gdが今のビルド(ステータス・残機・無敵時間)を報酬画面へ渡す"
 	)
+	check.call(
+		main.contains("ThreatMeter.reachable_hardest_toughness(GameState.map_tree)"),
+		"Main.gdが攻めの基準になる相手(次に踏みうる部屋のいちばん硬い1体)を渡す"
+	)
+	# ハーネスと実UIの情報量は対等に保つ約束(naive_play.card_preview_text の冒頭)。
+	# 実UIにだけ攻めの行があると、コールドプレイのエージェントだけが攻め札を
+	# 「1行も動かない空欄の札」として見送り続けることになる。
+	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
+	check.call(
+		cli.contains("ThreatMeter.reachable_hardest_toughness(tree)")
+		and cli.contains("\"STAT_ATTACK\": \"攻め力\""),
+		"naive_play.gdも同じ基準で攻めの行を出す(ハーネスと実UIの情報量は対等)"
+	)
 	var scene := FileAccess.get_file_as_string("res://scenes/reward/RewardScreen.tscn")
 	check.call(
 		scene.contains("REWARD_PREVIEW_HINT"),
@@ -448,19 +468,107 @@ func _test_translations(check: Callable) -> void:
 	var saved := TranslationServer.get_locale()
 	for locale in ["en", "ja"]:
 		TranslationServer.set_locale(locale)
-		for key in ["STAT_TOUGHNESS", "STAT_ENDURANCE", "STAT_WALL_ENDURANCE",
-				"REWARD_PREVIEW_HEADING", "REWARD_PREVIEW_HINT"]:
+		for key in ["STAT_TOUGHNESS", "STAT_ATTACK", "STAT_ENDURANCE",
+				"STAT_WALL_ENDURANCE", "REWARD_PREVIEW_HEADING", "REWARD_PREVIEW_HINT"]:
 			var got := TranslationServer.translate(key)
 			check.call(got != key, "%s: %s の訳がある (%s)" % [locale, key, got])
-	# 注記は3つの行を全部説明していること。行だけ増えて説明が2つのままだと、
-	# 「壁強さ」が何の回数なのか画面のどこにも出ない。
+	# 注記は4つの行を全部説明していること。行だけ増えて説明が据え置きだと、
+	# 「壁強さ」や「攻め力」が何の量なのか画面のどこにも出ない。
 	TranslationServer.set_locale("ja")
 	var hint_ja := TranslationServer.translate("REWARD_PREVIEW_HINT")
 	check.call(
-		hint_ja.contains("硬さ") and hint_ja.contains("打たれ強さ") and hint_ja.contains("壁強さ"),
-		"注記が3つの行を全部説明している (%s)" % hint_ja
+		hint_ja.contains("硬さ") and hint_ja.contains("攻め力")
+		and hint_ja.contains("打たれ強さ") and hint_ja.contains("壁強さ"),
+		"注記が4つの行を全部説明している (%s)" % hint_ja
 	)
 	TranslationServer.set_locale(saved)
+
+
+## 攻め力の行は「表示用の別式」ではなく、BattleResolver が与ダメージに使う
+## SpinnerPhysics の合成そのもの。括り出したのは violence と相対速さだけなので、
+## その2つを掛け戻せば実際の削りと**厳密に一致**しなければならない。
+##
+## 相手が自分より柔らかい場合と硬い場合の両方を見る。edge のボーナス基準は
+## maxf(素の削り, pierce) なので、片方だけでは max の中身が入れ替わる境目を
+## 押さえられない(max を落として素の削りだけにするサボタージュが素通りする)。
+func _test_attack_row_matches_physics(check: Callable) -> void:
+	var violence := 0.16
+	var speed := 5.0
+	var stats := _player()
+	stats.mass = 2.0
+	stats.radius = 0.8
+	stats.edge = 0.2
+	stats.drill = 0.25
+
+	# 相手の硬さ = 質量×半径²。柔らかい相手(素の削り > pierce)と
+	# 硬い相手(pierce > 素の削り)の2つ。
+	for opponent in [[0.6, 0.4], [3.9, 1.8]]:
+		var opp_mass: float = opponent[0]
+		var opp_radius: float = opponent[1]
+		var opp_toughness := opp_mass * opp_radius * opp_radius
+		# BattleResolver._resolve_pair の与ダメージ側と同じ組み立て。
+		var pierce := SpinnerPhysics.spin_drain(
+			stats.mass, speed, stats.mass, stats.radius, violence)
+		var raw := SpinnerPhysics.spin_drain(
+			stats.mass, speed, opp_mass, opp_radius, violence)
+		var dealt := SpinnerPhysics.drilled_spin_drain(
+			SpinnerPhysics.sharpened_spin_drain(raw, stats.edge, pierce),
+			stats.drill, pierce
+		)
+		var shown := PartPreview.attack(stats, opp_toughness)
+		check.call(
+			is_equal_approx(shown * violence * speed, dealt),
+			"攻め力×violence×速さ = 実際の削り (硬さ%.2fの相手: %.4f 対 %.4f)"
+				% [opp_toughness, shown * violence * speed, dealt]
+		)
+
+
+## 基準の相手が居なければ行を出さない。守りの3行と違って攻めは相手を括り出せない
+## ので、相手が無いときに0や適当な既定値で行を出すと**嘘の見積もり**になる。
+## 決戦のあと(進める先が無い)と、ステータス無しで呼ばれる古い経路がここを通る。
+func _test_attack_row_needs_an_opponent(check: Callable) -> void:
+	var stats := _player()
+	var part := _find_effect(CustomPart.Effect.EDGE)
+	check.call(
+		_row_of(PartPreview.rows(stats, part), "STAT_ATTACK").is_empty(),
+		"基準の相手が無ければ攻めの行は出ない"
+	)
+	var rows := PartPreview.rows(stats, part, -1, 0.0, 1.5)
+	check.call(
+		not _row_of(rows, "STAT_ATTACK").is_empty(),
+		"基準の相手があれば攻めの行が出る"
+	)
+	# 硬さの直後。この2つは同じ1接触の表と裏(削られない量と削る量)で、
+	# 残る2行は「何回耐えられるか」と単位が違う。
+	var keys := PackedStringArray()
+	for row in rows:
+		keys.append(row["label_key"])
+	check.call(
+		keys.size() >= 2 and keys[0] == "STAT_TOUGHNESS" and keys[1] == "STAT_ATTACK",
+		"攻めの行は硬さの直後に並ぶ (%s)" % ", ".join(keys)
+	)
+
+
+## **この変更の証拠**。EDGE(削り増強)と DRILL(貫通削り)は、攻めの行が入る前は
+## 硬さ・打たれ強さ・壁強さの3行とも1ミリも動かず、報酬画面で**空欄の札**だった
+## (一次証拠はコールドプレイ 2026-08-06 seed=48123。part_preview.gd の attack 参照)。
+## 攻めの行だけが動き、守りの3行は据え置きのままであることを両方見る
+## ——攻めの札が守りの行を動かし始めたらそれは別のバグ。
+func _test_attack_row_is_the_only_home_of_the_offence_cards(check: Callable) -> void:
+	var stats := _player()
+	for effect in [CustomPart.Effect.EDGE, CustomPart.Effect.DRILL]:
+		var part := _find_effect(effect)
+		var rows := PartPreview.rows(stats, part, -1, 0.0, 1.5)
+		check.call(
+			_better(rows, "STAT_ATTACK") == 1,
+			"%s: 攻め力が伸びる" % part.title_key
+		)
+		check.call(
+			_better(rows, "STAT_TOUGHNESS") == 0
+			and _better(rows, "STAT_ENDURANCE") == 0
+			and _better(rows, "STAT_WALL_ENDURANCE") == 0,
+			"%s: 守りの3行は据え置き(＝攻めの行が無ければ空欄の札だった)" % part.title_key
+		)
 
 
 ## 良し悪しの色が実際に読めるかは test_contrast.gd が見る(色はPaletteの持ち物)。

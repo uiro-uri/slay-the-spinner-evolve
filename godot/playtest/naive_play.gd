@@ -434,9 +434,12 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	# 実UIのカードと同じく、効果文の下に「取ると自分のコマがどう変わるか」を出す。
 	var stats := stats_from(state["stats"])
 	var ghost := CustomPartCatalog.total_ghost_seconds(_ids(state))
+	# 攻めの行の基準になる相手も実UI(Main.goto_reward)と同じものを渡す。
+	var opponent := ThreatMeter.reachable_hardest_toughness(tree)
 	for c in choices:
 		print("  id=%d '%s' [%s] %s" % [c.id, c.title_key, _rarity(c.rarity), card_text(c)])
-		print("      → %s" % card_preview_text(stats, c, int(state["continues"]), ghost))
+		print("      → %s" % card_preview_text(
+			stats, c, int(state["continues"]), ghost, opponent))
 	print("→ pick --id=<ID>")
 
 func _pick(state: Dictionary, path: String, id: int) -> void:
@@ -620,6 +623,7 @@ func _print_reachable(tree: MapTree, player: SpinnerStats = null) -> void:
 const _PREVIEW_LABELS := {
 	"STAT_TOUGHNESS": "硬さ",
 	"STAT_LIFETIME": "寿命",
+	"STAT_ATTACK": "攻め力",
 	"STAT_ENDURANCE": "打たれ強さ",
 	"STAT_WALL_ENDURANCE": "壁強さ",
 	"STAT_LIVES": "残機",
@@ -645,12 +649,13 @@ const _AXIS_LABELS := {
 
 
 static func card_preview_text(
-	stats: SpinnerStats, part: CustomPart, continues: int = -1, ghost_seconds: float = 0.0
+	stats: SpinnerStats, part: CustomPart, continues: int = -1, ghost_seconds: float = 0.0,
+	opponent_toughness: float = 0.0
 ) -> String:
 	if stats == null or part == null:
 		return ""
 	var cells := []
-	for row in PartPreview.rows(stats, part, continues, ghost_seconds):
+	for row in PartPreview.rows(stats, part, continues, ghost_seconds, opponent_toughness):
 		var key: String = row["label_key"]
 		cells.append("%s %s" % [
 			_PREVIEW_LABELS.get(key, key), PartPreview.format_row(row)])

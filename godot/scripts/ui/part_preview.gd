@@ -130,6 +130,52 @@ static func wall_endurance(stats: SpinnerStats) -> float:
 	return stats.rps * toughness(stats) / taken
 
 
+## 攻め力 = 1接触で**相手から削れる**rps(共通因子の violence と相対速さを括り出した値)。
+## 上の3行が全部「自分がどれだけ削られないか」なのに対し、これだけが攻めの軸。
+##
+## **なぜ相手の硬さを引数で受けるのか**
+## 硬さ・打たれ強さ・壁強さは、相手・速さ・violence を共通因子として括り出せたので
+## 相手を知らずに出せた。攻めは括り出せない——素の削りは相手の硬さに反比例する一方、
+## edge/drill の上乗せの基準 pierce(相手が自分と同じ硬さだったときの削り)は
+## **自分の**硬さで決まり、両者は maxf で繋がっている(SpinnerPhysics の
+## sharpened_spin_drain / drilled_spin_drain)。max の内側で相手が生き残るので、
+## 「相手が誰でも同じ」量にはならない。だから基準の相手を1体、外から渡してもらう。
+##
+## 式は BattleResolver._resolve_pair の与ダメージ側そのまま。a(自分)が b(相手)へ
+## 与える削りは
+##   素の削り  = violence × 自分の質量 × 相対速さ ÷ 相手の硬さ
+##   pierce   = violence × 相対速さ ÷ 自分の半径²  (spin_drain に自分の質量・半径を渡した値)
+##   合計      = 素の削り + edge × max(素の削り, pierce) + drill × pierce
+## で、**violence と相対速さは自分の札では動かない**ので括り出す。残るのが
+##   自分の質量/相手の硬さ + edge × max(自分の質量/相手の硬さ, 1/自分の半径²)
+##   + drill / 自分の半径²
+## 相手の hit_guard(受け手の軽減)は敵側の性能なので、相手・速さと同じく括り出す。
+##
+## 一次証拠(コールドプレイ 2026-08-06, seed=48123): 9戦全勝でクリアしたが、
+## **報酬10枚のうち攻めの札は1枚も取らなかった**。EDGE・DRILL・MOMENTUM・LOW_CENTER は
+## 見積もりの3行が**1つも動かない**ので、GIANT_GROWTH(硬さ 0.73→1.32)や
+## OVERENCUMBERED(打たれ強さ 37.2→46.9)と並ぶと**空欄の札**に見える。
+## 段1で DRILL_BIT を効果文だけで取ったときも「硬さ 0.73 / 打たれ強さ 11.8 /
+## 壁強さ 11.8」と3行とも据え置きで出ていて、取った後も何が変わったのか分からなかった。
+## 結果、質量と直径だけを積む1本道のビルドになった——`build/playtest/report.md` は
+## 報酬方針の差を **greedy 53.3% 対 random 14.7%(38.6pt)** と出しており、
+## このゲームでいちばん結果を動かすのは札選びなのに、その画面に攻めの軸が無かった。
+##
+## opponent_toughness <= 0 は「基準の相手が居ない」= 行を出さない合図(rows を参照)。
+## 自分の半径は @export_range で 0.1 以上に制限されているが、0 を渡されても
+## inf を出さないよう _EPSILON で床を張る(endurance / wall_endurance と同じ扱い)。
+static func attack(stats: SpinnerStats, opponent_toughness: float) -> float:
+	if opponent_toughness <= 0.0:
+		return 0.0
+	var raw := stats.mass / opponent_toughness
+	var pierce := 1.0 / maxf(stats.radius * stats.radius, _EPSILON)
+	return (
+		raw
+		+ maxf(stats.edge, 0.0) * maxf(raw, pierce)
+		+ maxf(stats.drill, 0.0) * pierce
+	)
+
+
 ## この札を取った後のステータス。元のstatsは変えない(プレビューなので破壊しない)。
 static func preview_stats(stats: SpinnerStats, part: CustomPart) -> SpinnerStats:
 	var after := stats.duplicate_stats()
@@ -145,16 +191,34 @@ static func preview_stats(stats: SpinnerStats, part: CustomPart) -> SpinnerStats
 ##
 ## continues は今の残機(GameState.continues_left)。0未満を渡すと残機の行を出さない。
 ## ghost_seconds は取得済みゴースト札の合計秒(CustomPartCatalog.total_ghost_seconds)。
+##
+## opponent_toughness は攻め力の基準にする相手1体の硬さ(Main が
+## ThreatMeter.reachable_hardest_toughness で「次に踏みうる部屋のいちばん硬い1体」を
+## 渡す)。0以下なら攻め力の行を出さない——基準の相手が居ないのは最終戦のあとと、
+## ステータス無しで呼ばれる古い経路・テストだけで、そこで嘘の基準を捏造すると
+## 「相手を知らずに出せる3行」との区別が消える。
+##
+## 攻め力を硬さの直後に置くのは、この2つが**同じ1接触の表と裏**だから
+## (硬さ=1接触で削られない量 / 攻め力=1接触で削る量)。残る2行は「何回耐えられるか」で
+## 単位が違うので、後ろにまとめる。
 static func rows(
 	stats: SpinnerStats, part: CustomPart,
-	continues: int = -1, ghost_seconds: float = 0.0
+	continues: int = -1, ghost_seconds: float = 0.0,
+	opponent_toughness: float = 0.0
 ) -> Array[Dictionary]:
 	var after := preview_stats(stats, part)
 	var result: Array[Dictionary] = [
 		_row("STAT_TOUGHNESS", toughness(stats), toughness(after), 2),
-		_row("STAT_ENDURANCE", endurance(stats), endurance(after), 1),
-		_row("STAT_WALL_ENDURANCE", wall_endurance(stats), wall_endurance(after), 1),
 	]
+	if opponent_toughness > 0.0:
+		result.append(_row(
+			"STAT_ATTACK",
+			attack(stats, opponent_toughness), attack(after, opponent_toughness), 2
+		))
+	result.append(_row("STAT_ENDURANCE", endurance(stats), endurance(after), 1))
+	result.append(
+		_row("STAT_WALL_ENDURANCE", wall_endurance(stats), wall_endurance(after), 1)
+	)
 	# 残機札(SPARE_CORE)はコマの性能を一切変えないので、硬さ・打たれ強さだけでは
 	# 「何も起きない札」に見えてしまう。GameState側の効果をここで補う。
 	if continues >= 0 and part.lives > 0:
