@@ -263,11 +263,11 @@ func _test_lifetime_ladder(check: Callable) -> void:
 		prev_avg = avg
 
 
-## 斥候段の割当: 各レベル帯の2段目(段2・4・6)だけが斥候段で、斥候レベルは
-## その段の基準+1。段8(Lv5=ボスの先取り)と帯の1段目(崖)は対象外。
-## is_vanguard_stepの条件(偶数段・レベル上限)を弄るとここが落ちる。
+## 斥候段の割当: 段1と帯の2段目(段2・4・6)で、斥候レベルはその段の基準+1。
+## 帯の1段目のうち段3(Lv3が2段先取りで重すぎる)・段5・段7(次レベル初対面の崖)と
+## 段8(Lv5=ボスの先取り)は対象外。is_vanguard_stepの条件を弄るとここが落ちる。
 func _test_vanguard_steps(check: Callable) -> void:
-	var expected := {1: 0, 2: 2, 3: 0, 4: 3, 5: 0, 6: 4, 7: 0, 8: 0, 9: 0}
+	var expected := {1: 2, 2: 2, 3: 0, 4: 3, 5: 0, 6: 4, 7: 0, 8: 0, 9: 0}
 	var ok := true
 	var detail := ""
 	for step in expected:
@@ -276,7 +276,10 @@ func _test_vanguard_steps(check: Callable) -> void:
 			ok = false
 			detail = " / 段%d: 期待Lv%d 実際Lv%d" % [step, expected[step], got]
 			break
-	check.call(ok, "斥候段: 段2→Lv2・段4→Lv3・段6→Lv4、他は無し%s" % detail)
+	check.call(
+		ok,
+		"斥候段: 段1・2→Lv2 / 段4→Lv3 / 段6→Lv4、段3・5・7・8は無し%s" % detail
+	)
 
 
 ## 斥候の出現規則: (1)斥候は必ず単体(乱戦にならない)、(2)レベルは基準+1ちょうど、
@@ -288,7 +291,7 @@ func _test_vanguard_group_rules(check: Callable) -> void:
 	rng.seed = 20260729
 	const DRAWS := 3000
 	var violations: Array[String] = []
-	for step in [2, 4, 6]:
+	for step in [1, 2, 4, 6]:
 		var base := EnemyRoster.level_for_step(step)
 		var vanguards := 0
 		for _i in DRAWS:
@@ -312,8 +315,8 @@ func _test_vanguard_group_rules(check: Callable) -> void:
 			for e in group:
 				if e.level != base:
 					violations.append("段%d: 封印中にLv%dが出た" % [step, e.level])
-	# 非斥候段(帯の1段目と段7・8)は常に基準レベルのみ。
-	for step in [1, 3, 5, 7, 8]:
+	# 非斥候段(段3と、崖の段5・7、段8)は常に基準レベルのみ。
+	for step in [3, 5, 7, 8]:
 		var base := EnemyRoster.level_for_step(step)
 		for _i in 1000:
 			for e in EnemyRoster.pick_group_for_step(step, rng):
