@@ -148,6 +148,17 @@ func _test_rage_and_momentum_report_their_capped_half(check: Callable) -> void:
 			axes.has("PART_AXIS_SPIN_DECAY") and not axes.has("PART_AXIS_FRICTION"),
 			"回転減衰が下限の勢い維持は回転減衰だけを挙げる (%s)" % [axes]
 		)
+		# 複合化した削りの軸(MOMENTUM_EDGE_STEP)も上限を持つので、注記が拾えること。
+		# edgeの器はSHARP_EDGEと共有するので、攻めの札を積み切った後に勢い維持を
+		# 提示されると「+10%と書いてあるのに伸びない」が実際に起きる——
+		# 謳う軸(_claimed_axes)に足し忘れると、その注記だけが黙って消える。
+		var sharpened := _player()
+		sharpened.edge = momentum.edge_max
+		var sharp_axes := _axes(momentum, sharpened)
+		check.call(
+			sharp_axes.has("PART_AXIS_EDGE") and not sharp_axes.has("PART_AXIS_SPIN_DECAY"),
+			"削り増強が上限の勢い維持は削り増強だけを挙げる (%s)" % [sharp_axes]
+		)
 
 
 ## 死にカード判定と同じ閾値を共有していること。

@@ -26,9 +26,18 @@ enum Stat { MASS, RADIUS, FRICTION, RESTITUTION, RPS }
 ##  - GHOST: 最初の衝突の直後から一定時間だけ敵との衝突を無効化する時間効果
 ##    (ヒット&ラン: 初撃は通り、直後の報復をすり抜けて離脱する)。すり抜け時間は
 ##    BattleがCustomPartCatalog.total_ghost_secondsで戦闘へ渡す。
-## MOMENTUM: 摩擦(速度減衰)と回転減衰率の両方を multiplier 倍にする「勢い維持」効果。
-## 単一ステータス倍率では摩擦しか触れず戦績がほぼ0だったので、回転減衰にも効かせる。
+## MOMENTUM: 摩擦(速度減衰)と回転減衰率の両方を multiplier 倍にしつつ、コマ同士の
+## 衝突で相手に与えるrps削りを増やす(edgeを edge_step ぶん加算、上限edge_max)複合効果。
 ## cap は spin_decay の下限(これ以上は減らさない=青天井/無限HP化を防ぐ)。
+##
+## 摩擦だけを下げていた頃は戦績がほぼ0で、回転減衰を足しても死に札のままだった。
+## 理由は倍率ではなく**軸**にある: 自機のrps喪失の内訳は決着を左右するLv2〜4で
+## 削り71〜83% / 壁16〜23% / 自然減衰4〜8%(playtest/measure_slope_grip)で、
+## MOMENTUMが触る2軸(摩擦・自然減衰)は合わせても1割に届かない。倍率をいくら
+## 強くしても、喪失の1割しか無い軸では中堅COMMONに届かない。
+## そこでGROWTH(直径→質量)・RAGE(反発→壁軽減)と同じ複合化で、決着を決める
+## 削りの軸へ足がかりを与える。「勢いを保って走り続ける＝速いまま当たるので深く削る」
+## という札の見立てそのままの向きで、素の削りが相対速さに比例する物理とも合う。
 ##
 ## RAGE: 反発(restitution)を multiplier 倍(cap上限)にしつつ、壁でのrps喪失を
 ## 減らす(wall_keepを wall_keep_step ぶん加算、上限1.0)複合効果。反発upは相手を
@@ -225,11 +234,15 @@ static func make_ghost(
 	return part
 
 
-## 勢い維持札を作る。摩擦とspin_decayの両方を multiplier 倍にする。
+## 勢い維持札を作る。摩擦とspin_decayの両方を multiplier 倍にしつつ、与ダメ増強
+## (edge)を edge_step_ ぶん上げる複合札。
 ## spin_decay_floor_ は spin_decay の下限（重ねても回転減衰をこれ以下にはしない）。
+## edge_max_ は edge の上限（EDGE札と同じ器を共有する。理由はカタログの
+## MOMENTUM_EDGE_STEP のコメント参照）。
 static func make_momentum(
 	id_: int, title_key_: String, rarity_: Rarity,
-	multiplier_: float, spin_decay_floor_: float = 0.0
+	multiplier_: float, spin_decay_floor_: float = 0.0,
+	edge_step_: float = 0.0, edge_max_: float = 1.0
 ) -> CustomPart:
 	var part := CustomPart.new()
 	part.id = id_
@@ -238,6 +251,8 @@ static func make_momentum(
 	part.effect = Effect.MOMENTUM
 	part.multiplier = multiplier_
 	part.cap = spin_decay_floor_
+	part.edge_step = edge_step_
+	part.edge_max = edge_max_
 	return part
 
 
@@ -360,14 +375,16 @@ static func make_spin_up(
 
 
 func apply_to(stats: SpinnerStats) -> void:
-	# 勢い維持(MOMENTUM): 摩擦と回転減衰の両方を下げる。spin_decayはcapを下限に
-	# クランプして、重ねても回転減衰がゼロ(=無限に回る)にならないようにする。
+	# 勢い維持(MOMENTUM): 摩擦と回転減衰の両方を下げ、与ダメ増強(edge)を上げる。
+	# spin_decayはcapを下限にクランプして、重ねても回転減衰がゼロ(=無限に回る)に
+	# ならないようにする。edgeはEDGE札と同じく上限で頭打ちにする。
 	if effect == Effect.MOMENTUM:
 		stats.friction *= multiplier
 		var decayed := stats.spin_decay * multiplier
 		if cap > 0.0:
 			decayed = maxf(decayed, cap)
 		stats.spin_decay = decayed
+		stats.edge = minf(stats.edge + edge_step, edge_max)
 		return
 	# 衝撃吸収(GUARD): 衝突で受けるrps削りを減らす(hit_guard加算)。上限で頭打ちに
 	# して、重ねがけで削り無効(=衝突無敵)にならないようにする。
@@ -505,6 +522,7 @@ func _claimed_axes() -> Array:
 			return [
 				["friction", "PART_AXIS_FRICTION"],
 				["spin_decay", "PART_AXIS_SPIN_DECAY"],
+				["edge", "PART_AXIS_EDGE"],
 			]
 		Effect.GUARD:
 			return [["hit_guard", "PART_AXIS_HIT_GUARD"]]
@@ -609,11 +627,19 @@ func describe() -> String:
 			tr("PART_EFFECT_GHOST").format([_trim(ghost_seconds)])
 			+ "\n" + tr("PART_NOTE_GHOST")
 		)
-	# 勢い維持は摩擦と回転減衰の両方に効く。倍率を埋めた専用の説明に、挙動の
-	# 注記を添える——「摩擦×0.8」だけでは下がる=良いことが初見に伝わらない
-	# (コールドプレイでは寿命目安の併記に救われて選べた、が実UIにその救いはない)。
+	# 勢い維持は摩擦・回転減衰・与ダメ増強の複合。倍率と削り増強を埋めた専用の
+	# 説明に、挙動の注記を添える——「摩擦×0.8」だけでは下がる=良いことが初見に
+	# 伝わらない(コールドプレイでは寿命目安の併記に救われて選べた、が実UIにその
+	# 救いはない)。削りの側はGUARD/EDGEと同じ%表記に揃える。
 	if effect == Effect.MOMENTUM:
-		return tr("PART_EFFECT_MOMENTUM").format([_trim(multiplier)]) + "\n" + tr("PART_NOTE_MOMENTUM")
+		return (
+			tr("PART_EFFECT_MOMENTUM").format([
+				_trim(multiplier),
+				_trim(edge_step * 100.0),
+				_trim(edge_max * 100.0),
+			])
+			+ "\n" + tr("PART_NOTE_MOMENTUM")
+		)
 	# 怒りの反射は反発倍率と壁rps保持の複合。両方を埋めた専用の説明を返す。
 	# 挙動注記(価値の逆転)を必ず添える——壁被弾がほぼ無い序盤に読むと死に効果に
 	# 見えるが、終盤は壁でのrps喪失が削りに並ぶ〜上回る(ボス戦で壁20.0 vs 削り12.0、

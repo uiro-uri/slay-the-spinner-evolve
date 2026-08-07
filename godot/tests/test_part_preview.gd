@@ -195,8 +195,9 @@ func _test_second_row_tracks_drain_not_decay(check: Callable) -> void:
 				row["before"], row["after"]]
 		)
 
-	# 自然減衰だけを動かす札(MOMENTUM)は、どちらの行も動かさない。
-	# measure_parts(Lv3・3枚)で全11札中最下位(+0.5pt)の札が、以前は寿命 +5.4 と
+	# 勢い維持(MOMENTUM)は守りの3行(硬さ・打たれ強さ・壁強さ)をどれも動かさない。
+	# 触るのは摩擦・自然減衰・与ダメ増強で、守りの軸を1本も持たないため。
+	# 以前は寿命が2行目に居たせいで、measure_parts(Lv3・3枚)で最下位の札が
 	# 「最も大きく得をする札」に見えていた。
 	var momentum := _find_effect(CustomPart.Effect.MOMENTUM)
 	check.call(momentum != null, "カタログに勢い維持札がある")
@@ -205,7 +206,18 @@ func _test_second_row_tracks_drain_not_decay(check: Callable) -> void:
 		check.call(
 			_row_of(rows, "STAT_TOUGHNESS")["better"] == 0
 			and _row_of(rows, "STAT_ENDURANCE")["better"] == 0,
-			"勢い維持札: 硬さも打たれ強さも動かない(自然減衰しか触らないため)"
+			"勢い維持札: 硬さも打たれ強さも動かない(守りの軸を持たないため)"
+		)
+		# ただし**攻めの行は動く**。複合化(MOMENTUM_EDGE_STEP)で削りの軸を得たので、
+		# 基準の相手を渡した画面では見積もりが必ず何かを語る——4行とも据え置きの
+		# 「白紙の札」ではなくなったことがこの札の改修の要点(死に札 +0.4pt の一次証拠は
+		# CustomPartCatalog.MOMENTUM_EDGE_STEP のコメント)。
+		var attack_rows := PartPreview.rows(_player(), momentum, 3, 0.0, 1.5)
+		var attack_row := _row_of(attack_rows, "STAT_ATTACK")
+		check.call(
+			attack_row["better"] == 1,
+			"勢い維持札: 攻め力の行が伸びる側で出る (%.2f→%.2f)" % [
+				attack_row["before"], attack_row["after"]]
 		)
 
 	# ゼロ除算でinf/nanを出さない(将来の札が軽減を1.0にしても壊れない)。
