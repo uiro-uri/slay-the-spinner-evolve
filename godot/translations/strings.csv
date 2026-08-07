@@ -154,7 +154,7 @@ STAT_ENEMY_TOUGHNESS,vs Toughness,硬さ 相手
 STAT_ENEMY_LIFETIME,vs Spin Time,寿命 相手
 REWARD_PREVIEW_HEADING,If you take it,取ると
 REWARD_PREVIEW_HINT,"Toughness resists drain; Attack is how much you drain per hit; Staying Power is how many hits you can take; Wall Endurance is how many wall slams",硬さ＝一撃の削られにくさ／攻め力＝一撃で削れる量／打たれ強さ＝耐えられる接触の回数／壁強さ＝耐えられる壁の回数
-REWARD_ATTACK_BASIS,"Attack is measured against the toughest foe you could face next (toughness {0})",攻め力の基準＝次に選べる部屋のいちばん硬い相手（硬さ {0}）
+REWARD_ATTACK_BASIS,"Attack = how many times harder you bite than a stock spinner, against the toughest foe you could face next (toughness {0})",攻め力＝素のコマの何倍削れるか。相手は次に選べる部屋のいちばん硬い1体（硬さ {0}）
 PART_GIANT_GROWTH,Giant Growth,ジャイアントグロース
 PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
 PART_FULL_STEAM_AHEAD,Full Steam Ahead,フルスロットル

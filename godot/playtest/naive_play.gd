@@ -441,8 +441,8 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	# 攻めの行の基準になる相手も実UI(Main.goto_reward)と同じものを渡す。
 	var opponent := ThreatMeter.reachable_hardest_toughness(tree)
 	# 実UIの報酬画面と同じ注記(RewardScreenのAttackBasis)。攻めの行だけが基準の相手を
-	# 持っていて、その相手の硬さはラン中に十数倍になるので、基準を出さないと
-	# 「強くなるほど攻め力が縮む」に見える(PartPreview.attack_basis_text)。
+	# 持っていて、その相手の硬さはラン中に十数倍になるので、値は素のコマ基準の倍率で
+	# 出し(PartPreview.attack_index)、どの相手を見た倍率かをこの注記が言う。
 	var basis := PartPreview.attack_basis_text(opponent)
 	if basis != "":
 		print("  %s" % basis)

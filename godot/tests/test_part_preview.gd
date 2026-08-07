@@ -14,6 +14,13 @@ extends RefCounted
 ## 見えていた。壁はラン合計で削りを上回る(コールドプレイ seed=4821 で
 ## 壁61.1 対 削り52.5)ので、壁の札と接触の札が**別々の行を動かす**ことを見る。
 ##
+## (9) **攻めの行が素のコマ基準の倍率であること**。生の攻め力は基準の相手の硬さに
+## 反比例するので、ラン中は自分が強くなるほど数字が縮んでいた(コールドプレイ
+## seed=4821 の実測で 13.64 → 1.02)。守りの3行が伸びる隣でこの行だけが逆を向くと、
+## 「自分の攻めは育っているのか」に画面のどこも答えられない。素のコマで割った倍率は
+## 同じ実測で 1.00 → 8.56 と伸びる。1画面の中でのカード同士の比較は変わらない
+## (分母が3枚に共通なので順位が保たれる)ことも併せて見る。
+##
 ## (7) **2行目が寿命でないこと**。寿命は自然減衰の軸で、実測では決着にほぼ効かない
 ## (敵の敗因の自然減衰は全レベル0.0%)のに、カード間で最も大きく動く行だった。
 ## 結果として最下位の札(FULL_STEAM_AHEAD)が最も得に見え、1位の札(GIANT_GROWTH)が
@@ -33,6 +40,8 @@ func run(check: Callable) -> void:
 	_test_attack_row_matches_physics(check)
 	_test_attack_row_needs_an_opponent(check)
 	_test_attack_row_is_the_only_home_of_the_offence_cards(check)
+	_test_attack_index_is_a_multiple_of_the_stock_spinner(check)
+	_test_attack_row_reads_as_build_growth(check)
 	_test_attack_basis_names_the_reference_opponent(check)
 	_test_rows_always_show_the_deciding_pair(check)
 	_test_non_stat_parts_still_show_something(check)
@@ -616,7 +625,107 @@ func _test_attack_row_is_the_only_home_of_the_offence_cards(check: Callable) -> 
 		)
 
 
-## **この変更の証拠**(2026-08-07)。攻めの行だけが基準の相手を持っていて、その相手の
+## 倍率(PartPreview.attack_index)の素性。素のコマがちょうど 1.00 になること、
+## 基準の相手が無ければ 0(＝行そのものが出ない合図)であること、そして
+## **1画面の中でのカード同士の比較を一切変えない**こと——分母は3枚とも共通の正の数
+## なので、倍率は attack の正のスカラー倍でなければならない。ここが崩れると
+## 「見た目のために順位が入れ替わる」ことになり、見積もりが嘘になる。
+func _test_attack_index_is_a_multiple_of_the_stock_spinner(check: Callable) -> void:
+	for opponent in [0.12, 1.52, 12.56]:
+		check.call(
+			is_equal_approx(PartPreview.attack_index(_player(), opponent), 1.0),
+			"素のコマは倍率1.00 (相手の硬さ%.2f: %.4f)"
+				% [opponent, PartPreview.attack_index(_player(), opponent)]
+		)
+	check.call(
+		PartPreview.attack_index(_player(), 0.0) == 0.0
+		and PartPreview.attack_index(_player(), -1.0) == 0.0,
+		"基準の相手が無ければ倍率も0(攻めの行を出さない合図)"
+	)
+
+	# 分母が3枚に共通＝倍率と生の攻め力で大小関係が同じ。全札×2つの硬さで見る。
+	for opponent in [0.12, 12.56]:
+		var ratios: Array[float] = []
+		for part in CustomPartCatalog.all():
+			var after := PartPreview.preview_stats(_player(), part)
+			var raw := PartPreview.attack(after, opponent)
+			var indexed := PartPreview.attack_index(after, opponent)
+			check.call(raw > 0.0 and indexed > 0.0, "%s: 攻めは正" % part.title_key)
+			ratios.append(indexed / raw)
+		for i in range(1, ratios.size()):
+			check.call(
+				is_equal_approx(ratios[0], ratios[i]),
+				"相手の硬さ%.2f: 全札で同じ分母＝順位が変わらない (%.6f 対 %.6f)"
+					% [opponent, ratios[0], ratios[i]]
+			)
+
+
+## **この変更の証拠**(2026-08-07)。攻めの行に出す値を素のコマ基準の倍率へ変えた理由は
+## 「ランを通して読むと、育っているのに数字が縮む」だった。コールドプレイ
+## (seed=4821・9戦全勝でクリア)で実際に踏んだ8画面ぶんのビルドと基準の相手を並べ、
+##  - **倍率は段が進むごとに必ず伸びる**(＝守りの3行と同じ向き)
+##  - **生の攻め力はそうならない**(縮む段がある。それがこの変更の動機)
+## の両方を見る。後半だけでは足りない——前半は相手が柔らかく素の削りが支配的、
+## 後半は相手が硬く貫通削りが支配的で、max の中身が入れ替わるからで、
+## 片側だけ切り出すと「たまたま単調だった」で通ってしまう。
+func _test_attack_row_reads_as_build_growth(check: Callable) -> void:
+	# [基準の相手の硬さ, 質量, 半径, 削り増強, 貫通削り] を段1の報酬画面から順に。
+	var run := [
+		[0.11, 1.50, 0.70, 0.00, 0.00],
+		[0.49, 1.50, 0.70, 0.00, 0.25],
+		[0.41, 1.50, 0.70, 0.40, 0.25],
+		[1.52, 1.95, 0.70, 0.40, 0.25],
+		[1.76, 2.24, 0.88, 0.40, 0.50],
+		[3.66, 2.58, 1.05, 0.40, 0.50],
+		[3.88, 2.58, 1.05, 0.40, 0.50],
+		[12.56, 2.58, 1.05, 0.40, 0.50],
+	]
+	var shown: Array[float] = []
+	var raw: Array[float] = []
+	# 表示の値は rows() から取る。attack_index を直に呼ぶと「関数はあるが
+	# 行に繋がっていない」サボタージュが素通りする。
+	var wiring := _find_effect(CustomPart.Effect.DRILL)
+	for entry in run:
+		var stats := _player()
+		stats.mass = entry[1]
+		stats.radius = entry[2]
+		stats.edge = entry[3]
+		stats.drill = entry[4]
+		var row := _row_of(PartPreview.rows(stats, wiring, -1, 0.0, entry[0]), "STAT_ATTACK")
+		check.call(not row.is_empty(), "攻めの行が出る(相手の硬さ%.2f)" % entry[0])
+		shown.append(row["before"])
+		raw.append(PartPreview.attack(stats, entry[0]))
+
+	var shown_falls := false
+	var raw_falls := false
+	for i in range(1, shown.size()):
+		if shown[i] <= shown[i - 1]:
+			shown_falls = true
+		if raw[i] <= raw[i - 1]:
+			raw_falls = true
+	check.call(
+		not shown_falls,
+		"攻めの行はラン中ずっと伸びる(実測のビルド8画面: %s)" % str(shown)
+	)
+	check.call(
+		raw_falls,
+		"生の攻め力はそうならない＝この変更の動機がまだ現実であること (%s)" % str(raw)
+	)
+	# 倍率だと分かる印。絶対量の行(硬さ・打たれ強さ)には付かない。
+	var rows := PartPreview.rows(_player(), wiring, -1, 0.0, 12.56)
+	check.call(
+		PartPreview.format_row(_row_of(rows, "STAT_ATTACK")).begins_with("×"),
+		"攻めの行は倍率と分かる印が付く (%s)"
+			% PartPreview.format_row(_row_of(rows, "STAT_ATTACK"))
+	)
+	for key in ["STAT_TOUGHNESS", "STAT_ENDURANCE", "STAT_WALL_ENDURANCE"]:
+		check.call(
+			not PartPreview.format_row(_row_of(rows, key)).begins_with("×"),
+			"%s は絶対量なので倍率の印を付けない" % key
+		)
+
+
+## 攻めの行だけが基準の相手を持っていて、その相手の
 ## 硬さはラン中に十数倍になる。だから自分が強くなっていても攻めの行は縮む
 ## (コールドプレイ seed=4711 の実測で 12.59 → 1.09)。注記が**基準の相手の硬さを
 ## その場の数字で**言わなければ、他の3行が伸びる隣でこの行だけ逆を向く理由が
@@ -652,12 +761,18 @@ func _test_attack_basis_names_the_reference_opponent(check: Callable) -> void:
 	)
 
 	# 両localeに訳があること。欠けるとキーが素のまま画面に出る。
+	# 行の値が倍率になった(2026-08-07)ので、注記は**何を1.00とした倍率か**まで言う
+	# ——基準の相手だけを言って倍率だと言わないと、「×3.83」が絶対量に読める。
 	for locale in ["en", "ja"]:
 		TranslationServer.set_locale(locale)
 		var text := PartPreview.attack_basis_text(12.64)
 		check.call(
 			not text.begins_with("REWARD_ATTACK_BASIS") and text.contains("12.64"),
 			"%s: 注記の訳がある (%s)" % [locale, text]
+		)
+		check.call(
+			text.contains("素のコマ") if locale == "ja" else text.contains("stock spinner"),
+			"%s: 注記が倍率の基準(素のコマ)を名指しする (%s)" % [locale, text]
 		)
 	TranslationServer.set_locale(saved)
 

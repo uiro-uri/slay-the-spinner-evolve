@@ -24,7 +24,7 @@ var _stats: SpinnerStats = null
 var _continues := -1
 var _ghost_seconds := 0.0
 
-## 攻め力(PartPreview.attack)の基準にする相手1体の硬さ。0以下ならその行を出さない。
+## 攻め力(PartPreview.attack_index)の基準にする相手1体の硬さ。0以下ならその行を出さない。
 ## Mainが「次に踏みうる部屋のいちばん硬い1体」を渡す(ThreatMeter参照)。
 var _opponent_toughness := 0.0
 
