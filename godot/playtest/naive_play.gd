@@ -670,10 +670,26 @@ static func card_preview_text(
 		cells.append("%s %s" % [
 			_PREVIEW_LABELS.get(key, key), PartPreview.format_row(row)])
 	var text := " / ".join(cells)
+	var decay := card_decay_text(stats, part)
+	if decay != "":
+		text += "  " + decay
 	var capped := card_capped_text(stats, part)
 	if capped != "":
 		text += "  " + capped
 	return text
+
+
+## 自然減衰の軸が動く札に付く注記(実UIが報酬カードに出す PartPreview.decay_note の
+## CLI版)。動かなければ空文字。
+##
+## **ハーネスと実ゲームの情報量は対等に保つ約束**(card_preview_text 参照)。
+## 4行は回転減衰を1本も読まないので、これが無いとコールドプレイだけが
+## 「巨大化は寿命を削る」「勢い維持は寿命を伸ばす」を知らないまま札を選ぶ。
+static func card_decay_text(stats: SpinnerStats, part: CustomPart) -> String:
+	var note := PartPreview.decay_note(stats, part)
+	if note.is_empty():
+		return ""
+	return "(%s)" % note["text"]
 
 
 ## 上限に達して動かなくなった軸の注記(実UIが報酬カードに出す

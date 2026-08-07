@@ -779,9 +779,24 @@ func _test_naive_play_card_preview(check: Callable) -> void:
 			String.num(PartPreview.endurance(stats), 1),
 			String.num(PartPreview.endurance(after), 1)]) in growth_text,
 		"naive_play: 打たれ強さの変化が実UIと同じ桁で出る (%s)" % growth_text)
+	# 寿命は**行**にはしない(実UIと同じ)。ただし自然減衰の軸が動く札には注記が付く
+	# ——ハーネスと実ゲームの情報量は対等に保つ約束(NaivePlay.card_decay_text)。
+	var growth_keys := PackedStringArray()
+	for row in PartPreview.rows(stats, growth):
+		growth_keys.append(row["label_key"])
 	check.call(
-		not ("寿命" in growth_text),
-		"naive_play: カードに寿命の行を出さない(実UIと同じ) (%s)" % growth_text)
+		not growth_keys.has("STAT_LIFETIME"),
+		"naive_play: カードに寿命の行を出さない(実UIと同じ) (%s)" % ", ".join(growth_keys))
+	check.call(
+		PartPreview.decay_note(stats, growth)["text"] in growth_text,
+		"naive_play: 巨大化に自然減衰の注記が実UIと同じ文で出る (%s)" % growth_text)
+	var momentum_text: String = NaivePlay.card_preview_text(stats, CustomPartCatalog.by_id(5))
+	check.call(
+		PartPreview.decay_note(stats, CustomPartCatalog.by_id(5))["text"] in momentum_text,
+		"naive_play: 勢い維持にも注記が出る(得の側も開示する) (%s)" % momentum_text)
+	check.call(
+		NaivePlay.card_decay_text(stats, edge) == "",
+		"naive_play: 減衰率を動かさない札に注記は出ない")
 
 	# 値は PartPreview から借りること(2箇所に式を書くと実UIとCLIが別の数字を出す)。
 	for id in [2, 3, 5, 7, 11, 12, 14]:

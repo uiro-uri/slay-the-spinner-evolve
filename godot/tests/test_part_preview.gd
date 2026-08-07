@@ -44,6 +44,7 @@ func run(check: Callable) -> void:
 	_test_attack_row_reads_as_build_growth(check)
 	_test_attack_basis_names_the_reference_opponent(check)
 	_test_rows_always_show_the_deciding_pair(check)
+	_test_decay_note_covers_the_axis_no_row_reads(check)
 	_test_non_stat_parts_still_show_something(check)
 	_test_format_hides_unchanged(check)
 	_test_screen_wiring(check)
@@ -134,6 +135,13 @@ func _test_growth_shows_both_gains(check: Callable) -> void:
 	check.call(
 		_row_of(rows, "STAT_LIFETIME").is_empty(),
 		"報酬カードに寿命の行を出さない(自然減衰は決着にほぼ効かない)"
+	)
+	# ただし代償は**注記として**出る。行に戻さないまま「巨大化は寿命を削る」を
+	# 数字にするのが decay_note の役目(2026-08-07)。
+	var growth_note := PartPreview.decay_note(stats, growth)
+	check.call(
+		not growth_note.is_empty() and growth_note["better"] == -1,
+		"巨大化: 寿命が縮む注記が悪くなる側で出る (%s)" % growth_note.get("text", "なし")
 	)
 
 	# betterの符号は実際の増減と一致していること(全札・全行で確認する)。
@@ -388,6 +396,145 @@ func _test_rows_always_show_the_deciding_pair(check: Callable) -> void:
 		)
 
 
+## **自然減衰の注記(decay_note)**。4行が1本も読まない軸を補う小さな注記で、
+## 行には戻さない(戻すと 2026-08-06 に外した「最も大きく動く行」が復活する)。
+##
+## 見るのは4つ:
+##  (1) 出す条件が**減衰率(半径×回転減衰)の変化**であること。寿命の変化で出すと
+##      回転札(EXTRA_WINDING / SPIN_ENGINE)にも付くが、rpsは打たれ強さ・壁強さの
+##      2行が既に読んでいるので、3つ目の上向きは情報を増やさず回転札を過大に見せる。
+##  (2) **両方向に出る**こと。巨大化の代償だけ出して勢い維持の得を出さないのは
+##      片側だけの開示になる(コールドプレイ 2026-08-07夜 で取り違えたのは両方)。
+##  (3) 表示する数字が `lifetime` そのものであること(2箇所に式を書くと表示だけ嘘になる)。
+##  (4) 行の列は**一切増えていない**こと。
+##
+## 一次証拠は part_preview.gd の decay_note 冒頭コメント。
+## サボタージュ検証は docs/evolve/journal.md の当該サイクル。
+func _test_decay_note_covers_the_axis_no_row_reads(check: Callable) -> void:
+	var stats := _player()
+
+	# (1)(2) カタログ全体で、注記が出る札 = 減衰率が動く札 と一致する。
+	var noted: Array[String] = []
+	var rate_moved: Array[String] = []
+	var mismatched: Array[String] = []
+	for part in CustomPartCatalog.all():
+		var after := PartPreview.preview_stats(stats, part)
+		var moves_rate := (
+			CustomPart.stat_moved(stats.radius, after.radius)
+			or CustomPart.stat_moved(stats.spin_decay, after.spin_decay)
+		)
+		var note := PartPreview.decay_note(stats, part)
+		if moves_rate:
+			rate_moved.append(part.title_key)
+		if not note.is_empty():
+			noted.append(part.title_key)
+		if moves_rate != (not note.is_empty()):
+			mismatched.append(part.title_key)
+	check.call(
+		mismatched.is_empty(),
+		"注記は減衰率が動く札にだけ出る (食い違い: %s)" % ", ".join(mismatched)
+	)
+	check.call(
+		noted.size() >= 2,
+		"注記が出る札が両方向ぶん存在する (%s)" % ", ".join(noted)
+	)
+
+	# 回転だけ動かす札(EXTRA_WINDING / SPIN_ENGINE)は寿命が伸びるのに注記を出さない
+	# ——rpsは打たれ強さ・壁強さの2行が既に読んでいる軸だから。カードを名指しせず
+	# 「rpsを上げるが減衰率は動かさない札」として全カタログから拾う。
+	var spin_cards: Array[String] = []
+	var leaked: Array[String] = []
+	for part in CustomPartCatalog.all():
+		var after := PartPreview.preview_stats(stats, part)
+		if after.rps <= stats.rps:
+			continue
+		if CustomPart.stat_moved(stats.radius, after.radius) or CustomPart.stat_moved(stats.spin_decay, after.spin_decay):
+			continue
+		spin_cards.append(part.title_key)
+		if PartPreview.lifetime(after) <= PartPreview.lifetime(stats):
+			leaked.append("%s(寿命が伸びていない)" % part.title_key)
+		elif not PartPreview.decay_note(stats, part).is_empty():
+			leaked.append("%s(注記が出た)" % part.title_key)
+	check.call(spin_cards.size() >= 2, "回転を上げる札が2枚以上ある (%s)" % ", ".join(spin_cards))
+	check.call(
+		leaked.is_empty(),
+		"回転札は寿命が伸びるが注記は出ない (%s)" % ", ".join(leaked)
+	)
+
+	# (2) 勢い維持は**得の側**で出る。この札は4行では攻め力が少し動くだけで、
+	# コールドプレイ 2026-08-07夜 の段7では寿命 28.9→38.0 を伸ばしながら
+	# 「いちばん地味な札」に見えていた。
+	var momentum := _find_effect(CustomPart.Effect.MOMENTUM)
+	check.call(momentum != null, "カタログに勢い維持札がある")
+	if momentum != null:
+		var note := PartPreview.decay_note(stats, momentum)
+		check.call(
+			not note.is_empty() and note["better"] == 1,
+			"勢い維持: 寿命が伸びる注記が良くなる側で出る (%s)" % note.get("text", "なし")
+		)
+
+		# **上限注記と物差しを共有していること**(CustomPart.stat_moved)。
+		# 勢い維持を4枚積んだビルド(摩擦0.40・回転減衰0.41、どちらも下限0.40)では
+		# capped_axes が「もう伸びない」と言う。ここだけ厳密一致で見ていると、
+		# 同じカードが「回転減衰はすでに上限」と「寿命 76.7 → 78.6」を**同時に言う**
+		# (下限クランプで 0.41→0.40 と1目盛だけ動くため。報酬画面で実測した)。
+		# おまけに注記が2本になってカードが伸び、1280x720 で 721/720 と溢れていた。
+		var stacked := _player()
+		stacked.friction = 0.40
+		stacked.spin_decay = 0.41
+		check.call(
+			momentum.capped_note(stacked) != "",
+			"勢い維持4枚のビルドでは上限注記が出る (%s)" % momentum.capped_note(stacked)
+		)
+		check.call(
+			PartPreview.decay_note(stacked, momentum).is_empty(),
+			"上限に達した軸では減衰の注記を出さない(上限注記と同じ物差し) (%s)"
+				% PartPreview.decay_note(stacked, momentum).get("text", "なし")
+		)
+
+	# (3) 注記の数字は lifetime そのもの。実UIと同じ桁(小数1桁)で両端が入る。
+	var growth := _find_effect(CustomPart.Effect.GROWTH)
+	check.call(growth != null, "カタログに巨大化札がある")
+	if growth != null:
+		var after_growth := PartPreview.preview_stats(stats, growth)
+		var text: String = PartPreview.decay_note(stats, growth)["text"]
+		check.call(
+			String.num(PartPreview.lifetime(stats), 1) in text
+			and String.num(PartPreview.lifetime(after_growth), 1) in text,
+			"注記の数字が lifetime と一致する (%s / %.1f→%.1f)" % [
+				text, PartPreview.lifetime(stats), PartPreview.lifetime(after_growth)]
+		)
+		check.call(
+			not ("REWARD_DECAY_NOTE" in text),
+			"注記が生の翻訳キーのままになっていない (%s)" % text
+		)
+
+		# 直径が上限のビルドでは減衰率が動かない=代償が無いので注記も出ない
+		# (「もう直径は伸びない」は capped_note の側が言う)。
+		var maxed := _player()
+		maxed.radius = 1.05
+		check.call(
+			PartPreview.decay_note(maxed, growth).is_empty(),
+			"直径が上限なら巨大化の注記は出ない (寿命 %.1f→%.1f)" % [
+				PartPreview.lifetime(maxed),
+				PartPreview.lifetime(PartPreview.preview_stats(maxed, growth))]
+		)
+
+	# (4) 注記を足しても行の列は増えていない(peer の行に戻していない)。
+	for part in CustomPartCatalog.all():
+		check.call(
+			_row_of(PartPreview.rows(stats, part, 3, 0.0, 1.5), "STAT_LIFETIME").is_empty(),
+			"%s: 寿命は行ではなく注記のまま" % part.title_key
+		)
+
+	# 引数が null でも落ちない(古い経路・ステータス無しの呼び出し)。
+	check.call(
+		PartPreview.decay_note(null, growth).is_empty()
+		and PartPreview.decay_note(stats, null).is_empty(),
+		"nullを渡しても空の注記を返す"
+	)
+
+
 ## 残機札・ゴースト札はSpinnerStatsを一切変えない。硬さ・打たれ強さだけだと
 ## 「何も起きない札」に見えるので、ラン側の効果を行として補う。
 func _test_non_stat_parts_still_show_something(check: Callable) -> void:
@@ -482,6 +629,19 @@ func _test_screen_wiring(check: Callable) -> void:
 		and screen.contains("_attack_basis.visible = basis != \"\""),
 		"RewardScreen.gdが攻めの基準の注記を作り、画面に出し、基準が無ければ隠す"
 	)
+	# 自然減衰の注記。文字列を作るだけで画面に足していない配線を落とすため、
+	# 生成・本文の代入・カードへの追加の3点を揃って見る(攻めの基準の注記と同じ理由)。
+	check.call(
+		screen.contains("PartPreview.decay_note(_stats, part)")
+		and screen.contains("decay_label.text = decay[\"text\"]")
+		and screen.contains("box.add_child(decay_label)"),
+		"RewardScreen.gdが自然減衰の注記を作り、カードに足す"
+	)
+	check.call(
+		screen.contains("if not decay.is_empty():"),
+		"RewardScreen.gdは減衰率が動かない札に注記を出さない(空なら足さない)"
+	)
+
 	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
 	check.call(
 		main.contains("GameState.player_stats") and main.contains("GameState.continues_left")
@@ -523,7 +683,8 @@ func _test_translations(check: Callable) -> void:
 	for locale in ["en", "ja"]:
 		TranslationServer.set_locale(locale)
 		for key in ["STAT_TOUGHNESS", "STAT_ATTACK", "STAT_ENDURANCE",
-				"STAT_WALL_ENDURANCE", "REWARD_PREVIEW_HEADING", "REWARD_PREVIEW_HINT"]:
+				"STAT_WALL_ENDURANCE", "REWARD_PREVIEW_HEADING", "REWARD_PREVIEW_HINT",
+				"REWARD_DECAY_NOTE"]:
 			var got := TranslationServer.translate(key)
 			check.call(got != key, "%s: %s の訳がある (%s)" % [locale, key, got])
 	# 注記は4つの行を全部説明していること。行だけ増えて説明が据え置きだと、
