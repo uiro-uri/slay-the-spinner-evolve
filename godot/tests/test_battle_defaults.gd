@@ -30,6 +30,7 @@ const KNOBS: Array[String] = [
 	"bite_floor_speed",
 	"enemy_mutual_drain_scale",
 	"drain_cap_share",
+	"wall_drain_cap_share",
 	"lose_threshold",
 ]
 

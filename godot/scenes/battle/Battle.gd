@@ -133,6 +133,13 @@ const BAR_ROW_H := 60.0
 ## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
 @export_range(0.0, 1.0, 0.01) var drain_cap_share: float = 0.5
 
+## 1回の壁(・柱)当たりで失えるrpsの天井を、回転ゲージ(初期rps)に対する割合で決める。
+## 0で天井なし(旧挙動)。drain_cap_shareの壁版で、接触の天井を迂回して
+## 「1発弾かれて壁で即死」が残っていた序盤の穴を塞ぐ。硬い相手には割合が届かない。
+## 詳細はSpinnerPhysics.capped_wall_drain。
+## 既定値はBattleRequestと一致させること(test_battle_defaults.gdが照合)。
+@export_range(0.0, 1.0, 0.01) var wall_drain_cap_share: float = 0.15
+
 ## これを下回ったら負け。
 @export_range(0.0, 1.0, 0.01) var lose_threshold: float = 0.03
 
@@ -854,6 +861,7 @@ func build_request(player_pos: Vector2, player_vel: Vector2) -> BattleRequest:
 	request.wall_violence = wall_violence
 	request.enemy_mutual_drain_scale = enemy_mutual_drain_scale
 	request.drain_cap_share = drain_cap_share
+	request.wall_drain_cap_share = wall_drain_cap_share
 	request.lose_threshold = lose_threshold
 	# 取得済みのゴースト札から無敵時間を決める。単体調整時は取得0で0秒になり従来どおり。
 	request.ghost_duration = CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids)

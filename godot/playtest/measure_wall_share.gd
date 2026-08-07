@@ -26,6 +26,10 @@ func _init() -> void:
 			if overrides == null:
 				overrides = BattleSim.Overrides.new()
 			overrides.wall_absolute_share = float(arg.split("=")[1])
+		elif arg.begins_with("--wallcap="):
+			if overrides == null:
+				overrides = BattleSim.Overrides.new()
+			overrides.wall_drain_cap_share = float(arg.split("=")[1])
 		elif arg.begins_with("--violence="):
 			if overrides == null:
 				overrides = BattleSim.Overrides.new()
@@ -47,10 +51,14 @@ func _init() -> void:
 	var mine := []
 	var theirs := []
 	var causes := []
+	# 段ごとの決着時間。壁の天井は「序盤が一瞬で終わる」への対策なので、
+	# 壁割合だけでなく尺そのものが伸びたかを同じ表で見る。
+	var times := []
 	for _i in STEPS + 1:
 		mine.append({"drain": 0.0, "wall": 0.0, "decay": 0.0, "hits": 0.0, "n": 0})
 		theirs.append({"drain": 0.0, "wall": 0.0, "decay": 0.0, "hits": 0.0, "n": 0})
 		causes.append({"drain": 0, "wall": 0, "decay": 0, "none": 0})
+		times.append([])
 
 	var cleared := 0
 	var total_time := 0.0
@@ -67,6 +75,7 @@ func _init() -> void:
 				continue
 			total_time += float(b.get("finish_time", 0.0))
 			total_battles += 1
+			times[step].append(float(b.get("finish_time", 0.0)))
 			_add(mine[step], b.get("player_rps_loss", {}))
 			for e in b.get("enemy_rps_loss", []):
 				_add(theirs[step], e)
@@ -79,7 +88,7 @@ func _init() -> void:
 		runs, seed_base, cleared * 100.0 / runs,
 		total_time / maxf(total_battles, 1.0),
 	])
-	print("段 | 自分: 壁割合 削り 壁 減衰 (壁回数/戦) | 敵: 壁割合 削り 壁 減衰 | 敗者死因 drain/wall/decay")
+	print("段 | 決着中央値 | 自分: 壁割合 削り 壁 減衰 (壁回数/戦) | 敵: 壁割合 削り 壁 減衰 | 敗者死因 drain/wall/decay")
 	var all_mine := {"drain": 0.0, "wall": 0.0, "decay": 0.0, "hits": 0.0, "n": 0}
 	var all_theirs := {"drain": 0.0, "wall": 0.0, "decay": 0.0, "hits": 0.0, "n": 0}
 	for step in range(1, STEPS + 1):
@@ -89,9 +98,10 @@ func _init() -> void:
 			all_mine[k] += m[k]
 			all_theirs[k] += th[k]
 		print(
-			"%d | %5.1f%% %6.1f %6.1f %6.1f (%4.1f) | %5.1f%% %6.1f %6.1f %6.1f | %d/%d/%d"
+			"%d | %8.2fs | %5.1f%% %6.1f %6.1f %6.1f (%4.1f) | %5.1f%% %6.1f %6.1f %6.1f | %d/%d/%d"
 			% [
-				step, _share(m) * 100.0, _avg(m, "drain"), _avg(m, "wall"), _avg(m, "decay"),
+				step, _median(times[step]),
+				_share(m) * 100.0, _avg(m, "drain"), _avg(m, "wall"), _avg(m, "decay"),
 				_avg(m, "hits"),
 				_share(th) * 100.0, _avg(th, "drain"), _avg(th, "wall"), _avg(th, "decay"),
 				causes[step]["drain"], causes[step]["wall"], causes[step]["decay"],
@@ -101,6 +111,14 @@ func _init() -> void:
 		_share(all_mine) * 100.0, _share(all_theirs) * 100.0
 	])
 	quit()
+
+
+func _median(values: Array) -> float:
+	if values.is_empty():
+		return 0.0
+	var sorted := values.duplicate()
+	sorted.sort()
+	return float(sorted[sorted.size() / 2])
 
 
 func _add(acc: Dictionary, loss: Dictionary) -> void:

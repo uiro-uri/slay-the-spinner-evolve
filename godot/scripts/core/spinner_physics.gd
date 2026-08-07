@@ -245,6 +245,25 @@ static func capped_spin_drain(drain: float, max_rps: float, cap_share: float) ->
 	return minf(drain, maxf(max_rps, 0.0) * cap_share)
 
 
+## 1回の壁(・柱)当たりで失えるrpsの天井。capped_spin_drainの壁版で、式は同じく
+## 「回転ゲージ(=初期rps)に対する割合」で切る。
+##
+## capped_spin_drainだけでは即死が消えない: 接触の削りに天井を置いても、その1撃の
+## spin_kickで軽い相手は壁へ飛ばされ、壁の喪失は絶対量(absolute_wall_drain)で
+## **自分の硬さに反比例**するため、柔らかい相手ほど1回の壁でゲージが大きく削れる。
+## 結果、接触の天井を迂回して壁が即死を肩代わりする(drain_cap_shareの採用時にも
+## 「0.34にするとLv1の死因が壁63.1%へ倒れた」として観測されている)。
+##
+## 天井は壁の喪失にだけ効き、反射(wall_bounce)の速度には触れない=押し込む手応えと
+## 壁際の危険はそのまま。割合の天井なので硬い相手(1回の壁がゲージのごく一部)には
+## 一切触れず、柔らかい相手の壁即死だけを消す。
+## cap_share<=0 で天井なし=旧挙動と厳密一致(古い保存データの再現用)。
+static func capped_wall_drain(drain: float, max_rps: float, cap_share: float) -> float:
+	if cap_share <= 0.0:
+		return drain
+	return minf(drain, maxf(max_rps, 0.0) * cap_share)
+
+
 ## 攻め手のdrill(0..)のぶんだけ、相手の硬さに依存しない追加削りを上乗せする。
 ## 追加量は drill × pierce_drain(相手が攻め手自身と同じ硬さだったときの素の削り)。
 ##
