@@ -176,6 +176,46 @@ static func attack(stats: SpinnerStats, opponent_toughness: float) -> float:
 	)
 
 
+## 攻め力の行に**実際に出す**値。`attack` を「出発時のコマが同じ相手へ与える削り」で
+## 割った倍率で、素のコマがちょうど 1.00 になる。
+##
+## **なぜ生の attack をそのまま出さないのか**(2026-08-07)
+## `attack` は「この相手へ1接触で削れる量」で、値としては正しい。ところが基準の相手は
+## 段が進むごとに硬くなり(ThreatMeter 冒頭: Lv1 0.12 → Lv5 12.5 の100倍)、素の削りは
+## その硬さに**反比例**する。結果、**自分は強くなり続けているのに行だけが縮む**。
+##
+## 一次証拠(コールドプレイ 2026-08-07, seed=4821・9戦全勝でクリア): 札を10枚積んで
+## いく途中の攻め力が段ごとに
+##   13.33 → 3.56 → 5.59 → 2.61 → 2.45 → 1.52 → 1.48 → 1.02
+## と**下がり続けた**。隣の打たれ強さは 11.8 → 137.0 と伸びるので、同じ4行の中で
+## この行だけが逆を向く。前サイクルが基準の相手の硬さを注記(`attack_basis_text`)で
+## 併記して「なぜ縮むか」までは言えるようにしたが、**縮む数字そのもの**は残ったので、
+## 「自分の攻めは育っているのか」には最後まで答えられなかった
+## (前サイクルの journal も同じ現象を独立に実測して「次の候補」の筆頭に置いている)。
+##
+## 割る相手を**素のコマ**に固定すると、同じ実測が
+##   1.00 → 1.17 → 1.54 → 2.64 → 2.86 → 3.71 → 3.83 → 8.55
+## と**単調に伸びる**。守りの3行と同じ向きになり、「出発時の何倍削れるか」という
+## 一言で読める。基準の相手は分母にも分子にも入るので消えはしない——最後の跳ね上がりは
+## 「貫通削り(pierce)は相手の硬さに依らないので、硬い相手ほど素のコマとの差が開く」
+## という本当のことで、DRILL/EDGE を積んだビルドが決戦で効く理由がそのまま出ている。
+##
+## 1画面の中でのカード同士の比較は**一切変わらない**。分母は3枚とも共通の正の数
+## (素のコマ×同じ相手)なので、倍率は attack の正のスカラー倍——大小関係も
+## 「伸びる/据え置き/縮む」の向きも保たれる。変わるのは**画面をまたいだ読み**だけ。
+##
+## 分母は `SpinnerStats.default_player()`(ランの出発点。GameState.default_player_stats が
+## そのまま返すのと同じ実体)。素のコマは edge も drill も 0 なので
+## 分母は 質量÷相手の硬さ で、相手の硬さが正なら必ず正になる。
+static func attack_index(stats: SpinnerStats, opponent_toughness: float) -> float:
+	if opponent_toughness <= 0.0:
+		return 0.0
+	var base := attack(SpinnerStats.default_player(), opponent_toughness)
+	if base < _EPSILON:
+		return 0.0
+	return attack(stats, opponent_toughness) / base
+
+
 ## この札を取った後のステータス。元のstatsは変えない(プレビューなので破壊しない)。
 static func preview_stats(stats: SpinnerStats, part: CustomPart) -> SpinnerStats:
 	var after := stats.duplicate_stats()
@@ -211,9 +251,12 @@ static func rows(
 		_row("STAT_TOUGHNESS", toughness(stats), toughness(after), 2),
 	]
 	if opponent_toughness > 0.0:
+		# 出す値は生の attack ではなく素のコマ基準の倍率(attack_index 参照)。
 		result.append(_row(
 			"STAT_ATTACK",
-			attack(stats, opponent_toughness), attack(after, opponent_toughness), 2
+			attack_index(stats, opponent_toughness),
+			attack_index(after, opponent_toughness),
+			2, "×"
 		))
 	result.append(_row("STAT_ENDURANCE", endurance(stats), endurance(after), 1))
 	result.append(
@@ -252,6 +295,11 @@ static func rows(
 ## ——このゲームの中心にある非対称(自分の硬さは2倍しか動かないのに相手は16倍動く)
 ## が、部品を選ぶまさにその画面に出る。
 ##
+## **2026-08-07 追記**: 行の値そのものを素のコマ基準の倍率へ変えた(`attack_index`)ので、
+## この注記も「何倍か」を先に言う。基準の相手を出し続けるのは、倍率の分母にも分子にも
+## その相手が入っている(硬い相手ほど貫通削りの差が開く)からで、どの相手を見た倍率かは
+## 依然として読み手に要る情報。
+##
 ## 行の中ではなくカードの外の1行に置くのは、3枚のカードで基準が共通だから
 ## (同じ文をカードごとに3回出しても情報は増えない)と、カード幅220pxの行に
 ## 長い項目名を足すと値と衝突するため。
@@ -263,13 +311,17 @@ static func attack_basis_text(opponent_toughness: float) -> String:
 	)
 
 
-static func _row(label_key: String, before: float, after: float, digits: int) -> Dictionary:
+## prefix は値の前に付ける記号。攻め力だけが**倍率**(素のコマ=1.00)なので、
+## 硬さ・打たれ強さのような絶対量と同じ見た目で並ぶと単位を取り違える。
+static func _row(
+	label_key: String, before: float, after: float, digits: int, prefix: String = ""
+) -> Dictionary:
 	var better := 0
 	if not is_equal_approx(before, after):
 		better = 1 if after > before else -1
 	return {
 		"label_key": label_key, "before": before, "after": after,
-		"digits": digits, "better": better,
+		"digits": digits, "better": better, "prefix": prefix,
 	}
 
 
@@ -277,7 +329,8 @@ static func _row(label_key: String, before: float, after: float, digits: int) ->
 ## 変化があると誤読させる)。矢印は方向を持たない記号にして、良し悪しは色で見せる。
 static func format_row(row: Dictionary) -> String:
 	var digits: int = row["digits"]
-	var before := String.num(row["before"], digits)
+	var prefix: String = row.get("prefix", "")
+	var before := prefix + String.num(row["before"], digits)
 	if row["better"] == 0:
 		return before
-	return "%s → %s" % [before, String.num(row["after"], digits)]
+	return "%s → %s" % [before, prefix + String.num(row["after"], digits)]
