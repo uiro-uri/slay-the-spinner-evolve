@@ -21,6 +21,8 @@ class Overrides:
 	var stage_shape := -1  # -1なら既定
 	var violence := -1.0
 	var wall_absolute_share := -1.0
+	## 1回の壁で失えるrpsの天井(ゲージ比)。-1なら既定。0で天井なし=導入前の挙動。
+	var wall_drain_cap_share := -1.0
 	var natural_damping := -1.0
 	## 敵の硬さ(質量)と回転の一律倍率。物理側を接触寄りに変えた際の難易度補償を測る。
 	var enemy_mass_scale := 1.0
@@ -38,6 +40,8 @@ class Overrides:
 			request.violence = violence
 		if wall_absolute_share >= 0.0:
 			request.wall_absolute_share = wall_absolute_share
+		if wall_drain_cap_share >= 0.0:
+			request.wall_drain_cap_share = wall_drain_cap_share
 		if natural_damping >= 0.0:
 			request.natural_damping = natural_damping
 

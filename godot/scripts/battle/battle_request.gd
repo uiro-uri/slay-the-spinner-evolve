@@ -148,6 +148,27 @@ var enemy_mutual_drain_scale: float = 0.5
 ## Lv1の即死だけが消えて(1衝突決着 72.4%→13.2%)死因の内訳はほぼ据え置き、
 ## Lv2〜5は決着中央値まで完全に不変、クリア率も48.0%のまま動かない。
 var drain_cap_share: float = 0.5
+
+## 1回の壁(・柱)当たりで失えるrpsの天井を、回転ゲージ(初期rps)に対する割合で決める。
+## drain_cap_shareの壁版。0以下で天井なし(旧挙動)。詳細はSpinnerPhysics.capped_wall_drain。
+##
+## 採用の経緯(2026-08-07): drain_cap_shareで接触の即死は消えたのに、序盤の部屋は
+## 依然1.3〜2.5秒・衝突1〜2回で終わる(コールドプレイの一次証拠: 段1が2.52秒で
+## 敵の喪失が 削り6.5/壁16.4、段2のLv1が1.33秒で 削り0.6/壁17.4＝**3回**の壁で
+## ゲージ18.1を使い切っている)。壁の喪失は絶対量で自分の硬さに反比例するので、
+## 柔らかい序盤の敵は1回の壁でゲージの3割を失い、接触の天井を壁が迂回していた。
+## ボット統計でもLv2単体の敗因は壁52.0%。
+##
+## 0.15の採用: measure_wall_share(200ラン)を 0/0.25/0.15/0.10 で振ると、段1〜4の
+## 決着中央値が 1.58/1.62/1.65/1.67s → 0.25で1.75/1.67/1.83/1.72 → **0.15で
+## 1.97/2.02/2.22/2.35** と伸び、段5〜9(5.02/5.05/9.07/8.55/9.98s)とクリア率
+## (57.5%)はどれも動かない=**効き目が序盤だけに収まる**。壁の喪失は割合の天井なので、
+## 硬い後半の敵は元々1回の壁がゲージのごく一部で天井に触れないため。
+## 0.10も測ったが段5・6が5.40/5.70sへ動きクリア率が60.5%まで緩むので見送り。
+## 敵の敗因は 削り/壁 で Lv1帯 150/55→176/30、Lv2帯 163/39→183/17 と削り主因へ寄る
+## (「壁支配の是正」2026-08-01 と同じ向き)。自分の壁割合は27.2%→27.0%でほぼ不変
+## ＝プレイヤーの強化ではなく、柔らかい相手の壁即死だけを消す変更。
+var wall_drain_cap_share: float = 0.15
 var lose_threshold: float = 0.03
 
 ## ゴーストの無敵時間(秒)。開始からこの時刻までプレイヤーと敵の衝突判定を切る。
@@ -184,6 +205,7 @@ func to_dict() -> Dictionary:
 		"wall_violence": wall_violence,
 		"enemy_mutual_drain_scale": enemy_mutual_drain_scale,
 		"drain_cap_share": drain_cap_share,
+		"wall_drain_cap_share": wall_drain_cap_share,
 		"lose_threshold": lose_threshold,
 		"ghost_duration": ghost_duration,
 		"time_step": time_step,
@@ -222,6 +244,8 @@ static func from_dict(d: Dictionary) -> BattleRequest:
 	r.enemy_mutual_drain_scale = d.get("enemy_mutual_drain_scale", 1.0)
 	# 同上: 旧い保存データは天井なし(0)で補い、当時の結果をそのまま再現する。
 	r.drain_cap_share = d.get("drain_cap_share", 0.0)
+	# 同上: 壁の天井も旧い保存データは天井なし(0)で補う。
+	r.wall_drain_cap_share = d.get("wall_drain_cap_share", 0.0)
 	r.lose_threshold = d["lose_threshold"]
 	# 旧い保存データにキーが無くても壊れないよう既定0で補う。
 	r.ghost_duration = d.get("ghost_duration", 0.0)

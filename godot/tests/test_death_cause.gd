@@ -135,6 +135,10 @@ func _test_wall_kill_with_contact(check: Callable) -> void:
 	r.violence = 0.0001
 	r.wall_damping = 0.1
 	r.wall_impact_ref_speed = 0.0
+	# 1回あたりの天井も切る。既定(15%)のままだと「最初の壁激突で確実に尽きる」が
+	# 原理的に組めない(天井は最低7回の壁を要求する)。ここで見たいのは死因の記録と
+	# 撃破判定であって天井そのものではない。天井は test_wall_drain_cap.gd が受け持つ。
+	r.wall_drain_cap_share = 0.0
 	r.player = BattleRequest.Launch.new(SpinnerStats.default_player(), Vector2(3, 5), Vector2(8, 0))
 	r.enemies = [BattleRequest.Launch.new(_enemy_stats(0.15), Vector2(6, 5), Vector2.ZERO)]
 	var result := BattleResolver.resolve(r)

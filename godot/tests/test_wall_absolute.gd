@@ -65,6 +65,10 @@ func _one_wall_hit_request(rps: float, share: float, wall_keep: float) -> Battle
 	r.natural_damping = 0.0
 	r.stage_strength = 0.0
 	r.wall_absolute_share = share
+	# 1回あたりの天井も切る。ここで見たいのは乗算と絶対量のブレンドそのもので、
+	# 天井が被さると端点(share=0の25%喪失)が頭打ちになって式が読めない。
+	# 天井は test_wall_drain_cap.gd が受け持つ。
+	r.wall_drain_cap_share = 0.0
 	# 速度スケールを切って、進入速度によらず base/絶対量そのものを見る。
 	r.wall_impact_ref_speed = 0.0
 	r.max_duration = 0.5

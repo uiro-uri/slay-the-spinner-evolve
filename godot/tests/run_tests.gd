@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "cappedaxes", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist", "gameoverpanel"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "walldraincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "cappedaxes", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist", "gameoverpanel"
 ]
 
 
@@ -166,6 +166,9 @@ func _init() -> void:
 
 	print("== draincap ==")
 	_test_drain_cap()
+
+	print("== walldraincap ==")
+	_test_wall_drain_cap()
 
 	print("== sparkscale ==")
 	_test_spark_scale()
@@ -670,6 +673,12 @@ func _test_drain_cap() -> void:
 	var suite = load("res://tests/test_drain_cap.gd").new()
 	suite.run(_check)
 	_done("draincap")
+
+
+func _test_wall_drain_cap() -> void:
+	var suite = load("res://tests/test_wall_drain_cap.gd").new()
+	suite.run(_check)
+	_done("walldraincap")
 
 
 func _test_spark_scale() -> void:

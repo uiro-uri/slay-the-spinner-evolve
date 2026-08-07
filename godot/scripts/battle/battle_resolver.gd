@@ -540,15 +540,21 @@ static func _wall_damaged_rps(s: State, normal_speed: float, req: BattleRequest)
 		keep
 	)
 	var share := clampf(req.wall_absolute_share, 0.0, 1.0)
-	if share <= 0.0:
-		return proportional
-	var absolute := maxf(
-		s.rps - SpinnerPhysics.absolute_wall_drain(
-			normal_speed, s.stats.mass, s.stats.radius, req.wall_violence
-		) * (1.0 - keep),
-		0.0
+	var damaged := proportional
+	if share > 0.0:
+		var absolute := maxf(
+			s.rps - SpinnerPhysics.absolute_wall_drain(
+				normal_speed, s.stats.mass, s.stats.radius, req.wall_violence
+			) * (1.0 - keep),
+			0.0
+		)
+		damaged = lerpf(proportional, absolute, share)
+	# 1回の壁で失える量にも天井を置く。接触側のdrain_cap_shareと対で、
+	# 軽い相手が弾かれて壁で即死する迂回路を塞ぐ(capped_wall_drain参照)。
+	# ゲージは初期rps(stats.rps)で、道中で減った現在rpsではない。
+	return s.rps - SpinnerPhysics.capped_wall_drain(
+		s.rps - damaged, s.stats.rps, req.wall_drain_cap_share
 	)
-	return lerpf(proportional, absolute, share)
 
 
 static func _apply_natural_decay(s: State, req: BattleRequest, dt: float) -> void:
