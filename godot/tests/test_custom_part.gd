@@ -111,6 +111,61 @@ func _test_apply(check: Callable) -> void:
 		]
 	)
 
+	# 低重心(GRIP)も複合札。傾斜の効きに加えて、複合した削り軽減(GRIP_HIT_GUARD_STEP)
+	# が入る。傾斜の軸だけでは喪失の16〜23%(壁)しか触れず単独計測で最下位(+0.8pt)
+	# だったので、残る7〜8割を占める削りへ足がかりを持つ
+	# (経緯は CustomPartCatalog.GRIP_HIT_GUARD_STEP のコメント)。
+	s = _stats()
+	var before_grip := s.slope_grip
+	CustomPartCatalog.by_id(14).apply_to(s)
+	check.call(
+		s.slope_grip > before_grip + EPS,
+		"パーツ: 低重心で傾斜の効きが上がる (%.3f -> %.3f)" % [before_grip, s.slope_grip]
+	)
+	check.call(
+		is_equal_approx(s.hit_guard, CustomPartCatalog.GRIP_HIT_GUARD_STEP),
+		"パーツ: 低重心で削り軽減が+%.2f入る (%.2f)" % [
+			CustomPartCatalog.GRIP_HIT_GUARD_STEP, s.hit_guard
+		]
+	)
+	# 守りの専任札(SHOCK_ABSORBER)の上位互換にはしない。
+	var guard_stats := _stats()
+	CustomPartCatalog.by_id(10).apply_to(guard_stats)
+	check.call(
+		s.hit_guard < guard_stats.hit_guard - EPS,
+		"パーツ: 低重心の削り軽減はSHOCK_ABSORBERより小さい (%.2f < %.2f)" % [
+			s.hit_guard, guard_stats.hit_guard
+		]
+	)
+	# 傾斜はGRIP_MAX、削り軽減はGUARD_HIT_MAXでクランプ(中心に貼り付いて壁に
+	# 触れなくなる／削り無効の衝突無敵、どちらの壊れ方も防ぐ)。
+	# hit_guardの器はSHOCK_ABSORBERと共有するので、混ぜて積んでも同じ上限で止まる。
+	s = _stats()
+	for i in 12:
+		CustomPartCatalog.by_id(14).apply_to(s)
+	check.call(
+		s.slope_grip <= CustomPartCatalog.GRIP_MAX + EPS,
+		"パーツ: 低重心のslope_gripが上限%.2fで止まる (%.2f)" % [
+			CustomPartCatalog.GRIP_MAX, s.slope_grip
+		]
+	)
+	check.call(
+		s.hit_guard <= CustomPartCatalog.GUARD_HIT_MAX + EPS,
+		"パーツ: 低重心のhit_guardが上限%.2fで止まる (%.2f)" % [
+			CustomPartCatalog.GUARD_HIT_MAX, s.hit_guard
+		]
+	)
+	var mixed_guard := _stats()
+	for i in 6:
+		CustomPartCatalog.by_id(14).apply_to(mixed_guard)
+		CustomPartCatalog.by_id(10).apply_to(mixed_guard)
+	check.call(
+		mixed_guard.hit_guard <= CustomPartCatalog.GUARD_HIT_MAX + EPS,
+		"パーツ: 低重心とSHOCK_ABSORBERはhit_guardの器を共有して上限%.2fで止まる (%.2f)" % [
+			CustomPartCatalog.GUARD_HIT_MAX, mixed_guard.hit_guard
+		]
+	)
+
 	# 掛け算なので繰り返し取ると積み上がる
 	s = _stats()
 	var part := CustomPart.make(0, "T", CustomPart.Rarity.COMMON, CustomPart.Stat.MASS, 2.0)
@@ -275,6 +330,15 @@ func _test_description_matches_effect(check: Callable) -> void:
 				text.contains(CustomPart._trim(part.grip_step * 100.0))
 					and text.contains(CustomPart._trim((part.grip_max - 1.0) * 100.0)),
 				"パーツ%d(%s): 低重心の説明に効きと上限が出ている (%s)" % [
+					part.id, part.title_key, text
+				]
+			)
+			# 複合した削り軽減も効果文に出る。ここを落とすと「見積もりの行は動くのに
+			# カードにそう書いていない」になり、選び分けの根拠が消える。
+			check.call(
+				text.contains(CustomPart._trim(part.hit_guard_step * 100.0))
+					and text.contains(CustomPart._trim(part.hit_guard_max * 100.0)),
+				"パーツ%d(%s): 低重心の説明に削り軽減と上限が出ている (%s)" % [
 					part.id, part.title_key, text
 				]
 			)

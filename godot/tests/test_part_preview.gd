@@ -220,6 +220,21 @@ func _test_second_row_tracks_drain_not_decay(check: Callable) -> void:
 				attack_row["before"], attack_row["after"]]
 		)
 
+	# 低重心(GRIP)も同じ穴に落ちていた札。傾斜(slope_grip)は見積もりの4行が
+	# どれも読まない軸なので、改修前は**4行が1桁まで据え置き**の白紙の札に見えた
+	# (コールドプレイ2026-08-03・08-07・08-07夜と3サイクル連続で見送られている)。
+	# 複合化(GRIP_HIT_GUARD_STEP)で削り軽減の軸を得たので、打たれ強さの行が動く。
+	var grip := _find_effect(CustomPart.Effect.GRIP)
+	check.call(grip != null, "カタログに低重心札がある")
+	if grip != null:
+		var grip_rows := PartPreview.rows(_player(), grip, 3, 0.0)
+		var endurance_row := _row_of(grip_rows, "STAT_ENDURANCE")
+		check.call(
+			endurance_row["better"] == 1,
+			"低重心札: 打たれ強さの行が伸びる側で出る (%.1f→%.1f)" % [
+				endurance_row["before"], endurance_row["after"]]
+		)
+
 	# ゼロ除算でinf/nanを出さない(将来の札が軽減を1.0にしても壊れない)。
 	var immune := _player()
 	immune.hit_guard = 1.0

@@ -107,7 +107,7 @@ PART_EFFECT_RAGE,Bounce ×{0} (max {1}) & less spin lost on walls,反発 ×{0}�
 PART_EFFECT_GUARD,Spin lost to hits -{0}% (stacks up to -{1}%),衝突で削られる回転 -{0}%（重ねて最大 -{1}%）
 PART_EFFECT_EDGE,Spin drained from foes on hit +{0}% (stacks up to +{1}%),衝突で相手から削る回転 +{0}%（重ねて最大 +{1}%）
 PART_EFFECT_DRILL,Piercing drain on hit +{0}% (stacks up to +{1}%),衝突での貫通削り +{0}%（重ねて最大 +{1}%）
-PART_EFFECT_GRIP,Pulled toward the center +{0}% harder (stacks up to +{1}%),土俵の傾斜に引かれる力 +{0}%（重ねて最大 +{1}%）
+PART_EFFECT_GRIP,Pulled toward the center +{0}% harder (stacks up to +{1}%) & spin lost to hits -{2}% (stacks up to -{3}%),土俵の傾斜に引かれる力 +{0}%（重ねて最大 +{1}%）＆衝突で削られる回転 -{2}%（重ねて最大 -{3}%）
 PART_EFFECT_GROWTH,Diameter ×{0} (max {1}) & mass ×{2} (max {3}),直径 ×{0}（上限 {1}）＆質量 ×{2}（上限 {3}）
 PART_EFFECT_SPIN_UP,Spin +{0} (max {1}),回転 +{0}（上限 {1}）
 PART_NOTE_GROWTH,"Shrugs off hits and knocks foes back harder, but its larger size speeds up natural decay and makes it easier to hit","衝突に強くなり相手をより弾くが、大きくなるぶん自然減衰が速まり被弾しやすい"
@@ -123,7 +123,7 @@ PART_NOTE_RPS_UP,Starts with more spin and lasts longer,開始回転が増え、
 PART_NOTE_RPS_DOWN,Starts with less spin and runs out sooner,開始回転が減り、寿命が縮む
 PART_NOTE_MOMENTUM,"Slows down less and its spin lasts longer — and it still carries that speed into the clash, so it bites deeper",減速しにくく走り続け、回転も長持ちする。勢いを保ったまま当たるぶん相手を深く削る
 PART_NOTE_DRILL,"The bonus is based on your own strike, not the foe's armor — bites into giants just as deep",追加の削りは自分基準で決まり相手の硬さで減らない。巨体にもそのまま食い込む
-PART_NOTE_GRIP,"Dragged back to the middle, so the wall is farther away and you arrive slower — it cuts wall damage before it happens, but you can no longer hold the rim",中央へ引き戻されるので壁が遠くなり、届いても遅い。壁の喪失を受ける前に減らす代わり、縁に留まる走りはできなくなる
+PART_NOTE_GRIP,"Dragged back to the middle, so the wall is farther away and you arrive slower — it cuts wall damage before it happens, and sitting low you dig in and get ground down less, but you can no longer hold the rim",中央へ引き戻されるので壁が遠くなり、届いても遅い。壁の喪失を受ける前に減らし、腰が低いぶん踏ん張って削られにくくなる代わり、縁に留まる走りはできなくなる
 PART_NOTE_GHOST,"Your opening hit lands first — then slip through counterattacks and pile-ups unharmed, hit-and-run",初撃は当たってから発動。直後の反撃や乱戦のもみくちゃを無傷でやり過ごすヒット＆ラン
 PART_NOTE_RAGE,"Modest early while wall hits are rare — in later stages spin lost to walls rivals collision drain, so it pays off late",壁被弾の少ない序盤は地味だが、終盤は壁で失う回転が削りに並ぶほど膨らむ。後半ほど効く
 PART_AXIS_MASS,mass,質量

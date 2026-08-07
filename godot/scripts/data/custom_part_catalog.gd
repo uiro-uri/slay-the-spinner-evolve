@@ -252,6 +252,29 @@ const DRILL_MAX := 0.75
 const GRIP_STEP := 0.4
 const GRIP_MAX := 2.2
 
+## Low Centerが1枚あたり上げる衝突削り軽減(hit_guard)。上限はGUARD_HIT_MAXを
+## 専任のSHOCK_ABSORBERと共有する——器を分けると「低重心＋衝撃吸収」で被ダメ
+## 軽減が青天井になり、衝突無敵の壊れ方に戻る(MOMENTUMがEDGE_MAXを共有するのと
+## 同じ判断)。
+## 傾斜の軸だけでは札が痩せていたのを複合で埋める: 単独計測(measure_parts,
+## intercept/Lv3/800戦)で3枚+0.8ptと全11札の最下位で、コールドプレイでも
+## 2026-08-03・08-07・今回と3サイクル連続で「見積もりの4行が1桁まで動かない」
+## まま見送られ続けた。機構自体は効いている(measure_slope_grip: grip 1.0→2.2 で
+## 自機の壁喪失シェアがLv3 21%→10%、Lv4 23%→12%と半減する)が、そもそも壁は
+## 喪失の16〜23%しかなく、残る71〜83%を占める削りの軸に足がかりが無かった。
+## 「低重心＝踏ん張りが効いて削られにくい」は札の見立てそのままの向き。
+##
+## 0.05/枚は専任のSHOCK_ABSORBER(0.17/枚)の1/3弱で、3枚(+15%)でも器(0.5)の
+## 1/3までしか埋めない。FULL_STEAMがEDGE_MAXに対して取った「専任の半分」の配分
+## (=0.08)から更に下げてあるのは、**hit_guardはedgeよりラン単位の効きが桁違いに
+## 大きい**ため: 0.08で測ると単独計測は+2.2ptと中堅相応でも、ラン統計の
+## intercept+greedyが51.3%→62.3%(+11pt)まで動き、段2が99.0%でアラート閾値に
+## 触れた。打たれ強さは1/(1-hit_guard)で効くので、器を共有する2枚目の供給源が
+## 増えると上限0.5への到達が早まり、天井が跳ねる。
+## 0.05なら単独計測+1.9pt(最下位を脱してRAGE/SHOCK/EXTRA_WINDINGの+1.4pt帯の上、
+## FULL_STEAMの+2.5ptの下)を保ったまま、ラン統計は+5.4ptに収まりアラートも出ない。
+const GRIP_HIT_GUARD_STEP := 0.05
+
 ## Extra Winding(追い巻き)が1枚あたり加算する回転数。上限はRPS_CAP。
 ## 敵rpsはLv1→5で15→33まで伸びるのに、プレイヤーの回転成長は勝利成長
 ## (+0.5/+1.0)とRARE札(SPIN_ENGINE ×1.25)の引き運だけで、引けないランは
@@ -344,8 +367,11 @@ static func all() -> Array[CustomPart]:
 		# Low Center: 土俵の傾斜の効きを上げて中心へ強く引き戻される守りのCOMMON札
 		# (経緯はGRIP_STEPのコメント参照)。壁の軸がRAGE1枚しかなく、敗因の半分が
 		# 壁なのに対策が引き運任せだったのを、機構の違う2枚目で埋める。
+		# 傾斜だけでは痩せていたので、GROWTH(直径→質量)・RAGE(反発→壁軽減)・
+		# MOMENTUM(勢い→削り増強)と同じ複合化で、喪失の7〜8割を占める削りの軸へ
+		# 足がかり(GRIP_HIT_GUARD_STEP)を与えた。
 		CustomPart.make_grip(14, "PART_LOW_CENTER", CustomPart.Rarity.COMMON,
-			GRIP_STEP, GRIP_MAX),
+			GRIP_STEP, GRIP_MAX, GRIP_HIT_GUARD_STEP, GUARD_HIT_MAX),
 	]
 
 
