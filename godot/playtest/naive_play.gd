@@ -45,6 +45,10 @@ static func launch_velocity(pos: Vector2, tgt: Vector2, force: float) -> Vector2
 
 
 func _init() -> void:
+	# このCLIの出力は全部日本語(_PREVIEW_LABELS などは訳表と同じ語を手で置いている)。
+	# headless の既定localeは "en" なので、訳表から取る文だけが英語で出てしまう
+	# (実UIと同じ文を使うのは PartPreview.attack_basis_text)。ここで揃えておく。
+	TranslationServer.set_locale("ja")
 	var a := _args()
 	var cmd: String = a.get("cmd", "")
 	var path: String = a.get("state", "")
@@ -436,6 +440,12 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	var ghost := CustomPartCatalog.total_ghost_seconds(_ids(state))
 	# 攻めの行の基準になる相手も実UI(Main.goto_reward)と同じものを渡す。
 	var opponent := ThreatMeter.reachable_hardest_toughness(tree)
+	# 実UIの報酬画面と同じ注記(RewardScreenのAttackBasis)。攻めの行だけが基準の相手を
+	# 持っていて、その相手の硬さはラン中に十数倍になるので、基準を出さないと
+	# 「強くなるほど攻め力が縮む」に見える(PartPreview.attack_basis_text)。
+	var basis := PartPreview.attack_basis_text(opponent)
+	if basis != "":
+		print("  %s" % basis)
 	for c in choices:
 		print("  id=%d '%s' [%s] %s" % [c.id, c.title_key, _rarity(c.rarity), card_text(c)])
 		print("      → %s" % card_preview_text(

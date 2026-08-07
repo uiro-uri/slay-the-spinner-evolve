@@ -11,6 +11,10 @@ signal part_chosen(part: CustomPart)
 const CHOICE_COUNT := 3
 
 @onready var _cards: HBoxContainer = $CenterContainer/VBoxContainer/Cards
+## 攻めの行の基準(相手1体の硬さ)を言う注記。3枚のカードで基準は共通なので、
+## カードの中ではなくカードの外に1行だけ置く(PartPreview.attack_basis_text)。
+## 基準の相手が居ない決戦のあとは行ごと隠す。
+@onready var _attack_basis: Label = $CenterContainer/VBoxContainer/AttackBasis
 
 var _shine := 0.0
 
@@ -36,6 +40,12 @@ func setup(
 	_continues = continues
 	_ghost_seconds = ghost_seconds
 	_opponent_toughness = opponent_toughness
+
+	# 攻めの行の基準。翻訳済みの文に数字を差し込むので、このラベルだけ
+	# 自動翻訳を切ってある(tscn の auto_translate_mode)。
+	var basis := PartPreview.attack_basis_text(_opponent_toughness)
+	_attack_basis.text = basis
+	_attack_basis.visible = basis != ""
 
 	for child in _cards.get_children():
 		_cards.remove_child(child)

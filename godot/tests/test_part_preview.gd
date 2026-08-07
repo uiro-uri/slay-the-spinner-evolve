@@ -33,6 +33,7 @@ func run(check: Callable) -> void:
 	_test_attack_row_matches_physics(check)
 	_test_attack_row_needs_an_opponent(check)
 	_test_attack_row_is_the_only_home_of_the_offence_cards(check)
+	_test_attack_basis_names_the_reference_opponent(check)
 	_test_rows_always_show_the_deciding_pair(check)
 	_test_non_stat_parts_still_show_something(check)
 	_test_format_hides_unchanged(check)
@@ -437,6 +438,14 @@ func _test_screen_wiring(check: Callable) -> void:
 		screen.contains("Palette.STAT_UP") and screen.contains("Palette.STAT_DOWN"),
 		"RewardScreen.gdが良し悪しを色で見せる"
 	)
+	# 攻めの基準の注記。文字列を作るだけで画面に出していない配線を落とすため、
+	# 生成・代入・出し隠しの3点を揃って見る(この関数の冒頭コメントと同じ理由)。
+	check.call(
+		screen.contains("PartPreview.attack_basis_text(_opponent_toughness)")
+		and screen.contains("_attack_basis.text = basis")
+		and screen.contains("_attack_basis.visible = basis != \"\""),
+		"RewardScreen.gdが攻めの基準の注記を作り、画面に出し、基準が無ければ隠す"
+	)
 	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
 	check.call(
 		main.contains("GameState.player_stats") and main.contains("GameState.continues_left")
@@ -456,10 +465,19 @@ func _test_screen_wiring(check: Callable) -> void:
 		and cli.contains("\"STAT_ATTACK\": \"攻め力\""),
 		"naive_play.gdも同じ基準で攻めの行を出す(ハーネスと実UIの情報量は対等)"
 	)
+	check.call(
+		cli.contains("PartPreview.attack_basis_text(opponent)")
+		and cli.contains("TranslationServer.set_locale(\"ja\")"),
+		"naive_play.gdも攻めの基準の注記を、CLIの他の出力と同じ日本語で出す"
+	)
 	var scene := FileAccess.get_file_as_string("res://scenes/reward/RewardScreen.tscn")
 	check.call(
 		scene.contains("REWARD_PREVIEW_HINT"),
 		"報酬画面に硬さ・打たれ強さの意味の注記がある"
+	)
+	check.call(
+		scene.contains("name=\"AttackBasis\"") and scene.contains("auto_translate_mode = 2"),
+		"報酬画面に攻めの基準の行があり、自動翻訳を切ってある(訳文へ数字を差し込むため)"
 	)
 
 
@@ -569,6 +587,52 @@ func _test_attack_row_is_the_only_home_of_the_offence_cards(check: Callable) -> 
 			and _better(rows, "STAT_WALL_ENDURANCE") == 0,
 			"%s: 守りの3行は据え置き(＝攻めの行が無ければ空欄の札だった)" % part.title_key
 		)
+
+
+## **この変更の証拠**(2026-08-07)。攻めの行だけが基準の相手を持っていて、その相手の
+## 硬さはラン中に十数倍になる。だから自分が強くなっていても攻めの行は縮む
+## (コールドプレイ seed=4711 の実測で 12.59 → 1.09)。注記が**基準の相手の硬さを
+## その場の数字で**言わなければ、他の3行が伸びる隣でこの行だけ逆を向く理由が
+## 画面のどこにも無い。
+##
+## 見るのは3点: (1)基準が無ければ注記も出ない(攻めの行が出ないのと揃う)、
+## (2)基準の相手が変われば注記の数字も変わる(定型文を出すだけのサボタージュを落とす)、
+## (3)その数字が実際に渡された硬さである。
+func _test_attack_basis_names_the_reference_opponent(check: Callable) -> void:
+	var saved := TranslationServer.get_locale()
+	TranslationServer.set_locale("ja")
+
+	check.call(
+		PartPreview.attack_basis_text(0.0) == "",
+		"基準の相手が無ければ注記も出ない(攻めの行が出ないのと揃う)"
+	)
+	check.call(
+		PartPreview.attack_basis_text(-1.0) == "",
+		"決戦のあと(reachable_hardest_toughness が -1)も注記を出さない"
+	)
+
+	# 段1の相手(Lv1)と決戦の相手(Lv5)。硬さは実ロスターのおおよその両端。
+	var early := PartPreview.attack_basis_text(0.12)
+	var late := PartPreview.attack_basis_text(12.64)
+	check.call(early != "" and late != "", "基準の相手があれば注記が出る")
+	check.call(
+		early != late,
+		"基準の相手が変われば注記も変わる(定型文ではない: %s / %s)" % [early, late]
+	)
+	check.call(
+		early.contains("0.12") and late.contains("12.64"),
+		"注記が基準の相手の硬さそのものを出す (%s / %s)" % [early, late]
+	)
+
+	# 両localeに訳があること。欠けるとキーが素のまま画面に出る。
+	for locale in ["en", "ja"]:
+		TranslationServer.set_locale(locale)
+		var text := PartPreview.attack_basis_text(12.64)
+		check.call(
+			not text.begins_with("REWARD_ATTACK_BASIS") and text.contains("12.64"),
+			"%s: 注記の訳がある (%s)" % [locale, text]
+		)
+	TranslationServer.set_locale(saved)
 
 
 ## 良し悪しの色が実際に読めるかは test_contrast.gd が見る(色はPaletteの持ち物)。
