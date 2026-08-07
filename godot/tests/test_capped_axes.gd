@@ -160,6 +160,26 @@ func _test_rage_and_momentum_report_their_capped_half(check: Callable) -> void:
 			"削り増強が上限の勢い維持は削り増強だけを挙げる (%s)" % [sharp_axes]
 		)
 
+	# 低重心(傾斜/削り軽減)も同じ複合札。hit_guardの器はSHOCK_ABSORBERと共有するので、
+	# 守りの札を積み切った後に低重心を提示されると「-8%と書いてあるのに動かない」が
+	# 実際に起きる——謳う軸(_claimed_axes)に足し忘れると、その注記だけが黙って消える。
+	var grip := _find_effect(CustomPart.Effect.GRIP)
+	if grip != null:
+		var planted := _player()
+		planted.slope_grip = grip.grip_max
+		var axes := _axes(grip, planted)
+		check.call(
+			axes.has("PART_AXIS_GRIP") and not axes.has("PART_AXIS_HIT_GUARD"),
+			"傾斜が上限の低重心は傾斜だけを挙げる (%s)" % [axes]
+		)
+		var guarded := _player()
+		guarded.hit_guard = grip.hit_guard_max
+		var guarded_axes := _axes(grip, guarded)
+		check.call(
+			guarded_axes.has("PART_AXIS_HIT_GUARD") and not guarded_axes.has("PART_AXIS_GRIP"),
+			"削り軽減が上限の低重心は削り軽減だけを挙げる (%s)" % [guarded_axes]
+		)
+
 
 ## 死にカード判定と同じ閾値を共有していること。
 ##

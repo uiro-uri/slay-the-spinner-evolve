@@ -176,12 +176,33 @@ func _test_grip_part_stacks_with_cap(check: Callable) -> void:
 	)
 	check.call(
 		absf(stats.mass - before_mass) < EPS and absf(stats.rps - before_rps) < EPS,
-		"GRIP札: 他のステータスには触らない"
+		"GRIP札: 傾斜と削り軽減以外のステータスには触らない"
 	)
-	# 上限に達した後は死にカード判定で提示から外れること(既存の仕組みへの接続)。
+	# 複合した削り軽減(GRIP_HIT_GUARD_STEP)も同時に積み上がり、専任のGUARD札と
+	# 器(GUARD_HIT_MAX)を共有して頭打ちになること。
+	check.call(
+		stats.hit_guard > EPS and stats.hit_guard <= CustomPartCatalog.GUARD_HIT_MAX + EPS,
+		"GRIP札: 削り軽減も積み上がり上限%.2fを超えない (%.2f)" % [
+			CustomPartCatalog.GUARD_HIT_MAX, stats.hit_guard
+		]
+	)
+	# 複合札なので、片方(傾斜)が上限でももう片方(削り軽減)が伸びる限り死に札ではない。
+	# ここを「傾斜が上限＝死に札」のままにすると、実際にはまだ伸びる札を提示から
+	# 外してしまう(死にカード判定は would_change_anything が唯一の窓口)。
+	check.call(
+		part.would_change_anything(stats),
+		"GRIP札: 傾斜が上限でも削り軽減が伸びる間は提示に残る (削り軽減 %.2f)" % stats.hit_guard
+	)
+	# 両方の軸が上限に達して初めて死にカードとして提示から外れること。
+	for i in 12:
+		part.apply_to(stats)
+	check.call(
+		absf(stats.hit_guard - CustomPartCatalog.GUARD_HIT_MAX) < EPS,
+		"GRIP札: 削り軽減が上限%.2fで頭打ち" % CustomPartCatalog.GUARD_HIT_MAX
+	)
 	check.call(
 		not part.would_change_anything(stats),
-		"GRIP札: 上限到達後は死にカードとして提示から外れる"
+		"GRIP札: 両軸とも上限に達したら死にカードとして提示から外れる"
 	)
 	var fresh := SpinnerStats.default_player()
 	check.call(part.would_change_anything(fresh), "GRIP札: 素のビルドでは有効")

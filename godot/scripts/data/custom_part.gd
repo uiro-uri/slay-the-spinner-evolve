@@ -327,11 +327,14 @@ static func make_drill(
 	return part
 
 
-## 低重心札を作る。土俵の傾斜の効き(slope_grip)を step_ ぶん上げる。
-## max_ は重ねがけの上限(中心に貼り付いて壁に触れなくなる無敵化を防ぐ)。
+## 低重心札を作る。土俵の傾斜の効き(slope_grip)を step_ ぶん上げつつ、衝突で
+## 受けるrps削りの軽減(hit_guard)を hit_guard_step_ ぶん上げる複合札。
+## max_ は傾斜側の重ねがけ上限(中心に貼り付いて壁に触れなくなる無敵化を防ぐ)。
+## hit_guard_max_ は削り軽減側の上限で、専任のGUARD札と器を共有する。
 static func make_grip(
 	id_: int, title_key_: String, rarity_: Rarity,
-	step_: float, max_: float
+	step_: float, max_: float,
+	hit_guard_step_: float = 0.0, hit_guard_max_: float = 1.0
 ) -> CustomPart:
 	var part := CustomPart.new()
 	part.id = id_
@@ -340,6 +343,8 @@ static func make_grip(
 	part.effect = Effect.GRIP
 	part.grip_step = step_
 	part.grip_max = max_
+	part.hit_guard_step = hit_guard_step_
+	part.hit_guard_max = hit_guard_max_
 	return part
 
 
@@ -401,10 +406,13 @@ func apply_to(stats: SpinnerStats) -> void:
 	if effect == Effect.DRILL:
 		stats.drill = minf(stats.drill + drill_step, drill_max)
 		return
-	# 低重心(GRIP): 土俵の傾斜の効きを上げる(slope_grip加算)。DRILLと同じく上限で
-	# 頭打ちにする(青天井だと中心に貼り付いて壁に一切触れなくなる)。
+	# 低重心(GRIP): 土俵の傾斜の効きを上げ(slope_grip加算)、衝突で受ける削りの
+	# 軽減(hit_guard)も上げる。傾斜側はDRILLと同じく上限で頭打ちにする(青天井だと
+	# 中心に貼り付いて壁に一切触れなくなる)。hit_guardはGUARD札と同じく上限で
+	# 頭打ちにして、重ねがけで削り無効(=衝突無敵)にならないようにする。
 	if effect == Effect.GRIP:
 		stats.slope_grip = minf(stats.slope_grip + grip_step, grip_max)
+		stats.hit_guard = minf(stats.hit_guard + hit_guard_step, hit_guard_max)
 		return
 	# 巨大化(GROWTH): 直径と質量の両方を倍にする。それぞれ上限でクランプ
 	# (直径はアリーナを埋め尽くさないよう、質量は青天井の複利を防ぐよう)。
@@ -531,7 +539,10 @@ func _claimed_axes() -> Array:
 		Effect.DRILL:
 			return [["drill", "PART_AXIS_DRILL"]]
 		Effect.GRIP:
-			return [["slope_grip", "PART_AXIS_GRIP"]]
+			return [
+				["slope_grip", "PART_AXIS_GRIP"],
+				["hit_guard", "PART_AXIS_HIT_GUARD"],
+			]
 		Effect.GROWTH:
 			return [
 				["radius", "PART_AXIS_RADIUS"],
@@ -675,7 +686,10 @@ func describe() -> String:
 	if effect == Effect.GRIP:
 		return (
 			tr("PART_EFFECT_GRIP").format(
-				[_trim((grip_step) * 100.0), _trim((grip_max - 1.0) * 100.0)]
+				[
+					_trim((grip_step) * 100.0), _trim((grip_max - 1.0) * 100.0),
+					_trim(hit_guard_step * 100.0), _trim(hit_guard_max * 100.0),
+				]
 			)
 			+ "\n" + tr("PART_NOTE_GRIP")
 		)

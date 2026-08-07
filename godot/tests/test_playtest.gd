@@ -434,6 +434,16 @@ func _test_naive_play_card_text(check: Callable) -> void:
 			and ("%.0f%%" % (momentum.edge_step * 100.0)) in momentum_text,
 		"naive_play: MOMENTUM札は削り増強も%%で謳う (%s)" % momentum_text
 	)
+	# 低重心も同じ複合札。傾斜だけでなく削り軽減もCLIに出すこと(同じ約束)。
+	var grip := CustomPartCatalog.by_id(14)    # GRIP(傾斜+削り軽減)
+	var grip_text: String = NaivePlay.card_text(grip)
+	check.call("傾斜" in grip_text, "naive_play: GRIP札は傾斜の効きを謳う (%s)" % grip_text)
+	check.call(
+		"削られる" in grip_text
+			and ("%.0f%%" % (grip.hit_guard_step * 100.0)) in grip_text,
+		"naive_play: GRIP札は削り軽減も%%で謳う (%s)" % grip_text
+	)
+
 	# STAT_MULTIPLY札も実UI(describe)と同じ挙動注記をCLIに出すこと。
 	# 発見の経緯: 「質量 ×1.30」だけでは対巨体の削り耐性だと読めず、実UIの
 	# 報酬画面には見えている注記がCLIにだけ出ないまま質量札を見送って、
