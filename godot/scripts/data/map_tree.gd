@@ -335,8 +335,14 @@ func _promote_compensation(
 ## 単体へ引き直すのは_ensure_single_escapeの保証(1体部屋)を後から壊さないため
 ## (斥候はもともと単体なので、頭数の総量も変わらない)。
 ## 段の昇順・列の昇順で舐めるのは決定性のため(Dictionaryの挿入順に依存させない)。
+##
+## 舐める段が**段0(スタート)から**なのは、段1が斥候段になったため(2026-08-07)。
+## 段1は必ず3ノードしかないので「3つとも斥候」が0.8%で起き、そのときラン最初の
+## 選択が「Lv2を踏むか、Lv2を踏むか、Lv2を踏むか」になる。段0自身は戦闘ノードでは
+## ないが矢印は持つので、他の段とまったく同じ判定でよい(200生成のテストが
+## seed=19 で実際に踏んだ)。
 func _ensure_vanguard_choice(rng: RandomNumberGenerator) -> void:
-	for step in range(1, STEP_GOAL):
+	for step in range(0, STEP_GOAL):
 		var columns: Array[int] = []
 		for coord in nodes:
 			if coord.x == step:
