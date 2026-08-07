@@ -83,10 +83,21 @@ static func toughness(stats: SpinnerStats) -> float:
 ## 寿命(秒の目安) = rps ÷ (半径 × 回転減衰)。自然減衰(natural_spin_decay)が
 ## 半径×回転減衰に比例するので、殴られなくてもこの時間で回転が尽きる。
 static func lifetime(stats: SpinnerStats) -> float:
-	var rate := stats.radius * stats.spin_decay
+	var rate := decay_rate(stats)
 	if rate < _EPSILON:
 		return 0.0
 	return stats.rps / rate
+
+
+## 自然減衰の速さ = 半径 × 回転減衰。寿命の分母そのもの
+## (SpinnerPhysics.natural_spin_decay がこれに比例する)。
+##
+## **4行が1本も読まない唯一の軸**。硬さは 質量×半径²、打たれ強さ・壁強さは
+## rps×硬さ÷軽減、攻め力は 質量・半径・edge・drill で、**回転減衰(spin_decay)は
+## どの行にも入っていない**。半径の方も、4行では**得の側にしか出てこない**
+## (硬さを押し上げる)。decay_note はこの片側だけ見えている軸を補う。
+static func decay_rate(stats: SpinnerStats) -> float:
+	return stats.radius * stats.spin_decay
 
 
 ## 打たれ強さ = rps × 硬さ ÷ (1 − 衝突軽減)。**接触に何回耐えられるか**に比例する。
@@ -309,6 +320,68 @@ static func attack_basis_text(opponent_toughness: float) -> String:
 	return TranslationServer.translate("REWARD_ATTACK_BASIS").format(
 		[String.num(opponent_toughness, 2)]
 	)
+
+
+## 自然減衰の軸が動く札にだけ付ける注記。動かなければ空の辞書を返し、呼び手は
+## ラベルごと出さない(`CustomPart.capped_note` と同じ約束)。
+## 返す辞書は {"text": 表示文, "better": +1/0/-1} で、better は**寿命**の向き。
+##
+## **なぜ行ではなく注記なのか**(2026-08-07)
+## 寿命は 2026-08-06 に2行目から外した軸で、その判断は今も正しい——当時の2行構成では
+## 寿命が**カード間で最も大きく動く行**になり、実測最下位の FULL_STEAM_AHEAD(+0.5pt)が
+## いちばん得に見え、実測1位の GIANT_GROWTH(+95.2pt)に唯一のマイナスが付いていた。
+## 揃った数値の列に peer として並べると、読み手は4本を横並びで数えるので、
+## 決着にほとんど効かない軸(敵の敗因の自然減衰は全レベル0.0%)が1/5票を持ってしまう。
+##
+## それでも**代償と得が数字でどこにも出ない**のは別の欠陥だった。4行が読むのは
+## 質量・半径・rps・hit_guard・wall_keep・edge・drill で、**回転減衰は1行も読まず**、
+## **半径は硬さを押し上げる得の側にしか出てこない**。
+##
+## 一次証拠(コールドプレイ 2026-08-07 夜, seed=25458): 段5で GIANT_GROWTH を取ったら
+## 4行が全部上がって見えた裏で寿命が 25.2→22.0 に落ちていて、そのまま2枚積んだ結果
+## 段6・段7が **22.0秒/25衝突・25.0秒/23衝突**の消耗戦になり、自分のrps喪失のうち
+## **自然減衰が6.9・7.9**(全体の24%・30%)を占めた。逆に段7で FULL_STEAM_AHEAD は
+## 寿命を **28.9→38.0(+31%)** も伸ばすのに、4行では攻め力が ×2.56→×2.80 と
+## 動くだけの地味な札に見えた——**その時いちばん大きかった喪失源を唯一直せる札**が、
+## 画面上でいちばん小さく見えていた。
+##
+## そこで peer の行ではなく、**上限注記(capped_note)と同じ小さな1行**として出す。
+## 揃った値の列の外に置くので4行を横並びで数える読みは変わらず、代償と得だけが
+## 数字になる。色は行と同じ規則(良し悪しは色で見せる)。
+##
+## **なぜ寿命の変化ではなく減衰率の変化で出すのか**
+## 寿命 = rps ÷ 減衰率 なので、回転を上げる札(EXTRA_WINDING / SPIN_ENGINE)でも
+## 寿命は伸びる。しかし rps は打たれ強さ・壁強さの**2行が既に読んでいる**軸で、
+## そこに3つ目の上向きを足しても情報は増えず、回転札を過大に見せるだけになる。
+## 出す条件を**減衰率(半径×回転減衰)が動いたとき**に絞ると、カタログ12枚のうち
+## GIANT_GROWTH(0.700→0.875)と FULL_STEAM_AHEAD(0.700→0.560)の**2枚だけ**が
+## 該当する——上のコールドプレイで取り違えた2枚と正確に一致する。
+## 直径が既に上限のビルドでは減衰率が動かないので注記も出ない(代償が無いのは本当で、
+## 「もう直径は伸びない」は capped_note の側が言う)。
+static func decay_note(stats: SpinnerStats, part: CustomPart) -> Dictionary:
+	if stats == null or part == null:
+		return {}
+	var after := preview_stats(stats, part)
+	# 見るのは減衰率そのものではなく**その2つの軸**。物差しは上限注記と共有する
+	# (CustomPart.stat_moved)——別々に持つと、上限注記が「回転減衰はもう伸びない」と
+	# 言う隣で減衰の注記だけが動いて見える(実測: 勢い維持4枚のビルドで
+	# 回転減衰 0.41→下限0.40 が「寿命 76.7 → 78.6」として出た)。
+	if not (
+		CustomPart.stat_moved(stats.radius, after.radius)
+		or CustomPart.stat_moved(stats.spin_decay, after.spin_decay)
+	):
+		return {}
+	var before_life := lifetime(stats)
+	var after_life := lifetime(after)
+	var better := 0
+	if not is_equal_approx(before_life, after_life):
+		better = 1 if after_life > before_life else -1
+	return {
+		"text": TranslationServer.translate("REWARD_DECAY_NOTE").format(
+			[String.num(before_life, 1), String.num(after_life, 1)]
+		),
+		"better": better,
+	}
 
 
 ## prefix は値の前に付ける記号。攻め力だけが**倍率**(素のコマ=1.00)なので、

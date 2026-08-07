@@ -518,6 +518,17 @@ static func _nearly_same(a: float, b: float) -> bool:
 	return absf(a - b) <= MEANINGFUL_CHANGE_RATIO * scale
 
 
+## 1つの軸が「意味のある変化」をしたか。`_nearly_same` の公開版。
+##
+## 上限注記(capped_axes)と自然減衰の注記(PartPreview.decay_note)は、同じ札の
+## 同じ軸について「止まった/動いた」を言う。**物差しを別々に持つと矛盾する**——
+## 勢い維持を4枚積んだビルド(回転減衰 0.41、下限0.40)で実測すると、
+## capped_axes は「回転減衰はすでに上限」と言う隣で、is_equal_approx で見ていた
+## 減衰の注記だけが「寿命 76.7 → 78.6」と動いて見えた。同じ関数を共有させる。
+static func stat_moved(before: float, after: float) -> bool:
+	return not _nearly_same(before, after)
+
+
 ## この札が「動かす」と謳っている軸: [SpinnerStatsのプロパティ名, 軸名の翻訳キー]。
 ##
 ## 効果文(describe)が名前を挙げている軸と1対1で対応させること。上限到達の注記は

@@ -125,6 +125,35 @@ func _build_card(part: CustomPart) -> Control:
 			box.add_child(line)
 			preview_labels.append(line.get_child(0) as Label)
 
+		# 自然減衰の軸が動く札にだけ付く注記。4行は回転減衰を1本も読まず、半径も
+		# 硬さを押し上げる得の側にしか出さないので、巨大化の代償と勢い維持の得が
+		# どこにも出ていなかった(詳細は PartPreview.decay_note)。上限注記と同じ
+		# 小さな1行として、揃った値の列の外に置く——列に peer として並べると、
+		# 決着にほぼ効かない軸が4行と同じ1票を持つ(2026-08-06 に行から外した経緯)。
+		var decay := PartPreview.decay_note(_stats, part)
+		if not decay.is_empty():
+			var decay_label := Label.new()
+			decay_label.text = decay["text"]
+			decay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			decay_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			decay_label.add_theme_font_size_override("font_size", 12)
+			# 良し悪しは色で見せる約束(_build_preview_row と同じ手口)。自前の色を
+			# 持つ行はレアの dark(暗色文字)に入れず、明るい金地では暗色の縁取りで
+			# 読ませる(capped_label と同じ扱い)。
+			if decay["better"] != 0:
+				decay_label.add_theme_color_override(
+					"font_color",
+					Palette.STAT_UP if decay["better"] > 0 else Palette.STAT_DOWN
+				)
+				if is_rare:
+					decay_label.add_theme_color_override(
+						"font_outline_color", Palette.TEXT_OUTLINE
+					)
+					decay_label.add_theme_constant_override("outline_size", 3)
+			elif is_rare:
+				preview_labels.append(decay_label)
+			box.add_child(decay_label)
+
 	if is_rare:
 		var tag := Label.new()
 		tag.text = "PART_RARITY_RARE"
