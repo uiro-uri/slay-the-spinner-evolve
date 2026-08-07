@@ -193,6 +193,26 @@ const RAGE_WALL_KEEP_MAX := 0.5
 ## 0.4なら自然減衰は最大でも通常の40%まで（無限に回るのを防ぐ）。
 const FULL_STEAM_FLOOR := 0.4
 
+## Full Steam Aheadが1枚あたり上げる与ダメ増強量(edgeへ加算)。上限はEDGE_MAXを
+## SHARP_EDGEと共有する。
+##
+## 摩擦と回転減衰だけの札だった頃、単独計測(measure_parts, intercept, Lv3, 800戦/セル)
+## で **3枚積んで+0.4pt** と全11札で最下位だった(次点のLOW_CENTER +0.8pt、
+## 中堅のSHARP_EDGE +8.6pt、首位のGIANT_GROWTH +62.9pt)。倍率不足ではなく
+## **軸が痩せている**のが理由で、自機のrps喪失は削り71〜83%/壁16〜23%/自然減衰4〜8%
+## (playtest/measure_slope_grip)——この札が触る2軸は合わせても喪失の1割に届かない。
+## 一次証拠(コールドプレイ 2026-08-07, seed=4821): 段4の報酬が
+## LOW_CENTER / SHOCK_ABSORBER / FULL_STEAM の3枚で、**見積もりの4行が動くのは
+## SHOCK_ABSORBERだけ**——3択の形をした1択だった。前サイクルのコールドプレイも
+## 同じ2枚を「5回提示されて5回とも見送った」と書き残している。
+##
+## 0.10/枚はSHARP_EDGE(0.20/枚)の半分。攻めの専任札の上位互換にはせず、
+## 3枚で+30%と器(EDGE_MAX=0.6)の半分までしか埋めない。器を共有するので
+## 「勢い維持＋シャープエッジ」を同時に積んでも与ダメの複利は青天井にならず、
+## 上限に達した側は死にカード判定(CustomPart.would_change_anything)と
+## 上限到達の注記(PART_CAPPED_NOTE)が自動で拾う。
+const MOMENTUM_EDGE_STEP := 0.1
+
 ## Shock Absorberが1枚あたり上げる衝突rps保持量(hit_guard)と、その上限。
 ## 数値は壁版のRAGE(wall_keep 0.17/0.5)に合わせた: 1枚で衝突削り-17%、
 ## 3枚の上限0.5で削り半減。1.0(削り無効)まで許すと衝突無敵になるので頭打ちにする。
@@ -277,8 +297,11 @@ static func all() -> Array[CustomPart]:
 		# 「勢いを保つ」よう、摩擦と回転減衰率(自然にRPSが落ちる速さ)の両方を
 		# 下げるMOMENTUM効果にした。spin_decayの下限FULL_STEAM_FLOORで、重ねても
 		# 回転減衰がゼロ(無限に回る)にならないようにする。倍率は計測で調整。
+		# それでも最下位の死に札のままだったので、GROWTH(直径→質量)・RAGE(反発→
+		# 壁軽減)と同じ複合化で削りの軸(MOMENTUM_EDGE_STEP)を足した——速いまま
+		# 当たれば深く削る、という札の見立てそのままの向き。
 		CustomPart.make_momentum(5, "PART_FULL_STEAM_AHEAD", CustomPart.Rarity.COMMON,
-			0.8, FULL_STEAM_FLOOR),
+			0.8, FULL_STEAM_FLOOR, MOMENTUM_EDGE_STEP, EDGE_MAX),
 		# Rage Reflection: 反発up(相手を壁へ押し込む攻撃用途・スキル天井)に加え、
 		# 自分の壁rps喪失を減らす複合札。反発upだけでは計測で負(跳ね回って壁で
 		# rpsを失う)だったので、wall_keepで壁ダメージを減らして確実に正にする。

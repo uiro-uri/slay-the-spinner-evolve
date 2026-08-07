@@ -62,7 +62,29 @@ func _test_apply(check: Callable) -> void:
 		s.spin_decay < before_decay,
 		"パーツ: Full Steam Aheadで回転減衰も減る (%.3f -> %.3f)" % [before_decay, s.spin_decay]
 	)
-	# spin_decayは下限FULL_STEAM_FLOORでクランプ(重ねても無限には回らない)。
+	# 複合化した削りの軸(MOMENTUM_EDGE_STEP)。摩擦・自然減衰だけでは喪失の1割しか
+	# 触れず単独計測で最下位(+0.4pt)だったので、決着を決める削りへ足がかりを持つ
+	# (経緯は CustomPartCatalog.MOMENTUM_EDGE_STEP のコメント)。
+	s = _stats()
+	CustomPartCatalog.by_id(5).apply_to(s)
+	check.call(
+		is_equal_approx(s.edge, CustomPartCatalog.MOMENTUM_EDGE_STEP),
+		"パーツ: Full Steam Aheadで与ダメ増強が+%.2f入る (%.2f)" % [
+			CustomPartCatalog.MOMENTUM_EDGE_STEP, s.edge
+		]
+	)
+	# 攻めの専任札(SHARP_EDGE)の上位互換にはしない。
+	var edge_stats := _stats()
+	CustomPartCatalog.by_id(11).apply_to(edge_stats)
+	check.call(
+		s.edge < edge_stats.edge - EPS,
+		"パーツ: Full Steamの削り増強はSHARP_EDGEより小さい (%.2f < %.2f)" % [
+			s.edge, edge_stats.edge
+		]
+	)
+	# spin_decayは下限FULL_STEAM_FLOOR、edgeは上限EDGE_MAXでクランプ
+	# (重ねても無限には回らないし、削りの複利も青天井にならない)。
+	# edgeの器はSHARP_EDGEと共有するので、混ぜて積んでも同じ上限で止まる。
 	s = _stats()
 	for i in 12:
 		CustomPartCatalog.by_id(5).apply_to(s)
@@ -70,6 +92,22 @@ func _test_apply(check: Callable) -> void:
 		s.spin_decay >= CustomPartCatalog.FULL_STEAM_FLOOR - EPS,
 		"パーツ: Full Steamのspin_decayが下限%.2fで止まる (%.3f)" % [
 			CustomPartCatalog.FULL_STEAM_FLOOR, s.spin_decay
+		]
+	)
+	check.call(
+		s.edge <= CustomPartCatalog.EDGE_MAX + EPS,
+		"パーツ: Full Steamのedgeが上限%.2fで止まる (%.2f)" % [
+			CustomPartCatalog.EDGE_MAX, s.edge
+		]
+	)
+	var mixed := _stats()
+	for i in 6:
+		CustomPartCatalog.by_id(5).apply_to(mixed)
+		CustomPartCatalog.by_id(11).apply_to(mixed)
+	check.call(
+		mixed.edge <= CustomPartCatalog.EDGE_MAX + EPS,
+		"パーツ: Full SteamとSHARP_EDGEはedgeの器を共有して上限%.2fで止まる (%.2f)" % [
+			CustomPartCatalog.EDGE_MAX, mixed.edge
 		]
 	)
 
@@ -339,11 +377,21 @@ func _test_description_matches_effect(check: Callable) -> void:
 
 	# 勢い維持(MOMENTUM)の注記もja側をピンする。enは上のカタログ一巡で確認済み。
 	var momentum_part := CustomPart.make_momentum(
-		0, "T", CustomPart.Rarity.COMMON, 0.8, 0.4
+		0, "T", CustomPart.Rarity.COMMON, 0.8, 0.4, 0.1, 0.6
 	)
 	check.call(
 		momentum_part.describe().contains("長持ち"),
 		"パーツ: 勢い維持の注記(ja)が長持ちに触れる (%s)" % momentum_part.describe()
+	)
+	# 複合化した削りの軸も効果文が数字で謳うこと。カードに書いていない効果は
+	# 上限到達の注記(_claimed_axes)を嘘にするので、文と軸は1対1でなければならない。
+	check.call(
+		momentum_part.describe().contains("10%") and momentum_part.describe().contains("60%"),
+		"パーツ: 勢い維持の効果文が削り増強と上限を%%で謳う (%s)" % momentum_part.describe()
+	)
+	check.call(
+		momentum_part.describe().contains("削る"),
+		"パーツ: 勢い維持の効果文が削りに触れる (%s)" % momentum_part.describe()
 	)
 
 

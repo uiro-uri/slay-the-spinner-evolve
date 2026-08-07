@@ -711,9 +711,11 @@ static func card_text(c: CustomPart) -> String:
 			return "最初の衝突後%.0f秒間 敵をすり抜ける・初撃は当たってから発動、直後の反撃や乱戦のもみくちゃを無傷でやり過ごすヒット&ラン [GHOST]" % c.ghost_seconds
 		CustomPart.Effect.MOMENTUM:
 			# 実UI(describe)の挙動注記と同じ一言を出す。「摩擦×0.8」だけでは
-			# 下がる=良いことが初見に読めない。
-			return "摩擦と回転減衰 ×%.2f(回転減衰の下限%.2f)・減速しにくく回転も長持ちする [MOMENTUM]" % [
-				c.multiplier, c.cap]
+			# 下がる=良いことが初見に読めない。削りの軸(複合)もEDGEと同じ%表記で
+			# 併記する——ここを落とすと、この札だけハーネスの情報量が実UIより
+			# 少なくなり、コールドプレイの見送り判断が実プレイと食い違う。
+			return "摩擦と回転減衰 ×%.2f(回転減衰の下限%.2f)・衝突で相手から削る回転を%.0f%%増強(重ねて最大%.0f%%)・減速しにくく回転が長持ちし、勢いを保ったまま当たるぶん深く削る [MOMENTUM]" % [
+				c.multiplier, c.cap, c.edge_step * 100.0, c.edge_max * 100.0]
 		CustomPart.Effect.RAGE:
 			# wall_keepは割合なので%で出す(下の%表記の判断と同じ。実UIは数値なしの
 			# 「壁でrpsを失いにくい」だけで、CLIの方が情報は多い)。

@@ -421,11 +421,19 @@ func _test_naive_play_card_text(check: Callable) -> void:
 	# (終盤はボス戦で壁20.0 vs 削り12.0と、壁が削りを上回ることさえある)。
 	check.call("終盤" in rage_text and "壁" in rage_text,
 		"naive_play: RAGE札は価値逆転(終盤は壁喪失が膨らむ)も謳う (%s)" % rage_text)
-	var momentum := CustomPartCatalog.by_id(5)    # MOMENTUM(摩擦+回転減衰)
+	var momentum := CustomPartCatalog.by_id(5)    # MOMENTUM(摩擦+回転減衰+削り増強)
 	var momentum_text: String = NaivePlay.card_text(momentum)
 	check.call("回転減衰" in momentum_text, "naive_play: MOMENTUM札は回転減衰を謳う (%s)" % momentum_text)
 	check.call(not ("質量" in momentum_text), "naive_play: MOMENTUM札の表記に質量が混ざらない")
 	check.call("長持ち" in momentum_text, "naive_play: MOMENTUM札は挙動(回転が長持ち)も謳う (%s)" % momentum_text)
+	# 複合化した削りの軸もCLIに出すこと。ここを落とすとこの札だけハーネスの
+	# 情報量が実UI(describe)より少なくなり、コールドプレイの見送り判断が
+	# 実プレイと食い違う(ハーネスと実UIの情報量は対等に保つ約束)。
+	check.call(
+		"削る" in momentum_text
+			and ("%.0f%%" % (momentum.edge_step * 100.0)) in momentum_text,
+		"naive_play: MOMENTUM札は削り増強も%%で謳う (%s)" % momentum_text
+	)
 	# STAT_MULTIPLY札も実UI(describe)と同じ挙動注記をCLIに出すこと。
 	# 発見の経緯: 「質量 ×1.30」だけでは対巨体の削り耐性だと読めず、実UIの
 	# 報酬画面には見えている注記がCLIにだけ出ないまま質量札を見送って、
