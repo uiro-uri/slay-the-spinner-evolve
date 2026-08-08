@@ -22,6 +22,7 @@ const EPS := 1e-4
 
 func run(check: Callable) -> void:
 	_test_melee_mass_scale(check)
+	_test_melee_discount_skips_level_one(check)
 	_test_melee_room_still_harder(check)
 	_test_toughness_ladder(check)
 	_test_lifetime_sane_decay(check)
@@ -65,13 +66,15 @@ func _test_melee_mass_scale(check: Callable) -> void:
 				seen_swarm = true
 			else:
 				seen_solo = true
-			var expected_scale := EnemyRoster.melee_mass_scale(group.size())
 			var expected_rps_scale := EnemyRoster.step_rps_scale(step)
 			for member in group:
 				var base := _solo_of(member)
 				if base == null:
 					violations.append("素の個体が引けない: %s" % member.display_name)
 					continue
+				# 割引はレベルごと(MELEE_DISCOUNT_MIN_LEVEL未満＝Lv1は掛からない)なので、
+				# 期待値も群単位ではなく**その個体のレベル**で引く。
+				var expected_scale := EnemyRoster.melee_mass_scale(group.size(), member.level)
 				if not is_equal_approx(member.stats.mass, base.stats.mass * expected_scale):
 					violations.append("%d体の%s: 質量%.4f (素%.4f×%.4f を期待)" % [
 						group.size(), member.display_name,
@@ -95,6 +98,76 @@ func _test_melee_mass_scale(check: Callable) -> void:
 		violations.is_empty(),
 		"乱戦の緩めは質量だけ・単体は素のまま%s" % (
 			"" if violations.is_empty() else " / 例: " + violations[0])
+	)
+
+
+## 乱戦の質量割引が **Lv1には掛からない**こと(MELEE_DISCOUNT_MIN_LEVEL)。
+##
+## 割引は「乱戦が崖になっている」レベルを均すための装置で、乱戦が既に床のLv1では
+## 逆に「無料の複数枚引き」を深める側に働いていた(measure_group_size: 割引ありで
+## Lv1が 100.0/99.8/99.4%、割引なしで 100.0/98.8/93.2%)。Lv1の段1〜2はランで最初に
+## 下す2つの判断なので、そこに賭けを戻す。
+##
+## 固定するのは値ではなく性質:
+##  - Lv1の乱戦メンバーは**素の個体と厳密に一致**する(質量が1ミリも動かない)
+##  - Lv2以降の乱戦メンバーは従来どおり melee_mass_scale(頭数) 倍のまま
+##  - 単体(1体)はどのレベルでも素のまま＝この変更で単体戦は1ビットも動かない
+##  - 倍率関数そのもの: level省略(0)は従来の割引あり、Lv1だけ1.0、Lv2以降は同値
+## 閾値の値(2)を変えたらここが落ちる=意図せず境界が動いたことに気付ける。
+func _test_melee_discount_skips_level_one(check: Callable) -> void:
+	# 倍率関数の素性。level=0(省略)は「レベルが分からない」＝従来どおり割引あり。
+	for count in [2, 3]:
+		var discounted := EnemyRoster.melee_mass_scale(count)
+		check.call(
+			discounted < 1.0 - EPS,
+			"melee_mass_scale(%d): レベル省略は従来どおり割引あり (%.4f)" % [count, discounted]
+		)
+		check.call(
+			is_equal_approx(EnemyRoster.melee_mass_scale(count, 1), 1.0),
+			"melee_mass_scale(%d, Lv1): 割引を掛けない (%.4f)" % [
+				count, EnemyRoster.melee_mass_scale(count, 1)]
+		)
+		# 境界は**リテラルで**押さえる。EnemyRoster.MELEE_DISCOUNT_MIN_LEVEL を
+		# そのまま回すと、定数がLv3へずれても検査が一緒にずれて素通りする
+		# (サボタージュで実際に素通りした)。割引が始まるのはLv2から。
+		for level in range(2, 6):
+			check.call(
+				is_equal_approx(EnemyRoster.melee_mass_scale(count, level), discounted),
+				"melee_mass_scale(%d, Lv%d): 従来の割引のまま (%.4f)" % [
+					count, level, EnemyRoster.melee_mass_scale(count, level)]
+			)
+	# 単体はレベルによらず必ず1.0(この変更で単体戦が動かないことの担保)。
+	for level in range(1, 6):
+		check.call(
+			is_equal_approx(EnemyRoster.melee_mass_scale(1, level), 1.0),
+			"melee_mass_scale(1, Lv%d): 単体は常に1.0" % level
+		)
+
+	# 実際に組んだメンバーで見る。melee_member を通したLv1は素の実体と全ステータス一致。
+	var untouched := true
+	var discounted_ok := true
+	for count in [2, 3]:
+		for base in EnemyRoster.of_level(1):
+			var member := EnemyRoster.melee_member(base, count)
+			if not (
+				is_equal_approx(member.stats.mass, base.stats.mass)
+				and is_equal_approx(member.stats.radius, base.stats.radius)
+				and is_equal_approx(member.stats.rps, base.stats.rps)
+				and member.level == base.level
+			):
+				untouched = false
+		for level in range(2, 6):
+			for base in EnemyRoster.of_level(level):
+				var member := EnemyRoster.melee_member(base, count)
+				var want := base.stats.mass * EnemyRoster.melee_mass_scale(count, level)
+				if not is_equal_approx(member.stats.mass, want) or member.level != base.level:
+					discounted_ok = false
+	check.call(untouched, "Lv1の乱戦メンバーは素の個体と厳密に一致する(質量が動かない)")
+	check.call(discounted_ok, "Lv2以降の乱戦メンバーは従来どおり質量だけ割引される")
+	# 境界そのもの。ここが動いたら意図せず帯がずれている。
+	check.call(
+		EnemyRoster.MELEE_DISCOUNT_MIN_LEVEL == 2,
+		"割引が始まるのはLv2から (実際=Lv%d)" % EnemyRoster.MELEE_DISCOUNT_MIN_LEVEL
 	)
 
 
@@ -367,7 +440,6 @@ func _test_reroll_group(check: Callable) -> void:
 			continue
 		if group.size() > 1:
 			seen_swarm_reroll = true
-		var expected_scale := EnemyRoster.melee_mass_scale(group.size())
 		for i in group.size():
 			if rerolled[i].level != group[i].level:
 				level_ok = false
@@ -375,6 +447,7 @@ func _test_reroll_group(check: Callable) -> void:
 			if alternatives and rerolled[i].display_name == group[i].display_name:
 				changed_ok = false
 			var base := _solo_of(rerolled[i])
+			var expected_scale := EnemyRoster.melee_mass_scale(group.size(), rerolled[i].level)
 			if base == null or not is_equal_approx(
 				rerolled[i].stats.mass, base.stats.mass * expected_scale
 			):

@@ -514,10 +514,11 @@ func _test_melee_scale_on_every_node(check: Callable) -> void:
 			var node: MapTree.MapNode = tree.nodes[coord]
 			if not node.has_encounter():
 				continue
-			var expected := EnemyRoster.melee_mass_scale(node.enemy_count())
 			if node.enemy_count() >= 2:
 				swarms += 1
 			for member in node.enemies:
+				# 割引はレベルごと(Lv1には掛からない)なので、期待値も個体のレベルで引く。
+				var expected := EnemyRoster.melee_mass_scale(node.enemy_count(), member.level)
 				var base := EnemyRoster.find_by_name(member.display_name)
 				if base == null:
 					mismatches.append("seed=%d %s: 素の個体が引けない(%s)" % [
