@@ -70,6 +70,24 @@ godotプロセスを起こしてnproc並列でばら撒く。
   ```bash
   godot --headless --path godot --script res://playtest/measure_launch_force.gd -- --count=400
   ```
+- `godot/playtest/measure_launch_stance.gd` — 発射の**立ち位置**を振る計測器。
+  実UI(`Battle._clamp_launch`)の発射地点は「壁の内側 かつ 敵予告の間合いの外」なら
+  どこでもよい**2自由度**(向き＋中心からの距離)なのに、`LaunchPolicy` は長らく
+  外周リング上の一様ランダムしか撃たなかった。向きは `Stance`
+  (opposite=敵の真反対で助走最長 / near=同じ側で最短 / random=従来)、距離は
+  `--rings`(外周リング=1.00、0.00で中心)で振る。
+
+  ```bash
+  godot --headless --path godot --script res://playtest/measure_launch_stance.gd -- \
+    --count=400 --build=mid --sizes=1 --rings=1.0,0.6,0.25
+  ```
+
+  **2026-08-08 の結論は否定的**: 立ち位置が勝率を動かす幅は9セル(向き3×距離3)で
+  最大5pt弱(Lv3 91.7〜96.0% / Lv4 4.5〜10.0% / Lv1・Lv2・Lv5 は床か天井に張り付き)。
+  しかも助走最長の opposite は有利ではなく Lv4 で最下位で、決着が延び・壁回数が増え・
+  rps喪失の壁の取り分が 26%→34% に膨らむ——**助走で買った一撃を、その勢いのまま
+  壁に払っている**。同じ `--build=mid` で頭数は 49pt(`measure_group_size`)、
+  報酬方針は 38pt(`report.md`)動かすので、**発射の腕は桁で効かない**。
 - `godot/playtest/measure_slope_grip.gd` — 自機の**傾斜の効き**(`slope_grip`)を1.0未満まで
   振って、「離れて待つ」が戦術として成立するかを見る計測器。引き量も併せて振る
   (弱く撃って離れるのが実プレイヤーの取る手なので、満引き固定では待ちの成否が
