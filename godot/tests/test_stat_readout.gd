@@ -12,8 +12,10 @@ const EPS := 1e-4
 ## 行の並びは _test_rows がキーで固定する。ここは「何番目か」に依存する検査の索引。
 const TOUGHNESS_ROW := 0
 const LIFETIME_ROW := 1
-const MASS_ROW := 2
-const GHOST_ROW := 6
+const ATTACK_ROW := 2
+const KNOCKBACK_ROW := 3
+const MASS_ROW := 4
+const GHOST_ROW := 8
 
 
 func run(check: Callable) -> void:
@@ -22,6 +24,7 @@ func run(check: Callable) -> void:
 	_test_ghost_row(check)
 	_test_composite_rows(check)
 	_test_enemy_rows(check)
+	_test_offense_rows(check)
 	_test_enemy_rows_wiring(check)
 
 
@@ -30,14 +33,14 @@ func _test_rows(check: Callable) -> void:
 	var rows := StatReadout.rows(stats)
 
 	check.call(
-		rows.size() == 6,
-		"行数は6(硬さ/寿命/重さ/大きさ/反発/初期回転数): %d" % rows.size()
+		rows.size() == 8,
+		"行数は8(硬さ/寿命/攻め力/弾き/重さ/大きさ/反発/初期回転数): %d" % rows.size()
 	)
 
 	# 順序とキーを固定する。承認済みプレビューの並び。勝敗を決める複合量
-	# (硬さ・寿命)が先頭で、生の4本はその材料として後ろに続く。
+	# (硬さ・寿命・攻め力・弾き)が先頭で、生の4本はその材料として後ろに続く。
 	var keys := [
-		"STAT_TOUGHNESS", "STAT_LIFETIME",
+		"STAT_TOUGHNESS", "STAT_LIFETIME", "STAT_ATTACK", "STAT_KNOCKBACK",
 		"STAT_MASS", "STAT_RADIUS", "STAT_RESTITUTION", "STAT_RPS_INITIAL",
 	]
 	for i in keys.size():
@@ -81,15 +84,15 @@ func _test_fraction_range(check: Callable) -> void:
 func _test_ghost_row(check: Callable) -> void:
 	var stats := SpinnerStats.default_player()
 
-	# ゴースト未取得(0秒)なら無敵時間の行は出ない。基本4行のまま。
+	# ゴースト未取得(0秒)なら無敵時間の行は出ない。基本8行のまま。
 	check.call(
-		StatReadout.rows(stats, 0.0).size() == 6,
+		StatReadout.rows(stats, 0.0).size() == 8,
 		"ゴースト0秒なら行を足さない: %d" % StatReadout.rows(stats, 0.0).size()
 	)
 
 	# 取得している(>0)なら末尾に無敵時間の行が付き、割合は0〜1。
 	var rows := StatReadout.rows(stats, StatReadout.GHOST_MAX * 0.5)
-	check.call(rows.size() == 7, "ゴースト取得時は7行になる: %d" % rows.size())
+	check.call(rows.size() == 9, "ゴースト取得時は9行になる: %d" % rows.size())
 	check.call(
 		rows[GHOST_ROW]["label_key"] == "STAT_GHOST",
 		"末尾は無敵時間の行 -> %s" % rows[GHOST_ROW]["label_key"]
@@ -336,6 +339,148 @@ func _test_enemy_rows(check: Callable) -> void:
 	for row in StatReadout.enemy_rows(player, bigger_bosses):
 		var f: float = row["fraction"]
 		check.call(f >= 0.0 and f <= 1.0, "%s の取り分が0〜1: %f" % [row["label_key"], f])
+
+
+## 攻めの2行(攻め力・弾き)。動機は「報酬カードが約束した攻めが、取った瞬間に
+## どこにも出なくなる」——硬さ・寿命で塞いだのと同型の穴が攻めの側に残っていた。
+##
+## 要点は3つ。(1) 報酬カードとまったく同じ定義(PartPreview)を通していること。
+## (2) 基準の相手を**素のコマに固定**していること——部屋ごとの相手を基準にすると、
+## 札を1枚も取っていないのに部屋を移るだけで値が動いてバーが光る。
+## (3) 攻めの札で伸び、守りの札では動かないこと——行が「何でも伸びる欄」に
+## なっていたら、EDGE と GUARD の区別が付かない。
+func _test_offense_rows(check: Callable) -> void:
+	var base := SpinnerStats.default_player()
+	var rows := StatReadout.rows(base)
+
+	# 出発点はちょうど 1.00 倍(倍率の定義そのもの)。ここが1でないと
+	# 「素のコマの何倍か」という読みが成り立たない。
+	check.call(
+		absf(StatReadout.attack_index(base) - 1.0) < EPS,
+		"素のコマの攻め力は×1.00: %f" % StatReadout.attack_index(base)
+	)
+	check.call(
+		absf(StatReadout.knockback_index(base) - 1.0) < EPS,
+		"素のコマの弾きは×1.00: %f" % StatReadout.knockback_index(base)
+	)
+
+	# 定義の共有: 報酬カードの行(PartPreview)を StatReadout のレンジで割ったもの。
+	# 別実装になって片方だけ直されると、カードの予告とビルド表示が食い違う。
+	var built := SpinnerStats.default_player()
+	built.mass = base.mass * 1.6
+	built.edge = 0.4
+	built.drill = 0.5
+	var built_rows := StatReadout.rows(built)
+	var stock_toughness := PartPreview.toughness(SpinnerStats.default_player())
+	check.call(
+		absf(built_rows[ATTACK_ROW]["fraction"]
+			- PartPreview.attack_index(built, stock_toughness)
+				/ StatReadout.ATTACK_INDEX_MAX) < EPS,
+		"攻め力の行は PartPreview.attack_index と同じ定義: %f" % built_rows[ATTACK_ROW]["fraction"]
+	)
+	check.call(
+		absf(built_rows[KNOCKBACK_ROW]["fraction"]
+			- PartPreview.knockback_index(built, SpinnerStats.default_player())
+				/ StatReadout.KNOCKBACK_INDEX_MAX) < EPS,
+		"弾きの行は PartPreview.knockback_index と同じ定義: %f"
+			% built_rows[KNOCKBACK_ROW]["fraction"]
+	)
+
+	# **基準の相手は素のコマに固定**。引数で相手を受けないので、この行は
+	# 部屋が変わっても動かない——それを「素のコマの硬さで割った値と一致する」
+	# ことで押さえる(上の定義検査が第2引数に stock_toughness を渡していることが
+	# そのまま固定の証明になっている)。念のため、別の硬さを基準にすると
+	# 値が変わる=固定していなければ検出できることも確かめる。
+	check.call(
+		absf(PartPreview.attack_index(built, stock_toughness * 10.0)
+			- PartPreview.attack_index(built, stock_toughness)) > EPS,
+		"基準の相手を変えれば攻め力の倍率は動く(=固定していないと部屋ごとに跳ねる)"
+	)
+
+	# 攻めの札で伸びる。EDGE(削り増強)・DRILL(貫通削り)は攻め力を、
+	# 質量・反発は弾きを動かす。ここが落ちると「カードの約束が数字に出ない」に戻る。
+	var edged := SpinnerStats.default_player()
+	edged.edge = 0.2
+	check.call(
+		StatReadout.rows(edged)[ATTACK_ROW]["fraction"] > rows[ATTACK_ROW]["fraction"],
+		"EDGE札で攻め力の行が伸びる"
+	)
+	var drilled := SpinnerStats.default_player()
+	drilled.drill = 0.25
+	check.call(
+		StatReadout.rows(drilled)[ATTACK_ROW]["fraction"] > rows[ATTACK_ROW]["fraction"],
+		"DRILL札で攻め力の行が伸びる"
+	)
+	var heavy := SpinnerStats.default_player()
+	heavy.mass = base.mass * 1.3
+	check.call(
+		StatReadout.rows(heavy)[KNOCKBACK_ROW]["fraction"] > rows[KNOCKBACK_ROW]["fraction"],
+		"質量札で弾きの行が伸びる"
+	)
+	check.call(
+		StatReadout.rows(heavy)[ATTACK_ROW]["fraction"] > rows[ATTACK_ROW]["fraction"],
+		"質量札は攻め力も伸ばす(削りは質量比例)"
+	)
+	# RAGE_REFLECTION(反発↑)は**弾きだけ**を動かす札。攻め力は反発を1ミリも読まない
+	# ので据え置きでなければならない。2行が同じものを見ていたらここで落ちる。
+	var bouncy := SpinnerStats.default_player()
+	bouncy.restitution = minf(base.restitution * 1.1, 1.0)
+	check.call(
+		StatReadout.rows(bouncy)[KNOCKBACK_ROW]["fraction"] > rows[KNOCKBACK_ROW]["fraction"],
+		"反発札で弾きの行が伸びる"
+	)
+	check.call(
+		absf(StatReadout.rows(bouncy)[ATTACK_ROW]["fraction"]
+			- rows[ATTACK_ROW]["fraction"]) < EPS,
+		"反発札では攻め力は据え置き(2行が別の軸であること)"
+	)
+
+	# **守りの札では動かない**。行が「何でも伸びる欄」になっていないことの検査。
+	# 衝突軽減(GUARD)・壁での軽減(RAGEの守り側)・回転(SPIN_ENGINE)は
+	# どれも自分が与える削り・弾きには入らない。
+	for probe in ["hit_guard", "wall_keep", "rps"]:
+		var guarded := SpinnerStats.default_player()
+		guarded.set(probe, 0.3 if probe != "rps" else base.rps * 2.0)
+		var guarded_rows := StatReadout.rows(guarded)
+		check.call(
+			absf(guarded_rows[ATTACK_ROW]["fraction"] - rows[ATTACK_ROW]["fraction"]) < EPS
+				and absf(guarded_rows[KNOCKBACK_ROW]["fraction"]
+					- rows[KNOCKBACK_ROW]["fraction"]) < EPS,
+			"%s は攻めの2行を動かさない(守り/持久の軸)" % probe
+		)
+
+	# 上端超えは満タンで頭打ち、バーは溢れない。実測の最大(攻め力4.19・弾き2.17)を
+	# 超えるビルドでも 0〜1 に収まる。
+	var monster := SpinnerStats.default_player()
+	monster.mass = 8.0
+	monster.edge = 0.6
+	monster.drill = 0.75
+	monster.restitution = 1.0
+	for row in StatReadout.rows(monster):
+		var f: float = row["fraction"]
+		check.call(f >= 0.0 and f <= 1.0, "%s の割合が0〜1: %f" % [row["label_key"], f])
+	check.call(
+		absf(StatReadout.rows(monster)[ATTACK_ROW]["fraction"] - 1.0) < EPS,
+		"上端を超える攻め力は満タンで頭打ち"
+	)
+
+	# CLIの印字(playtest/naive_play.gd)。ハーネスと実ゲームのズレを作らないため、
+	# 同じ2つを同じ純粋関数から出していること。ラベルを落とすサボタージュも捕まえる。
+	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
+	check.call(
+		cli.contains("StatReadout.attack_index(player)")
+			and cli.contains("StatReadout.knockback_index(player)"),
+		"CLIも同じ純粋関数から攻めの2行を出す"
+	)
+	check.call(
+		cli.contains("攻め力×%.2f 弾き×%.2f"),
+		"CLIの攻めの行に2つともラベルが付く"
+	)
+	check.call(
+		cli.count("offense_index_text(") >= 3,
+		"CLIが攻めの行を定義1+呼び出し2箇所(ステータス/対戦前)で出す: %d"
+			% cli.count("offense_index_text(")
+	)
 
 
 ## 敵の行の配線。純粋関数が正しくても、呼ばれていなければ画面には何も出ない。

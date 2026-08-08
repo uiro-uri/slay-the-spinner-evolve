@@ -215,6 +215,7 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		float(state["stats"].get("drill", 0.0)),
 		float(state["stats"].get("slope_grip", 1.0)),
 		field.inradius() - float(state["stats"]["radius"]) - 0.5])
+	print(offense_index_text(stats_from(state["stats"])))
 	print("ゴースト(初衝突後すり抜け): %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
 	var enemies := node_group(state, node)
 	var plans := _enemy_plans(enemies, field, bseed)
@@ -598,6 +599,7 @@ func _print_stats(state: Dictionary) -> void:
 	print("ステータス: mass=%.2f radius=%.2f friction=%.3f rest=%.2f rps=%.1f spin_decay=%.2f wall_keep=%.2f hit_guard=%.2f edge=%.2f drill=%.2f grip=%.2f  (寿命目安rps/(radius*spin_decay)=%.1f 硬さmass*r^2=%.2f)" % [
 		s["mass"], s["radius"], s["friction"], s["restitution"], s["rps"], decay, keep, guard, edge, drill, grip,
 		float(s["rps"]) / (float(s["radius"]) * decay), float(s["mass"]) * float(s["radius"]) * float(s["radius"])])
+	print(offense_index_text(stats_from(s)))
 
 func _print_parts(state: Dictionary) -> void:
 	if state["parts"].is_empty(): print("所持パーツ: なし"); return
@@ -860,6 +862,22 @@ static func threat_text(n: MapTree.MapNode, player: SpinnerStats) -> String:
 	var share := ThreatMeter.share(player, n.enemies)
 	var mark := "格上" if share > StatReadout.PARITY else "格下"
 	return "(硬さ取り分%.2f %s)" % [share, mark]
+
+
+## 対戦画面のビルド表示(StatPanel)が出す攻めの2行のCLI版。値は
+## StatReadout.attack_index / knockback_index をそのまま呼ぶ(素のコマ基準の倍率)。
+##
+## **ハーネスと実ゲームのズレを作らないため**に足してある(threat_text と同じ理由)。
+## 従来この2行はどちらにも無かった=対等だったが、実UIのビルド表示に載った以上、
+## CLIに無いままだとコールドプレイのエージェントだけが実プレイヤーより少ない情報で
+## 札を選ぶことになる。
+static func offense_index_text(player: SpinnerStats) -> String:
+	if player == null:
+		return ""
+	return "攻め(素のコマ基準の倍率): 攻め力×%.2f 弾き×%.2f" % [
+		StatReadout.attack_index(player),
+		StatReadout.knockback_index(player),
+	]
 
 
 ## pickが取れるのは直前のrewardで提示された札だけ。JSON経由でidがfloatに
