@@ -137,7 +137,7 @@ static func play_one(
 				continues -= 1
 				continues_used += 1
 				attempt += 1
-				group = EnemyRoster.reroll_group(group, rng)
+				group = EnemyRoster.reroll_group(group, rng, tree.current_step())
 				continue
 			break
 

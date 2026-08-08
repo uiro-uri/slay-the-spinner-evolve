@@ -37,6 +37,82 @@ static func level_for_step(step: int) -> int:
 	return clampi((step + 1) / 2, 1, 5)
 
 
+## その段が「帯(同じレベルが2段続く区間)の2段目」か。段1と、レベルが切り替わる段は偽。
+## 現行の level_for_step では偶数段がこれに当たるが、式ではなくレベルの一致で判定する
+## ——level_for_step を触ったときに、こちらが黙って嘘にならないようにするため。
+## 段9(ボス)は段8がLv4なので必ず偽＝**ボスは据え置き**。
+static func is_band_second_step(step: int) -> bool:
+	return step > 1 and level_for_step(step) == level_for_step(step - 1)
+
+
+## 帯の2段目で敵のrpsに掛ける倍率の増分。1段目は1.00(素の表のまま)。
+##
+## **動機: 帯の2段目は必ず楽になる**。2026-08-08 のボット計測(intercept+greedy、
+## 各段の「基準レベル・1体」だけを抜いた素の難度。斥候と乱戦は混ぜていない):
+##
+##   帯Lv1: 段1 98.5% 残65.6%  →  段2 **100.0%** 残**79.6%**
+##   帯Lv2: 段3 98.9% 残62.3%  →  段4   99.4% 残 71.8%
+##   帯Lv3: 段5 96.1% 残38.4%  →  段6 **100.0%** 残 47.7%
+##   帯Lv4: 段7 71.0% 残25.8%  →  段8   95.6% 残 37.0%
+##   (「残」＝勝った戦闘で残ったrpsの中央値＝どれだけ楽に勝ったか)
+##
+## **4帯とも例外なく、2段目の方が残rpsが 6.5〜13.6pt 多い**。敵のレベルは2段に1度しか
+## 上がらないのに、**プレイヤーは毎段1〜3枚の札を積む**からで、帯の1段目で釣り合って
+## いた強さが2段目では必ずプレイヤー側へ傾く。勝率だけ見ていると段2・段6の100%しか
+## 見えないが(`report.md` の自動アラートも段2しか挙げない)、**余裕(残rps)で見ると
+## 4帯すべてに同じ穴が空いている**。
+##
+## コールドプレイ(2026-08-08, seed=48213)の一次証拠: 段2は**1.42秒・3衝突・残76%**で
+## 終わった。全9戦で最も短く、発射の角度も引き量も一度も考えなかった。
+##
+## **のこぎりを平らにするのではなく、谷の底だけを上げる**。「手強い段のあとに一息」の
+## リズムは残す価値があるので、帯の1段目には一切触れない。触るのは2段目だけ。
+##
+## **rpsだけを動かす理由**は RPS_SCALE の注釈と同じ。被削りは相手の質量に比例し、
+## 与削りは相手の硬さ(質量×半径²)に反比例するので、質量や半径を動かすと接触トレード
+## (test_enemy_roster.gd の被/与比の床・上限)が段によって変わってしまう。rpsはこの比に
+## 入らず、硬さ(=rps×質量×半径²)と寿命(rps÷半径)だけを素直に押し上げる。
+##
+## 値の決め方(各1200ラン。段6・段8は基準Lv・1体戦の勝率/残rps中央値):
+##   0.00: 段6 100.0%/47.7  段8 95.6%/37.0   クリア率 57.7%
+##   0.12: 段6  96.2%/ ---  段8 94.6%/ ---   クリア率 57.7%
+##   0.25: 段6  94.4%/42.0  段8 87.2%/27.4   クリア率 54.3%  ← 採用
+##   0.40: 段6  91.7%/41.8  段8 82.1%/28.8   クリア率 52.7%
+## 0.25 を採る。0.12 は段8がほぼ動かず(95.6→94.6)谷が残り、0.40 はクリア率を5pt
+## 落として「一息つく段」まで削る。0.25 での帯ごとの余裕の差(2段目−1段目)は
+##   Lv2 +9.5pt→+4.1pt / Lv3 +9.3pt→+2.9pt / Lv4 +11.2pt→+0.9pt
+## と縮み、死亡段の分布も段7・段9への集中がほぐれた
+## (段6 4.8→8.5%、段8 3.5→7.0%、段7 17.0→15.0%、段9 27.2→23.2%)。
+## 帯の1段目(段1・3・5・7)は1ミリも動かない。
+##
+## **Lv1帯(段2)だけはこのつまみが効かない**。段2は +40% にしても勝率100.0%・
+## 残rps 79.6→78.8 とほぼ不動だった。原因は与削りの天井
+## (SpinnerPhysics.capped_spin_drain = 相手の初期rps × drain_cap_share)で、
+## **天井が相手のrpsに比例するため、rpsを上げると天井も同率で上がり、倒すのに要する
+## 打撃数が変わらない**。素の削りが天井を大きく超えて常に張り付いている帯——つまり
+## プレイヤーが圧倒している帯——では、rpsは難易度つまみとして構造的に死んでいる。
+## 段2を動かすには硬さ側の別の軸が要る——docs/evolve/journal.md の次の候補に回した。
+## いじったら scripts/playtest.sh で段別勝率・残rps・クリア率を測り直すこと。
+const BAND_SECOND_STEP_RPS_RAMP := 0.25
+
+
+## 段stepの敵rpsに掛ける倍率。帯の1段目とボス段は必ず1.0(素の表と厳密に一致)。
+static func step_rps_scale(step: int) -> float:
+	return 1.0 + BAND_SECOND_STEP_RPS_RAMP if is_band_second_step(step) else 1.0
+
+
+## 敵1体を、段stepに出る個体として**rpsだけ**押し上げた複製にする。
+## 倍率1.0の段(帯の1段目・ボス段)では複製せずそのまま返す＝従来と厳密に一致。
+## 名前とレベルは保つ——マップのLv表示・報酬の実レベル・CLIの名前復元が依存している。
+## 乱戦の質量倍率(melee_member)とは軸が違うので、順序を問わず重ねられる。
+static func step_member(data: EnemyData, step: int) -> EnemyData:
+	if data == null or not is_band_second_step(step):
+		return data
+	var stats := data.stats.duplicate_stats()
+	stats.rps *= step_rps_scale(step)
+	return EnemyData.make(data.level, data.display_name, stats)
+
+
 ## 数値はテストプレイ(scripts/playtest.sh)で当てたもの。プロトタイプの表は
 ## 使っていない。あちらは段9のボスが 質量5.0/半径3.0/rps60 で、パーツを8枚
 ## 積んだプレイヤーでも勝率0%だった(25,000戦で勝利ゼロ)。
@@ -149,6 +225,12 @@ static func of_level(level: int) -> Array[EnemyData]:
 
 
 ## その段にふさわしい敵を1体選ぶ。
+##
+## 帯の2段目のrpsランプ(step_member)は**ここで掛ける**。マップ生成には
+## `pick_group_for_step` を通らない経路が2つある(1体部屋保証の引き直し
+## `_ensure_single_escape` と、斥候の逃げ道 `_ensure_vanguard_choice`。どちらも
+## 「その段の通常単体」を引き直す)ので、入り口ごとに掛けていると必ずどれかが漏れる
+## ——実際このテストを足した時点で段2の引き直しノードだけ素の強さで残っていた。
 static func pick_for_step(step: int, rng: RandomNumberGenerator = null) -> EnemyData:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
@@ -157,7 +239,7 @@ static func pick_for_step(step: int, rng: RandomNumberGenerator = null) -> Enemy
 	if candidates.is_empty():
 		push_error("EnemyRoster: 段%dに出せる敵がいない" % step)
 		return null
-	return candidates[rng.randi_range(0, candidates.size() - 1)]
+	return step_member(candidates[rng.randi_range(0, candidates.size() - 1)], step)
 
 
 ## 表示名から敵を引く。CLI(naive_play)がリトライで入れ替えた個体をJSONの
@@ -179,10 +261,11 @@ static func find_by_name(display_name: String) -> EnemyData:
 ## 喪失内訳までほぼ同一)。同レベルは硬さをほぼ揃え形で個性を出す設計なので、
 ## 個体の入れ替えは難易度を保ったまま接触トレードの手触りだけを変える。
 ##
-## 入れ替えた個体にも乱戦の質量倍率(melee_member)を掛け直す。素の表から引くと
-## リトライしただけで乱戦が元の手強さに戻ってしまう(予告に出る硬さも嘘になる)。
+## 入れ替えた個体にも乱戦の質量倍率(melee_member)と段のrpsランプ(step_member)を
+## 掛け直す。素の表から引くとリトライしただけで元の手強さに戻ってしまう
+## (予告に出る硬さも嘘になる)。stepは呼び手が渡す。0(既定)は倍率1.0＝従来どおり。
 static func reroll_group(
-	group: Array[EnemyData], rng: RandomNumberGenerator = null
+	group: Array[EnemyData], rng: RandomNumberGenerator = null, step: int = 0
 ) -> Array[EnemyData]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
@@ -196,9 +279,9 @@ static func reroll_group(
 		if others.is_empty():
 			result.append(enemy)
 		else:
-			result.append(
-				melee_member(others[rng.randi_range(0, others.size() - 1)], group.size())
-			)
+			result.append(step_member(
+				melee_member(others[rng.randi_range(0, others.size() - 1)], group.size()), step
+			))
 	return result
 
 
@@ -311,16 +394,21 @@ static func melee_member(data: EnemyData, count: int) -> EnemyData:
 	return EnemyData.make(data.level, data.display_name, stats)
 
 
-## レベルlevelの敵をcount体、乱戦の規則(melee_member)を通して引く。
-## 乱戦グループを組む場所をここ1つにするための入り口で、マップ生成の
+## レベルlevelの敵をcount体、乱戦の規則(melee_member)と段の規則(step_member)を
+## 通して引く。乱戦グループを組む場所をここ1つにするための入り口で、マップ生成の
 ## 昇格補償(MapTree._promote_compensation)も同じ規則を踏む。
-static func group_of(level: int, count: int, rng: RandomNumberGenerator) -> Array[EnemyData]:
+## stepは帯の2段目のrpsランプに使う。0(既定)は「段が分からない」＝倍率1.0。
+static func group_of(
+	level: int, count: int, rng: RandomNumberGenerator, step: int = 0
+) -> Array[EnemyData]:
 	var candidates := of_level(level)
 	var group: Array[EnemyData] = []
 	if candidates.is_empty():
 		return group
 	for _i in maxi(count, 1):
-		group.append(melee_member(candidates[rng.randi_range(0, candidates.size() - 1)], count))
+		group.append(step_member(
+			melee_member(candidates[rng.randi_range(0, candidates.size() - 1)], count), step
+		))
 	return group
 
 
@@ -354,10 +442,12 @@ static func pick_group_for_step(
 		return [pick_for_step(step, rng)]
 
 	# 斥候: 次レベルの単体。頭数ロールより先に振る(斥候は乱戦にならない)。
+	# 斥候にも段のランプを掛ける。掛けないと帯の2段目で「斥候の方が通常戦より
+	# 楽な瞬間」ができ、選べるリスクの向きが裏返る。
 	if allow_vanguard and is_vanguard_step(step) and rng.randf() < VANGUARD_CHANCE:
 		var scouts := of_level(vanguard_level_for_step(step))
 		if not scouts.is_empty():
-			return [scouts[rng.randi_range(0, scouts.size() - 1)]]
+			return [step_member(scouts[rng.randi_range(0, scouts.size() - 1)], step)]
 
 	# 頭数を重み付きで決める。大半は1体、たまに2〜3体。
 	var roll := rng.randf()
@@ -370,7 +460,7 @@ static func pick_group_for_step(
 	if count == 1:
 		return [pick_for_step(step, rng)]
 
-	var group := group_of(level_for_step(step), count, rng)
+	var group := group_of(level_for_step(step), count, rng, step)
 	if group.is_empty():
 		return [pick_for_step(step, rng)]
 	return group
