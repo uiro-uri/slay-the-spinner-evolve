@@ -82,9 +82,9 @@ static func reachable_shares(tree: MapTree, player: SpinnerStats) -> Dictionary:
 	return out
 
 
-## 進める先の部屋に居る**1体ぶんの硬さの最大値**。相手が居なければ -1.0。
+## 進める先の部屋に居る**いちばん硬い1体のステータス**。相手が居なければ null。
 ##
-## 報酬画面の攻め力(PartPreview.attack)の基準にする相手。攻め力は
+## 報酬画面の攻めの2行(PartPreview.attack / knockback)の基準にする相手。攻め力は
 ## 「1接触で相手から削れるrps」なので、基準も**1体**でなければならない
 ## ——部屋の脅威(room_toughness)が頭数ぶんの和なのは「この部屋を抜けられるか」の
 ## 話だからで、1回の噛み合いの相手はそのうちの1体でしかない。和を渡すと
@@ -97,8 +97,13 @@ static func reachable_shares(tree: MapTree, player: SpinnerStats) -> Dictionary:
 ##
 ## reachable_shares と同じく**進める先の戦闘ノードだけ**を見る。遠いノードを
 ## 混ぜないのはあちらと同じ理由で、そこへ着く頃には今のビルドとの比が嘘になる。
-static func reachable_hardest_toughness(tree: MapTree) -> float:
-	var hardest := -1.0
+##
+## **硬さだけでなく1体まるごと返す**(2026-08-08)。弾きの行(PartPreview.knockback)は
+## 相手の質量・半径・反発・衝突軽減も読むので、硬さのスカラーでは足りない。
+## 攻めの2行が**同じ1体**を見ていることを型で保証するために、選んだ相手をそのまま返す。
+static func reachable_hardest_stats(tree: MapTree) -> SpinnerStats:
+	var hardest: SpinnerStats = null
+	var hardest_toughness := -1.0
 	if tree == null:
 		return hardest
 	for coord in tree.next_coords():
@@ -108,8 +113,19 @@ static func reachable_hardest_toughness(tree: MapTree) -> float:
 		if not node.has_encounter():
 			continue
 		for stats in stats_of(node.enemies):
-			hardest = maxf(hardest, PartPreview.toughness(stats))
+			var t := PartPreview.toughness(stats)
+			if t > hardest_toughness:
+				hardest_toughness = t
+				hardest = stats
 	return hardest
+
+
+## 上の1体の硬さ。相手が居なければ -1.0。硬さしか要らない呼び手のための薄い包み。
+static func reachable_hardest_toughness(tree: MapTree) -> float:
+	var hardest := reachable_hardest_stats(tree)
+	if hardest == null:
+		return -1.0
+	return PartPreview.toughness(hardest)
 
 
 ## メーターの外枠。ノード中心と(ホバーで膨らんだあとの)半径から決まる。

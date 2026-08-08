@@ -65,7 +65,15 @@ extends RefCounted
 ## 片方の札を取った瞬間に恒久的に割れる。並べる意味はそこにある——
 ## 衝突軽減と怒りの反射を並べたとき、どちらがどちらの軸かが2行の対比で一目で読める。
 ##
-## 硬さ・打たれ強さ・壁強さは**変化しない札でも常に出す**。「この札では硬さが伸びない」
+## **なぜ攻めが2行なのか**(2026-08-08)
+## 上の3行を足した時点で守り(硬さ・打たれ強さ・壁強さ)は接触と壁の両方を数えるように
+## なったが、**攻めは削りしか数えていなかった**。敵の死因は Lv2以降で壁が1/4〜1/2以上
+## (Lv3・Lv4の乱戦では壁が主因)で、押し込む強さは攻め力に1ミリも入っていない。
+## そのため RAGE_REFLECTION(反発↑=弾性衝突で相手をより遠くへ飛ばす)は攻めの行が
+## 据え置きで出て、SHARP_EDGE の「弾き飛ばしも強まる」という効果文にも数字が付かない。
+## 詳細と一次証拠は `knockback` の doc。
+##
+## 硬さ・攻め力・弾き・打たれ強さ・壁強さは**変化しない札でも常に出す**。「この札では硬さが伸びない」
 ## こと自体が選択に必要な情報で、行が出たり消えたりするとカードの高さも揺れる
 ## (行を1本足してもカードは371→403px、画面全体で521/720pxに収まることを実測済み)。
 ## 残機・無敵時間の行は、その札が動かすときだけ足す(コマの性能ではないため)。
@@ -187,6 +195,95 @@ static func attack(stats: SpinnerStats, opponent_toughness: float) -> float:
 	)
 
 
+## 弾き = 1接触で相手に渡す「自分から離れる向きの速さ」(共通因子の噛み合う速さを
+## 括り出した値)。攻め力が**削って倒す**側の軸なのに対し、これは**壁へ押し込んで
+## 倒す**側の軸。
+##
+## **なぜ攻め力の隣にもう1本要るのか**(2026-08-08)
+## 敵は削りだけで死ぬのではない。`build/playtest/report.md` の死因内訳(1200ラン)は
+##   Lv1 単体 削り95.2% / 壁 4.8%     Lv3 乱戦 削り47.5% / 壁 **52.5%**
+##   Lv2 単体 削り60.7% / 壁 39.3%    Lv4 乱戦 削り44.7% / 壁 **55.3%**
+##   Lv5 単体 削り71.0% / 壁 29.0%
+## で、**Lv2以降は敵の死の1/4〜1/2以上が壁**、Lv3〜4の乱戦では壁が主因を上回る。
+## 自然減衰(全レベル0.0%)を注記へ降ろしたのと正反対の重みを持つ軸なのに、
+## 報酬画面の攻めの行は**削りしか数えていなかった**。
+##
+## 一次証拠(コールドプレイ 2026-08-08, seed=4471・9戦全勝でクリア): 段5以降の5戦の
+## うち**4戦で決着死因が「壁」**、敵のrps喪失も壁が削りを上回った
+## (段5 壁14.5対削り8.0 / 段7 壁15.2対15.1 / 段8 壁24.9対11.4 / 決戦 壁20.4対16.2)。
+## 実際に勝たせていたのは「当ててから壁へ押し込む」ことなのに、選ぶ画面には
+## 攻め力(削り)しか無く、押し込む強さが伸びたのか縮んだのかは最後まで分からなかった。
+## しかもカード文面の方は既にそれを言っている——GIANT_GROWTH と OVERENCUMBERED は
+## 「相手をより弾く」、SHARP_EDGE は「弾き飛ばしも強まる」、`SpinnerStats.edge` の
+## 注釈も「相手を強く弾き飛ばす=壁へ押し込む攻め」と書いていた。
+## **カードが言っていることが数字のどこにも出ていない**、壁強さを足す前と同じ切れ方。
+##
+## **式**(`BattleResolver._resolve_disc_collision` の相手側そのまま)
+## 相手 b が自分 a から受け取る「離れる向きの速さ」は2つの和:
+##   弾性衝突     (1 + 反発の積) × 自分の質量 ÷ (自分の質量 + 相手の質量) × 噛み合う速さ
+##                (SpinnerPhysics.elastic_velocities の中心線方向の交換)
+##   spin_kick   spin_kick_scale × 相手の半径 × 相手が受けた削り
+##                (SpinnerPhysics.spin_kick。削り比例なので edge/drill もここで効く)
+## 相手が受けた削りは violence × 自分の速さ × attack() × (1 − 相手の衝突軽減) なので、
+## **噛み合う速さ**を共通因子として括り出すと(正面から止まっている相手に当てる=
+## プレイヤーが実際に狙う発射の1撃では、自分の速さと噛み合う速さが一致する)
+##   (1 + 反発の積) × 質量比 + spin_kick_scale × 相手の半径 × violence × attack × (1 − 軽減)
+## が残る。硬さ・打たれ強さ・壁強さで相手・速さ・violence を括り出したのと同じ手口で、
+## **速さに依らない**量になる。violence と spin_kick_scale は2つの項の重みが
+## 単位ごと違うので括り出せず、BattleRequest の既定値を使う
+## (Battle.gd の @export と一致することは test_battle_defaults.gd が見張っている)。
+##
+## 相手を引数で受けるのは攻め力と同じ理由に加えて、**質量比が相手の質量を含む**ため。
+## 1接触で奪えるrpsの天井(`capped_spin_drain`)は掛けない——天井は相手の残りrpsに
+## 依るので、札を選ぶ時点では相手の減り具合が分からない。天井に張り付いている
+## 相手では spin_kick の側が実際より大きく出る、控えめでない向きの近似なので、
+## そこは弾性衝突の側が支配的(実測: 素のコマ基準で弾性が Lv1 55% / Lv3 83% /
+## Lv5 92%)であることで薄まっている。
+static func knockback(
+	stats: SpinnerStats, opponent: SpinnerStats,
+	spin_kick_scale: float, violence: float
+) -> float:
+	if stats == null or opponent == null:
+		return 0.0
+	var total_mass := maxf(stats.mass + opponent.mass, _EPSILON)
+	# 反発は積で、かつ壁と同じく[0,1]へクランプする(1超は発散するので
+	# BattleResolver も同じクランプを掛けている。表示だけ発散させない)。
+	var pair_restitution := clampf(stats.restitution * opponent.restitution, 0.0, 1.0)
+	var exchange := (1.0 + pair_restitution) * stats.mass / total_mass
+	# 受け手の衝突軽減(Shock Absorber)は削りを減らし、削り比例の spin_kick も一緒に
+	# 減らす。敵は現状0だが、相手の性能として素直に読む。
+	var taken := 1.0 - clampf(opponent.hit_guard, 0.0, 1.0)
+	var kick := (
+		maxf(spin_kick_scale, 0.0) * opponent.radius * maxf(violence, 0.0)
+		* attack(stats, toughness(opponent)) * taken
+	)
+	return exchange + kick
+
+
+## 弾きの行に**実際に出す**値。素のコマが同じ相手を弾く量で割った倍率で、
+## 素のコマがちょうど 1.00 になる。
+##
+## 攻め力(`attack_index`)と揃える理由は2つ。生の弾きは質量比の項が
+## **相手が重いほど縮む**ので、そのまま出すとラン中に自分が育つほど数字が小さくなる
+## ——攻め力を倍率へ変えた 2026-08-07 とまったく同じ逆立ちが起きる。もう1つは、
+## 攻めの2行が同じ「素のコマの何倍か」で並ぶと、削りと押し込みのどちらが伸びた札
+## なのかが横並びで読めること(mass札は両方・EDGE/DRILL札は攻め力だけ・
+## RAGE_REFLECTION は弾きだけを動かす)。
+##
+## violence / spin_kick_scale は分子・分母で共通なので、既定値から動いても
+## 倍率の大小関係は保たれる。
+static func knockback_index(stats: SpinnerStats, opponent: SpinnerStats) -> float:
+	if stats == null or opponent == null:
+		return 0.0
+	var req := BattleRequest.new()
+	var base := knockback(
+		SpinnerStats.default_player(), opponent, req.spin_kick_scale, req.violence
+	)
+	if base < _EPSILON:
+		return 0.0
+	return knockback(stats, opponent, req.spin_kick_scale, req.violence) / base
+
+
 ## 攻め力の行に**実際に出す**値。`attack` を「出発時のコマが同じ相手へ与える削り」で
 ## 割った倍率で、素のコマがちょうど 1.00 になる。
 ##
@@ -243,30 +340,44 @@ static func preview_stats(stats: SpinnerStats, part: CustomPart) -> SpinnerStats
 ## continues は今の残機(GameState.continues_left)。0未満を渡すと残機の行を出さない。
 ## ghost_seconds は取得済みゴースト札の合計秒(CustomPartCatalog.total_ghost_seconds)。
 ##
-## opponent_toughness は攻め力の基準にする相手1体の硬さ(Main が
-## ThreatMeter.reachable_hardest_toughness で「次に踏みうる部屋のいちばん硬い1体」を
-## 渡す)。0以下なら攻め力の行を出さない——基準の相手が居ないのは最終戦のあとと、
+## opponent は攻めの2行の基準にする相手1体(Main が
+## ThreatMeter.reachable_hardest_stats で「次に踏みうる部屋のいちばん硬い1体」を
+## 渡す)。null なら攻めの2行を出さない——基準の相手が居ないのは最終戦のあとと、
 ## ステータス無しで呼ばれる古い経路・テストだけで、そこで嘘の基準を捏造すると
 ## 「相手を知らずに出せる3行」との区別が消える。
 ##
-## 攻め力を硬さの直後に置くのは、この2つが**同じ1接触の表と裏**だから
-## (硬さ=1接触で削られない量 / 攻め力=1接触で削る量)。残る2行は「何回耐えられるか」で
-## 単位が違うので、後ろにまとめる。
+## **硬さだけでなく相手のステータスそのものを受ける**(2026-08-08)。攻め力は相手の
+## 硬さだけで足りるが、弾きは**質量比**も読む(knockback 参照)。スカラーを2つ別々に
+## 受けると、片方だけ違う敵のものを渡す配線ミスが黙って通る。相手は1体として渡す。
+##
+## 攻め力・弾きを硬さの直後に置くのは、この3つが**同じ1接触の表と裏**だから
+## (硬さ=1接触で削られない量 / 攻め力=1接触で削る量 / 弾き=1接触で押し出す速さ)。
+## 残る2行は「何回耐えられるか」で単位が違うので、後ろにまとめる。
 static func rows(
 	stats: SpinnerStats, part: CustomPart,
 	continues: int = -1, ghost_seconds: float = 0.0,
-	opponent_toughness: float = 0.0
+	opponent: SpinnerStats = null
 ) -> Array[Dictionary]:
 	var after := preview_stats(stats, part)
 	var result: Array[Dictionary] = [
 		_row("STAT_TOUGHNESS", toughness(stats), toughness(after), 2),
 	]
+	var opponent_toughness := toughness(opponent) if opponent != null else 0.0
 	if opponent_toughness > 0.0:
 		# 出す値は生の attack ではなく素のコマ基準の倍率(attack_index 参照)。
 		result.append(_row(
 			"STAT_ATTACK",
 			attack_index(stats, opponent_toughness),
 			attack_index(after, opponent_toughness),
+			2, "×"
+		))
+		# 削って倒す軸(攻め力)の隣に、壁へ押し込んで倒す軸。Lv2以降は敵の死の
+		# 1/4〜1/2以上が壁なのに、この行が無いあいだ攻めの行は削りしか数えて
+		# いなかった(knockback 参照)。こちらも素のコマ基準の倍率。
+		result.append(_row(
+			"STAT_KNOCKBACK",
+			knockback_index(stats, opponent),
+			knockback_index(after, opponent),
 			2, "×"
 		))
 	result.append(_row("STAT_ENDURANCE", endurance(stats), endurance(after), 1))

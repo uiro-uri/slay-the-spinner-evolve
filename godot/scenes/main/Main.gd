@@ -198,16 +198,17 @@ func goto_reward() -> void:
 	# 今のビルドを渡す。カードごとの「取ると硬さ・寿命がどう動くか」(PartPreview)の
 	# 基準になる。残機とゴーストの合計秒は、コマの性能を変えない札(残機・無敵)でも
 	# 見積もりが空にならないよう添える。
-	# 最後の1つは攻めの行の基準になる相手——**次に踏みうる部屋のいちばん硬い1体**。
-	# 守りの3行(硬さ・打たれ強さ・壁強さ)は相手を括り出せるが攻めは括り出せず、
-	# 相手を渡さないと EDGE/DRILL が「1行も動かない札」になる(PartPreview.attack)。
+	# 最後の1つは攻めの2行(攻め力・弾き)の基準になる相手——**次に踏みうる部屋の
+	# いちばん硬い1体**。守りの3行(硬さ・打たれ強さ・壁強さ)は相手を括り出せるが
+	# 攻めは括り出せず、相手を渡さないと EDGE/DRILL/mass札が「1行も動かない札」に
+	# なる(PartPreview.attack / knockback)。
 	# ここで渡せるのは、報酬を選ぶ時点で map_tree が既に今のノードまで進んでいて
-	# next_coords() が次の分岐を返すため。決戦のあとは進める先が無く -1 が返り、
-	# 攻めの行は出ない。
+	# next_coords() が次の分岐を返すため。決戦のあとは進める先が無く null が返り、
+	# 攻めの2行は出ない。
 	reward.setup(
 		_reward_offer, GameState.player_stats, GameState.continues_left,
 		CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids),
-		ThreatMeter.reachable_hardest_toughness(GameState.map_tree)
+		ThreatMeter.reachable_hardest_stats(GameState.map_tree)
 	)
 
 

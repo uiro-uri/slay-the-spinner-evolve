@@ -24,9 +24,11 @@ var _stats: SpinnerStats = null
 var _continues := -1
 var _ghost_seconds := 0.0
 
-## 攻め力(PartPreview.attack_index)の基準にする相手1体の硬さ。0以下ならその行を出さない。
-## Mainが「次に踏みうる部屋のいちばん硬い1体」を渡す(ThreatMeter参照)。
-var _opponent_toughness := 0.0
+## 攻めの2行(PartPreview.attack_index / knockback_index)の基準にする相手1体。
+## nullならその2行を出さない。Mainが「次に踏みうる部屋のいちばん硬い1体」を渡す
+## (ThreatMeter参照)。硬さのスカラーではなく1体まるごと持つのは、弾きが質量比も
+## 読むため——2つのスカラーに分けると別々の敵のものを渡す配線ミスが黙って通る。
+var _opponent: SpinnerStats = null
 
 
 ## 選択肢を並べる。stats/continues/ghost_secondsは各カードの「取るとどうなるか」
@@ -34,16 +36,18 @@ var _opponent_toughness := 0.0
 func setup(
 	parts: Array[CustomPart], stats: SpinnerStats = null,
 	continues: int = -1, ghost_seconds: float = 0.0,
-	opponent_toughness: float = 0.0
+	opponent: SpinnerStats = null
 ) -> void:
 	_stats = stats
 	_continues = continues
 	_ghost_seconds = ghost_seconds
-	_opponent_toughness = opponent_toughness
+	_opponent = opponent
 
 	# 攻めの行の基準。翻訳済みの文に数字を差し込むので、このラベルだけ
 	# 自動翻訳を切ってある(tscn の auto_translate_mode)。
-	var basis := PartPreview.attack_basis_text(_opponent_toughness)
+	var basis := PartPreview.attack_basis_text(
+		PartPreview.toughness(_opponent) if _opponent != null else 0.0
+	)
 	_attack_basis.text = basis
 	_attack_basis.visible = basis != ""
 
@@ -119,7 +123,7 @@ func _build_card(part: CustomPart) -> Control:
 		box.add_child(heading)
 		preview_labels.append(heading)
 		for row in PartPreview.rows(
-			_stats, part, _continues, _ghost_seconds, _opponent_toughness
+			_stats, part, _continues, _ghost_seconds, _opponent
 		):
 			var line := _build_preview_row(row, is_rare)
 			box.add_child(line)

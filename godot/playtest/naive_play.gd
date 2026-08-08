@@ -439,12 +439,15 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	# 実UIのカードと同じく、効果文の下に「取ると自分のコマがどう変わるか」を出す。
 	var stats := stats_from(state["stats"])
 	var ghost := CustomPartCatalog.total_ghost_seconds(_ids(state))
-	# 攻めの行の基準になる相手も実UI(Main.goto_reward)と同じものを渡す。
-	var opponent := ThreatMeter.reachable_hardest_toughness(tree)
-	# 実UIの報酬画面と同じ注記(RewardScreenのAttackBasis)。攻めの行だけが基準の相手を
+	# 攻めの2行の基準になる相手も実UI(Main.goto_reward)と同じものを渡す。
+	var opponent := ThreatMeter.reachable_hardest_stats(tree)
+	# 実UIの報酬画面と同じ注記(RewardScreenのAttackBasis)。攻めの2行だけが基準の相手を
 	# 持っていて、その相手の硬さはラン中に十数倍になるので、値は素のコマ基準の倍率で
-	# 出し(PartPreview.attack_index)、どの相手を見た倍率かをこの注記が言う。
-	var basis := PartPreview.attack_basis_text(opponent)
+	# 出し(PartPreview.attack_index / knockback_index)、どの相手を見た倍率かを
+	# この注記が言う。
+	var basis := PartPreview.attack_basis_text(
+		PartPreview.toughness(opponent) if opponent != null else 0.0
+	)
 	if basis != "":
 		print("  %s" % basis)
 	for c in choices:
@@ -643,6 +646,7 @@ const _PREVIEW_LABELS := {
 	"STAT_TOUGHNESS": "硬さ",
 	"STAT_LIFETIME": "寿命",
 	"STAT_ATTACK": "攻め力",
+	"STAT_KNOCKBACK": "弾き",
 	"STAT_ENDURANCE": "打たれ強さ",
 	"STAT_WALL_ENDURANCE": "壁強さ",
 	"STAT_LIVES": "残機",
@@ -669,12 +673,12 @@ const _AXIS_LABELS := {
 
 static func card_preview_text(
 	stats: SpinnerStats, part: CustomPart, continues: int = -1, ghost_seconds: float = 0.0,
-	opponent_toughness: float = 0.0
+	opponent: SpinnerStats = null
 ) -> String:
 	if stats == null or part == null:
 		return ""
 	var cells := []
-	for row in PartPreview.rows(stats, part, continues, ghost_seconds, opponent_toughness):
+	for row in PartPreview.rows(stats, part, continues, ghost_seconds, opponent):
 		var key: String = row["label_key"]
 		cells.append("%s %s" % [
 			_PREVIEW_LABELS.get(key, key), PartPreview.format_row(row)])
