@@ -139,6 +139,7 @@ PART_AXIS_DRILL,pierce,貫通削り
 PART_AXIS_GRIP,slope pull,傾斜の効き
 PART_CAPPED_NOTE,{0} is already at the cap — this part will not raise it further,{0}はすでに上限に達している（この札ではもう伸びない）
 PART_CAPPED_JOIN,", ",・
+PART_GROWING_NOTE,{0} still grows with this part,{0}はまだ伸びる（この札で伸ばせる）
 STAT_MASS,Weight,重さ
 STAT_RADIUS,Size,大きさ
 STAT_RESTITUTION,Bounce,反発

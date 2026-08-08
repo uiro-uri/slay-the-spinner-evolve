@@ -16,6 +16,12 @@ extends RefCounted
 ## (5) 注記が空のときは1文字も出さないこと、
 ## (6) RewardScreen/naive_play の配線と訳の存在。
 ##
+## 2026-08-08 に**対になる「まだ伸びる軸」(growing_axes / growing_note)**を足した。
+## 注記が止まった軸しか言わないと複合札が死んで見えて、実際に前サイクルの
+## コールドプレイは最強札(GIANT_GROWTH)を2回見送っている。追加で大事なのは
+## (7) 伸びる軸が止まった軸のちょうど補集合であること(同じ探査を分けて返す)、
+## (8) 伸びの行は上限注記が出るカードにだけ付くこと(全札に付けたら雑音)。
+##
 ## サボタージュ検証(CLAUDE.md「壊した実装を落とせて初めて完成」)は
 ## docs/evolve/journal.md の当該サイクルに記録。
 
@@ -27,6 +33,8 @@ func run(check: Callable) -> void:
 	_test_does_not_mutate(check)
 	_test_axisless_parts_report_nothing(check)
 	_test_note_is_empty_or_names_the_axis(check)
+	_test_growing_is_the_complement_of_capped(check)
+	_test_growing_note_only_rescues_capped_cards(check)
 	_test_catalog_axes_are_translated(check)
 	_test_wiring(check)
 
@@ -279,12 +287,118 @@ func _test_note_is_empty_or_names_the_axis(check: Callable) -> void:
 		note.contains(axis_name),
 		"注記が止まった軸の名前('%s')を含む ('%s')" % [axis_name, note]
 	)
+	# 上限注記は**止まった軸だけ**を挙げる。伸びる軸はこちらではなく
+	# growing_note が言う(2行に分けるのは色を分けるため。RewardScreen 参照)。
 	check.call(
 		not note.contains(TranslationServer.translate("PART_AXIS_MASS")),
-		"まだ伸びる軸の名前は注記に出ない ('%s')" % note
+		"上限注記にまだ伸びる軸の名前は混ざらない ('%s')" % note
 	)
 	check.call(
 		not note.contains("PART_"), "注記に生の翻訳キーが残っていない ('%s')" % note
+	)
+	TranslationServer.set_locale(saved)
+
+
+## まだ伸びる軸(growing_axes)は、止まった軸(capped_axes)のちょうど補集合。
+##
+## 「謳う軸 = 止まった軸 ∪ 伸びる軸」かつ「交わりは空」を、カタログ全札 ×
+## ビルドの階段で押さえる。同じ探査を分けて返す(_split_axes)実装なら自明だが、
+## **別々に数える実装へ戻したときに落ちる**のがこの検査の役目——閾値の片方だけを
+## 触ると「直径は上限」と「直径はまだ伸びる」が同時に出せてしまう。
+##
+## 合計本数は _claimed_axes の本数と一致すること。片側を数え落とす実装
+## (伸びる軸をいつも空で返す等)は、交わりが空のままでも合計で落ちる。
+func _test_growing_is_the_complement_of_capped(check: Callable) -> void:
+	var overlaps := 0
+	var wrong_total := 0
+	var checked := 0
+	var mixed_seen := 0
+	for part in CustomPartCatalog.all():
+		var claimed := part.capped_axes(_saturated_for(part)).size()
+		for build in [_player(), _mid_build(), _stacked(part, 3), _saturated_for(part)]:
+			checked += 1
+			var capped := Array(part.capped_axes(build))
+			var growing := Array(part.growing_axes(build))
+			for key in growing:
+				if capped.has(key):
+					overlaps += 1
+			# 軸を持たない札(残機・ゴースト)は両方空で、claimed も 0 なので一致する。
+			if capped.size() + growing.size() != claimed:
+				wrong_total += 1
+			if not capped.is_empty() and not growing.is_empty():
+				mixed_seen += 1
+	check.call(
+		checked > 0 and mixed_seen > 0,
+		"片側だけ止まったビルドを実際に踏んでいる (検査 %d件 / うち混在 %d件)"
+			% [checked, mixed_seen]
+	)
+	check.call(overlaps == 0, "同じ軸が上限と伸びるの両方に出ない (重複 %d件)" % overlaps)
+	check.call(
+		wrong_total == 0,
+		"上限+伸びる が謳う軸の本数と一致する (食い違い %d/%d)" % [wrong_total, checked]
+	)
+
+
+## 「まだ伸びる」の行は**上限注記が出るカードにだけ**付く。
+##
+## 何も止まっていないビルドで「質量はまだ伸びる」を出すと、効果文が既に
+## 言っていることの繰り返しで、全札に1行ずつ雑音が増える。この行の役目は
+## 止まった軸の巻き返しなので、上限注記と同時に出るか、出ないかのどちらか。
+func _test_growing_note_only_rescues_capped_cards(check: Callable) -> void:
+	var growth := _find_effect(CustomPart.Effect.GROWTH)
+	check.call(growth != null, "カタログに巨大化札がある")
+	if growth == null:
+		return
+	var saved := TranslationServer.get_locale()
+	TranslationServer.set_locale("ja")
+
+	# 何も止まっていない初期ビルド: 上限注記も伸び注記も出ない。
+	var fresh := _player()
+	check.call(
+		growth.capped_note(fresh) == "" and growth.growing_note(fresh) == "",
+		"上限に達していないビルドでは伸び注記も空 ('%s')" % growth.growing_note(fresh)
+	)
+
+	# 直径だけ上限: 上限注記は直径を、伸び注記は質量を言う。
+	var wide := _player()
+	wide.radius = growth.cap
+	wide.mass = growth.mass_cap * 0.25
+	var note := growth.growing_note(wide)
+	var mass_name := TranslationServer.translate("PART_AXIS_MASS")
+	var radius_name := TranslationServer.translate("PART_AXIS_RADIUS")
+	check.call(note != "", "直径が上限のビルドでは伸び注記が出る")
+	check.call(
+		note.contains(mass_name),
+		"伸び注記がまだ伸びる軸の名前('%s')を含む ('%s')" % [mass_name, note]
+	)
+	check.call(
+		not note.contains(radius_name),
+		"伸び注記に止まった軸('%s')が混ざらない ('%s')" % [radius_name, note]
+	)
+	check.call(
+		not note.contains("PART_"), "伸び注記に生の翻訳キーが残っていない ('%s')" % note
+	)
+	# 実際に伸びる裏取り: 注記が名前を挙げた軸が本当に動くこと。
+	var after := wide.duplicate_stats()
+	growth.apply_to(after)
+	check.call(after.mass > wide.mass, "伸び注記が指す質量が実際に伸びる (%.3f→%.3f)"
+		% [wide.mass, after.mass])
+
+	# 全軸が止まった札(死に札)では、伸び注記も空。
+	var dead := _saturated_for(growth)
+	check.call(
+		growth.growing_note(dead) == "",
+		"全軸が上限なら伸び注記は空 ('%s')" % growth.growing_note(dead)
+	)
+
+	# 判定はプレビューなので元を壊さない(capped側と同じ約束)。
+	var mass := wide.mass
+	var radius := wide.radius
+	growth.growing_axes(wide)
+	growth.growing_note(wide)
+	check.call(
+		is_equal_approx(wide.mass, mass) and is_equal_approx(wide.radius, radius),
+		"伸び判定が元のステータスを壊さない (質量 %.3f 半径 %.3f)" % [wide.mass, wide.radius]
 	)
 	TranslationServer.set_locale(saved)
 
@@ -304,7 +418,7 @@ func _test_catalog_axes_are_translated(check: Callable) -> void:
 		for key in keys.keys():
 			var got := TranslationServer.translate(key)
 			check.call(got != key, "%s: %s の訳がある (%s)" % [locale, key, got])
-		for key in ["PART_CAPPED_NOTE", "PART_CAPPED_JOIN"]:
+		for key in ["PART_CAPPED_NOTE", "PART_CAPPED_JOIN", "PART_GROWING_NOTE"]:
 			var got := TranslationServer.translate(key)
 			check.call(got != key, "%s: %s の訳がある (%s)" % [locale, key, got])
 	TranslationServer.set_locale(saved)
@@ -321,6 +435,20 @@ func _test_wiring(check: Callable) -> void:
 		screen.contains("if capped_text != \"\":"),
 		"RewardScreen.gdが空の注記ではラベルを足さない"
 	)
+	check.call(
+		screen.contains("part.growing_note(_stats)"),
+		"RewardScreen.gdが「まだ伸びる軸」の行もCustomPartから得る"
+	)
+	check.call(
+		screen.contains("if growing_text != \"\":"),
+		"RewardScreen.gdが空の伸び注記ではラベルを足さない"
+	)
+	# 止まった軸と伸びる軸は色で区別する(良し悪しは色で見せる約束)。同じ色で
+	# 2行並べると、赤い「まだ伸びる」という読みにくい組み合わせになる。
+	check.call(
+		screen.contains("growing_label.add_theme_color_override(\"font_color\", Palette.STAT_UP)"),
+		"RewardScreen.gdが伸びる軸をSTAT_UPで出す(止まった軸のSTAT_DOWNと分ける)"
+	)
 	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
 	check.call(
 		cli.contains("card_capped_text(stats, part)"),
@@ -329,4 +457,8 @@ func _test_wiring(check: Callable) -> void:
 	check.call(
 		cli.contains("part.capped_axes(stats)"),
 		"naive_play.gdの注記がCustomPart.capped_axes由来(別実装の予測を持たない)"
+	)
+	check.call(
+		cli.contains("part.growing_axes(stats)"),
+		"naive_play.gdも「まだ伸びる軸」を出す(ハーネスと実ゲームの情報量は対等)"
 	)

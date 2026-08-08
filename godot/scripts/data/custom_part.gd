@@ -595,17 +595,46 @@ func _claimed_axes() -> Array:
 ## 閾値も同じ _nearly_same(相対1%)を共有する——死にカード判定では「動かない」のに
 ## 注記では「動く」という食い違いを作らないため。
 func capped_axes(stats: SpinnerStats) -> PackedStringArray:
+	return _split_axes(stats)["capped"]
+
+
+## 謳っている軸のうち**まだ動く**もの(軸名の翻訳キー)。capped_axes の裏側。
+##
+## 一次証拠(コールドプレイ 2026-08-08): 上限注記は「止まった軸」しか言わないので、
+## 複合札の片側が上限に達した瞬間から**カードが死んで見える**。段2で直径が上限
+## 1.05 に達した後の GIANT_GROWTH には「直径はすでに上限（この札ではもう伸びない）」
+## だけが付くが、質量側は最後まで ×1.15 で伸び続け、実際その後も硬さを
+## 2.19→2.52→2.89 と押し上げた。前サイクル(2026-08-08 16:07)のコールドプレイは
+## **この注記を読んで最強札を2回見送っている**。注記は正しいのに決断を誤らせる
+## ——「もう伸びない」の隣に「まだ伸びる」が無いのが原因なので、両側を出す。
+##
+## capped_axes と**同じ1回の探査を分けて返す**(_split_axes)。別々に数えると、
+## 閾値の片方だけを直したときに「直径は上限」と「直径はまだ伸びる」が同時に
+## 出せてしまう。補集合であることを実装で保証する。
+func growing_axes(stats: SpinnerStats) -> PackedStringArray:
+	return _split_axes(stats)["growing"]
+
+
+## 謳っている軸を「止まった/まだ動く」へ1回の探査で振り分ける。
+## {"capped": PackedStringArray, "growing": PackedStringArray}。
+##
+## 判定は would_change_anything と同じく**複製へ実際に apply_to して比べる**。
+## 閾値も同じ _nearly_same(相対1%)を共有する。
+func _split_axes(stats: SpinnerStats) -> Dictionary:
 	var capped := PackedStringArray()
+	var growing := PackedStringArray()
 	var axes := _claimed_axes()
 	if axes.is_empty() or stats == null:
-		return capped
+		return {"capped": capped, "growing": growing}
 	var probe := stats.duplicate_stats()
 	apply_to(probe)
 	for axis in axes:
 		var field: String = axis[0]
 		if _nearly_same(float(probe.get(field)), float(stats.get(field))):
 			capped.append(axis[1])
-	return capped
+		else:
+			growing.append(axis[1])
+	return {"capped": capped, "growing": growing}
 
 
 ## 上限に達した軸を伝える1行。止まっている軸が無ければ空文字を返し、
@@ -618,6 +647,26 @@ func capped_note(stats: SpinnerStats) -> String:
 	for key in axes:
 		names.append(tr(key))
 	return tr("PART_CAPPED_NOTE").format([tr("PART_CAPPED_JOIN").join(names)])
+
+
+## まだ伸びる軸を伝える1行。上限注記(capped_note)と**対で出すためのもの**。
+##
+## **上限注記が出ないビルドでは空文字**。どの軸も止まっていないなら効果文が
+## そのまま正しいので、「質量はまだ伸びる」を全札に付けても雑音が増えるだけ。
+## この行の役目は止まった軸の巻き返しであって、伸びの実況ではない。
+##
+## 全軸が止まった札(=死に札)でも空文字。それは would_change_anything が提示前に
+## 弾くので実際には出番が無いが、ここで「まだ伸びる軸: なし」を作らない。
+func growing_note(stats: SpinnerStats) -> String:
+	if capped_axes(stats).is_empty():
+		return ""
+	var axes := growing_axes(stats)
+	if axes.is_empty():
+		return ""
+	var names := PackedStringArray()
+	for key in axes:
+		names.append(tr(key))
+	return tr("PART_GROWING_NOTE").format([tr("PART_CAPPED_JOIN").join(names)])
 
 
 ## レアカードの金色スタイルボックス。報酬選択とマップ一覧で共有する。
