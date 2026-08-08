@@ -29,6 +29,10 @@ class Overrides:
 	var enemy_rps_scale := 1.0
 	## 自機の発射初速の倍率(=実UIの引き量/フォース)。1.0で満引き=従来と厳密一致。
 	var launch_force_scale := 1.0
+	## 自機の立ち位置(LaunchPolicy.Stance)。RING_RANDOMで従来と厳密一致。
+	var launch_stance := LaunchPolicy.Stance.RING_RANDOM
+	## 自機の立ち位置の中心からの距離(外周リング=1.0)。1.0で従来と厳密一致。
+	var launch_ring_scale := 1.0
 	## 乱戦の回り込み角(度)。既定は実ゲームと同じ。0にすると回り込み無し
 	## (＝この機構が入る前の「全員まっすぐ中央へ」)に戻せるので、効果を測れる。
 	var swirl_deg := SPAWN_SWIRL_DEG
@@ -126,8 +130,13 @@ static func play_one(
 
 	# 全敵の予告を渡す(狙う基準は先頭、間合いは全敵に効く)。
 	var force_scale := 1.0 if overrides == null else overrides.launch_force_scale
+	var stance := (
+		LaunchPolicy.Stance.RING_RANDOM if overrides == null else overrides.launch_stance
+	)
+	var ring_scale := 1.0 if overrides == null else overrides.launch_ring_scale
 	var launch := LaunchPolicy.decide(
-		policy, field, player_stats.radius, plans, enemy_radii, rng, force_scale
+		policy, field, player_stats.radius, plans, enemy_radii, rng,
+		force_scale, stance, ring_scale
 	)
 
 	request.player = BattleRequest.Launch.new(player_stats, launch.position, launch.velocity)

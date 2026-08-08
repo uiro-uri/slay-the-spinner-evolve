@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "walldraincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "cappedaxes", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist", "gameoverpanel"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "launchstance", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "walldraincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "cappedaxes", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist", "gameoverpanel"
 ]
 
 
@@ -124,6 +124,9 @@ func _init() -> void:
 
 	print("== standoff ==")
 	_test_launch_standoff()
+
+	print("== launchstance ==")
+	_test_launch_stance()
 
 	print("== victorygrowth ==")
 	_test_victory_growth()
@@ -589,6 +592,12 @@ func _test_launch_standoff() -> void:
 	var suite = load("res://tests/test_launch_standoff.gd").new()
 	suite.run(_check)
 	_done("standoff")
+
+
+func _test_launch_stance() -> void:
+	var suite = load("res://tests/test_launch_stance.gd").new()
+	suite.run(_check)
+	_done("launchstance")
 
 
 func _test_victory_growth() -> void:

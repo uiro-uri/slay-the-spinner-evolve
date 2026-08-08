@@ -8,10 +8,10 @@ extends SceneTree
 ##   enter  --state=path --col=C --bseed=B    次ノードへ入り、敵の予告(テレグラフ)を出す
 ##                                            (入ったら一方通行。決着かretry/giveupまで
 ##                                             enterし直せない=実ゲームのマップと同じ)
-##   aim    --state=path --bseed=B --from-deg=D --target=center|enemyK|x,y --force=F
+##   aim    --state=path --bseed=B --from-deg=D [--from-r=R] --target=center|enemyK|x,y --force=F
 ##                                            撃たずに先読みだけ出す(実UIの狙い中の輪と
 ##                                             同じRendezvousPreview)。何度でも試せる
-##   launch --state=path --bseed=B --from-deg=D --target=center|enemyK|x,y --force=F
+##   launch --state=path --bseed=B --from-deg=D [--from-r=R] --target=center|enemyK|x,y --force=F
 ##                                            自分の発射を決めて1戦解決。勝敗を出す
 ##                                            (解決は enter/retry で予告した bseed で行う。
 ##                                             勝敗は保存され、同じ戦闘は撃ち直せない)
@@ -56,8 +56,8 @@ func _init() -> void:
 		"new": _new(int(a.get("seed", "0")), path)
 		"status": _status(_load(path), path)
 		"enter": _enter(_load(path), path, int(a["col"]), int(a["bseed"]))
-		"aim": _aim(_load(path), int(a["bseed"]), float(a.get("from-deg","0")), a.get("target","enemy1"), float(a.get("force","1.0")))
-		"launch": _launch(_load(path), path, int(a["bseed"]), float(a.get("from-deg","0")), a.get("target","enemy1"), float(a.get("force","1.0")))
+		"aim": _aim(_load(path), int(a["bseed"]), float(a.get("from-deg","0")), a.get("target","enemy1"), float(a.get("force","1.0")), float(a.get("from-r","1.0")))
+		"launch": _launch(_load(path), path, int(a["bseed"]), float(a.get("from-deg","0")), a.get("target","enemy1"), float(a.get("force","1.0")), float(a.get("from-r","1.0")))
 		"reward": _reward(_load(path), path, int(a["bseed"]))
 		"pick": _pick(_load(path), path, int(a["id"]))
 		"retry": _retry(_load(path), path, a)
@@ -222,7 +222,7 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		print(enemy_line(
 			i, enemies[i], plans[i],
 			float(state["stats"]["radius"]), field.inradius()))
-	print("→ launch --bseed=%d --from-deg=<0-360> --target=center|enemy1..|x,y --force=<0-1>" % bseed)
+	print("→ launch --bseed=%d --from-deg=<0-360> [--from-r=<0-1>] --target=center|enemy1..|x,y --force=<0-1>" % bseed)
 
 ## 撃たずに先読みだけ出す。実UIで引いている最中に見えている輪(RendezvousPreview)を
 ## 文字にしたもので、状態は一切書き換えない(何度でも試せる=マウスを動かすのと同じ)。
@@ -231,7 +231,7 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 ## 揺れるが、CLIは元から確定値を印字する道具(enemy_lineが出現位置も速度も
 ## そのまま出す)なので、ここも確定値で読む。CLIの方が正確に読めるのは
 ## 揺れの導入前から変わらない性質で、この行だけの話ではない。
-func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force: float) -> void:
+func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force: float, from_r: float = 1.0) -> void:
 	var block := launch_block_reason(state)
 	if block != "":
 		printerr(block); return
@@ -245,7 +245,7 @@ func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force:
 	var pstats := stats_from(state["stats"])
 
 	var pos := field.clamp_launch(
-		_ring_pos(field, pstats.radius, from_deg),
+		_ring_pos(field, pstats.radius, from_deg, from_r),
 		spawn_points_of(plans), enemy_radii_of(enemies), pstats.radius)
 	var vel := launch_velocity(pos, _target_point(field, plans, target), force)
 
@@ -269,7 +269,7 @@ func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force:
 		print("  → 実UIが輪で見せるのは enemy%d のぶん" % [best + 1])
 
 
-func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float) -> void:
+func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float, from_r: float = 1.0) -> void:
 	var block := launch_block_reason(state)
 	if block != "":
 		printerr(block); return
@@ -289,7 +289,7 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 
 	# 発射位置は壁の内側かつ敵予告の間合い(LaunchStandoff)の外。実UIと同じ制約で、
 	# 予告の真横に置いて動く前に殴る「至近スポーン殴り」はできない。
-	var want := _ring_pos(field, pstats.radius, from_deg)
+	var want := _ring_pos(field, pstats.radius, from_deg, from_r)
 	var pos := field.clamp_launch(
 		want, spawn_points_of(plans), enemy_radii_of(enemies), pstats.radius)
 	if pos.distance_to(want) > 0.05:
@@ -533,8 +533,16 @@ static func _enemy_plans(enemies: Array, field: FieldData, bseed: int) -> Array:
 		plans.append(plan)
 	return plans
 
-func _ring_pos(field: FieldData, prad: float, from_deg: float) -> Vector2:
-	var ring := field.inradius() - prad - 0.5
+## 発射地点。from_deg は中心から見た向き、from_r は中心からの距離の比
+## (1.0=外周リング=既定で従来と厳密一致、0.0=中心)。
+##
+## **実UIは土俵の内側ならどこへでも置ける**(Battle._clamp_launch は壁と間合いしか
+## 見ない)のに、このCLIは長らく外周リングの1点しか撃てなかった。実UIの発射位置は
+## 2自由度、CLIは1自由度で、コールドプレイは**入力の半分を使わずに**遊んでいた
+## (2026-08-08のコールドプレイは9戦すべて外周から撃っている)。ボット側の同じ穴は
+## LaunchPolicy._ring_position の ring_scale で塞いだ。
+func _ring_pos(field: FieldData, prad: float, from_deg: float, from_r: float = 1.0) -> Vector2:
+	var ring := (field.inradius() - prad - 0.5) * clampf(from_r, 0.0, 1.0)
 	var p := field.center() + Vector2.RIGHT.rotated(deg_to_rad(from_deg)) * ring
 	if field.wall_shape == ArenaWall.WallShape.RECT:
 		return ArenaWall.clamp_inside(field.arena_bounds, p, prad)
