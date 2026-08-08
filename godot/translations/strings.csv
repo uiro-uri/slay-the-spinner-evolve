@@ -148,13 +148,14 @@ STAT_LIVES,Lives,残機
 STAT_TOUGHNESS,Toughness,硬さ
 STAT_LIFETIME,Spin Time,寿命
 STAT_ATTACK,Attack,攻め力
+STAT_KNOCKBACK,Knockback,弾き
 STAT_ENDURANCE,Staying Power,打たれ強さ
 STAT_WALL_ENDURANCE,Wall Endurance,壁強さ
 STAT_ENEMY_TOUGHNESS,vs Toughness,硬さ 相手
 STAT_ENEMY_LIFETIME,vs Spin Time,寿命 相手
 REWARD_PREVIEW_HEADING,If you take it,取ると
-REWARD_PREVIEW_HINT,"Toughness resists drain; Attack is how much you drain per hit; Staying Power is how many hits you can take; Wall Endurance is how many wall slams",硬さ＝一撃の削られにくさ／攻め力＝一撃で削れる量／打たれ強さ＝耐えられる接触の回数／壁強さ＝耐えられる壁の回数
-REWARD_ATTACK_BASIS,"Attack = how many times harder you bite than a stock spinner, against the toughest foe you could face next (toughness {0})",攻め力＝素のコマの何倍削れるか。相手は次に選べる部屋のいちばん硬い1体（硬さ {0}）
+REWARD_PREVIEW_HINT,"Toughness resists drain; Attack is how much you drain per hit; Knockback is how hard you shove them into the wall; Staying Power is how many hits you can take; Wall Endurance is how many wall slams",硬さ＝一撃の削られにくさ／攻め力＝一撃で削れる量／弾き＝一撃で壁へ押し込む強さ／打たれ強さ＝耐えられる接触の回数／壁強さ＝耐えられる壁の回数
+REWARD_ATTACK_BASIS,"Attack and Knockback = how many times a stock spinner you bite and shove, against the toughest foe you could face next (toughness {0})",攻め力・弾き＝素のコマの何倍削れるか／弾けるか。相手は次に選べる部屋のいちばん硬い1体（硬さ {0}）
 REWARD_DECAY_NOTE,Spin Time {0} → {1} (seconds to wind down untouched),寿命 {0} → {1}（誰にも触れられずに尽きるまでの秒）
 PART_GIANT_GROWTH,Giant Growth,ジャイアントグロース
 PART_OVERENCUMBERED,Overencumbered,オーバーウェイト
