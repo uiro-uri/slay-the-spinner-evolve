@@ -23,6 +23,8 @@ func run(check: Callable) -> void:
 	_test_node_level_is_max(check)
 	_test_reward_count(check)
 	_test_melee_scale_on_every_node(check)
+	_test_distinct_choice_guarantee(check)
+	_test_targets_are_alike_predicate(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -587,3 +589,141 @@ func _test_encounters_deterministic(check: Callable) -> void:
 				break
 
 	check.call(same, "マップ遭遇: 同じシードなら遭遇（敵数・レベル・土俵）も一致する")
+
+
+## 「見分けの付かない2択」が減っていること、そして減らした代わりに**報酬の総量が
+## 1つも増えていない**こと(_ensure_distinct_choice)。
+##
+## マップのノードが出す判断材料は レベル・頭数・報酬枚数・レア倍率・脅威メーター で、
+## 独立に動くのは実レベルと頭数の2つだけ(報酬枚数は頭数そのもの、レア倍率と脅威
+## メーターはレベルと頭数の関数)。進める先が全部おなじ(レベル, 頭数)なら
+## **表示される数字が1つ残らず一致する2択**＝選ぶ根拠が無い。
+##
+## 数値の出どころ(シード0..TRIALS-1で決定的。playtest/measure_map_choice.gd と同じ数え方):
+##   分岐点(進める先2つ以上)は 5173 個で、そのうち見分けが付かないものは
+##     保証なし      : 1928 個 (37.3%) / 頭数の総和 10028
+##     交換つき(現行): 1561 個 (30.2%) / 頭数の総和 10028  ← 総和が1つも動かない
+##     昇格だけ      :  781 個 (15.1%) / 頭数の総和 10622  ← 経済が+5.9%太る
+##     得>損を外す   : 1647 個 (31.8%) / 頭数の総和 10028  ← 交換が自分で潰して回る
+##   1600 は「現行(1561)」と「得>損を外した版(1647)」の分水嶺で、「保証なし(1928)」は
+##   当然弾く。頭数の帯 9900〜10100 は ±1%で、「昇格だけ」(10622)を確実に弾き、
+##   乱戦の抽選重みを将来いじったときに誤爆しない幅。敵の抽選重みを変えたら
+##   どちらも取り直すこと。
+##
+## 見分けが**完全に**付くようにはならない。渡し手(同じ段の別の乱戦)が居ないと
+## 交換が成立せず、経済を動かさない方を優先して昇格を見送るため。段7→段8は
+## ゴール手前の3ノードを多くの親が共有していて渡し手が枯れるので、ほぼ手付かず。
+func _test_distinct_choice_guarantee(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var branch_points := 0
+	var alike := 0
+	var heads := 0
+
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			continue
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			heads += node.enemy_count()
+			var targets := node.targets()
+			if targets.size() < 2:
+				continue
+			branch_points += 1
+			if _targets_look_same(tree, targets):
+				alike += 1
+
+	check.call(
+		branch_points > 0,
+		"見分けの付く2択: 分岐点が数えられている(%d個)" % branch_points
+	)
+	check.call(
+		alike <= 1600,
+		"見分けの付く2択: 表示が全一致の分岐点が減っている(%d個, 1600以下 / 保証なしは1928)"
+			% alike
+	)
+	# 対比は「1体を2体へ」で作るので、相殺しないと頭数ぶん報酬が増えて経済が太る
+	# (実測: クリア率 54.7%→65.3%)。同じ段の別の乱戦から頭数を1つもらう交換に
+	# してあるので、総和は1つも動かないはず。
+	check.call(
+		heads >= 9900 and heads <= 10100,
+		"見分けの付く2択: 報酬の総量(頭数の総和)が動いていない(%d, 9900〜10100 / 素は10028)"
+			% heads
+	)
+
+
+## 進める先が全部おなじ(実レベル, 頭数)か＝マップ上で表示が全一致か。
+## 生成器の _targets_are_alike とは別実装にしてある(生成器は昇格の出番が無い
+## 「全部2体」を false にするが、遊ぶ側から見ればあれも同じ2択なので数える)。
+func _targets_look_same(tree: MapTree, targets: Array[Vector2i]) -> bool:
+	var level := -1
+	var count := -1
+	for t in targets:
+		var node: MapTree.MapNode = tree.nodes.get(t)
+		if node == null or not node.has_encounter():
+			return false
+		if level < 0:
+			level = node.level()
+			count = node.enemy_count()
+		elif node.level() != level or node.enemy_count() != count:
+			return false
+	return level > 0
+
+
+## 「見分けが付かない」の判定そのもの(MapTree._targets_are_alike)を直に確かめる。
+##
+## 統計側(_test_distinct_choice_guarantee)は数だけを見るので、判定が緩んでも
+## 「無駄な交換が増えて取り分が少し落ちる」程度にしか出ない——実際、レベルの
+## 比較を消すサボタージュは 1561→1582 で素通りした。判定は規則そのものなので、
+## 合成した2択で1つずつ押さえる。
+##
+## `as_single` は交換相手の下見(そのノードが頭数を1つ減らしたら平らになるか)。
+## 3体→2体 は乱戦のままなので平らにならず、2体→1体 は平らになる——この非対称が
+## 「3体の渡し手が最優先になる」根拠なので、両方を押さえる。
+func _test_targets_are_alike_predicate(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var tree := MapTree.new()
+	var a := Vector2i(1, 0)
+	var b := Vector2i(1, 1)
+	tree.nodes[a] = MapTree.MapNode.new(a)
+	tree.nodes[b] = MapTree.MapNode.new(b)
+	var node_a: MapTree.MapNode = tree.nodes[a]
+	var node_b: MapTree.MapNode = tree.nodes[b]
+	var targets: Array[Vector2i] = [a, b]
+
+	node_a.enemies = EnemyRoster.group_of(1, 1, rng, 0)
+	node_b.enemies = EnemyRoster.group_of(1, 1, rng, 0)
+	check.call(
+		tree._targets_are_alike(targets),
+		"見分け判定: 同レベル・どちらも1体なら見分けが付かない"
+	)
+
+	node_b.enemies = EnemyRoster.group_of(2, 1, rng, 0)
+	check.call(
+		not tree._targets_are_alike(targets),
+		"見分け判定: レベルが違えば見分けが付く(斥候の2択に手を出さない)"
+	)
+
+	node_b.enemies = EnemyRoster.group_of(1, 2, rng, 0)
+	check.call(
+		not tree._targets_are_alike(targets),
+		"見分け判定: 頭数が違えば見分けが付く"
+	)
+
+	node_a.enemies = EnemyRoster.group_of(1, 2, rng, 0)
+	check.call(
+		not tree._targets_are_alike(targets),
+		"見分け判定: どちらも2体なら昇格の出番が無いので手を出さない"
+	)
+	check.call(
+		not tree._targets_are_alike(targets, b),
+		"見分け判定: 3体→2体の下見——片方が乱戦のままなら平らにならない(損0)"
+	)
+
+	node_a.enemies = EnemyRoster.group_of(1, 1, rng, 0)
+	check.call(
+		tree._targets_are_alike(targets, b),
+		"見分け判定: 2体→1体の下見——全部1体になるなら平らになる(損が立つ)"
+	)
