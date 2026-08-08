@@ -25,12 +25,18 @@ extends RefCounted
 
 
 ## 再挑戦する相手。据え置きならそのまま、替えるなら同レベルの別個体へ。
+##
+## stepは「今どの段で再挑戦しているか」。帯の2段目のrpsランプ
+## (EnemyRoster.step_rps_scale)を入れ替えた個体にも掛け直すために要る。
+## 渡さないと、負けてリトライしただけでその段の敵が素の表の強さへ戻る
+## ——乱戦の質量倍率が同じ穴を空けていたのと同じ理由。
 static func next_enemies(
-	current: Array[EnemyData], same_opponent: bool, rng: RandomNumberGenerator
+	current: Array[EnemyData], same_opponent: bool, rng: RandomNumberGenerator,
+	step: int = 0
 ) -> Array[EnemyData]:
 	if same_opponent:
 		return current
-	return EnemyRoster.reroll_group(current, rng)
+	return EnemyRoster.reroll_group(current, rng, step)
 
 
 ## 再挑戦の出現(位置・向き・速度・乱戦の回り込み)を決める種。

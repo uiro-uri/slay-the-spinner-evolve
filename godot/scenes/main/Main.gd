@@ -159,7 +159,7 @@ func _on_continue_requested(same_opponent: bool) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	GameState.pending_enemies = RetryPlan.next_enemies(
-		GameState.pending_enemies, same_opponent, rng)
+		GameState.pending_enemies, same_opponent, rng, GameState.map_tree.current_step())
 	GameState.pending_spawn_seed = RetryPlan.next_spawn_seed(
 		GameState.pending_spawn_seed, same_opponent, rng)
 	goto_battle()

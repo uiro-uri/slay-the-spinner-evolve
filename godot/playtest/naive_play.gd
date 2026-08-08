@@ -192,7 +192,8 @@ func _retry(state: Dictionary, path: String, a: Dictionary) -> void:
 	var reroll_rng := RandomNumberGenerator.new()
 	reroll_rng.seed = bseed
 	state["enemies"] = group_names(
-		RetryPlan.next_enemies(node_group(state, node), same_opponent, reroll_rng))
+		RetryPlan.next_enemies(
+			node_group(state, node), same_opponent, reroll_rng, node.coord.x))
 	_save(state, path)
 	if same_opponent:
 		print("=== RETRY 残機を1消費 (残り%d) 同じ相手・同じ予告で再戦 ===" % state["continues"])
@@ -1032,16 +1033,20 @@ static func defeat_prompt(continues: int) -> String:
 ## 交戦中ノードの敵グループ。retryで個体を入れ替えた場合はstate["enemies"]の
 ## 名前列から復元し、無ければノード生成時の個体をそのまま使う。名前で持つのは
 ## stateがJSONだから。往復の性質は test_playtest.gd が守る。
+## 段はノード自身(coord.x)から取る。呼び手に配らせると、4か所のうち1か所が
+## 渡し忘れた瞬間にその局面だけ敵が素の強さへ戻る。
 static func node_group(state: Dictionary, node: MapTree.MapNode) -> Array[EnemyData]:
-	return group_from_names(state.get("enemies"), node.enemies)
+	return group_from_names(state.get("enemies"), node.enemies, node.coord.x)
 
 
 ## 名前列からEnemyDataの列を復元する。名前でない/知らない名前が混ざっていたら
 ## (手で書き換えた・ロスターから消えた等)、部分的に混ぜず丸ごとfallbackへ戻す。
-## 復元にも乱戦の質量倍率(melee_member)を掛ける。名前が指すのは素の表の個体なので、
-## 掛け直さないとリトライした乱戦だけ元の手強さに戻る(実プレイのreroll_groupと
-## 挙動がずれ、CLIで測った数字が嘘になる)。
-static func group_from_names(names, fallback: Array[EnemyData]) -> Array[EnemyData]:
+## 復元にも乱戦の質量倍率(melee_member)と段のrpsランプ(step_member)を掛ける。
+## 名前が指すのは素の表の個体なので、掛け直さないとリトライした戦闘だけ
+## 元の手強さに戻る(実プレイのreroll_groupと挙動がずれ、CLIで測った数字が嘘になる)。
+static func group_from_names(
+	names, fallback: Array[EnemyData], step: int = 0
+) -> Array[EnemyData]:
 	if not (names is Array) or (names as Array).is_empty():
 		return fallback
 	var count: int = (names as Array).size()
@@ -1050,7 +1055,7 @@ static func group_from_names(names, fallback: Array[EnemyData]) -> Array[EnemyDa
 		var enemy := EnemyRoster.find_by_name(str(name_value))
 		if enemy == null:
 			return fallback
-		result.append(EnemyRoster.melee_member(enemy, count))
+		result.append(EnemyRoster.step_member(EnemyRoster.melee_member(enemy, count), step))
 	return result
 
 

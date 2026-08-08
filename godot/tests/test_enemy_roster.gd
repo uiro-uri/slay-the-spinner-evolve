@@ -33,15 +33,25 @@ func run(check: Callable) -> void:
 	_test_vanguard_group_rules(check)
 	_test_reroll_group(check)
 	_test_find_by_name(check)
+	_test_band_second_step_shape(check)
+	_test_band_ramp_only_on_second_step(check)
+	_test_band_ramp_survives_reroll(check)
+	_test_band_ramp_wiring(check)
+	_test_band_ramp_on_generated_maps(check)
 
 
 ## 乱戦メンバーの緩め方は**質量だけ**であること。実際に生成したグループの各体を
 ## 同名の素の個体と突き合わせ、
 ##  - 単体戦(1体)は素と厳密に一致する(質量倍率が漏れていない)
 ##  - 乱戦(2〜3体)は質量がちょうど melee_mass_scale(頭数)倍
-##  - rps・半径・spin_decay は頭数によらず素のまま(=**寿命 rps÷(半径×spin_decay)が不変**)
+##  - rpsは**頭数によらず** step_rps_scale(段) 倍ちょうど(=頭数割りの復活を許さない)
+##  - 半径・spin_decay は素のまま
 ##  - レベルが下がらない(表示レベルと報酬の実レベルを動かさない)
 ## を固定する。rps割りや1段下げを復活させるとここが落ちる。
+##
+## rpsの期待値に段の倍率(BAND_SECOND_STEP_RPS_RAMP)を掛けるのは、帯の2段目のランプが
+## **段の軸**で、乱戦の緩め(頭数の軸)とは別だから。掛ける相手を頭数から独立させて
+## あるので、「乱戦だけrpsを割る」を戻すとここは依然として落ちる。
 func _test_melee_mass_scale(check: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20240718
@@ -56,6 +66,7 @@ func _test_melee_mass_scale(check: Callable) -> void:
 			else:
 				seen_solo = true
 			var expected_scale := EnemyRoster.melee_mass_scale(group.size())
+			var expected_rps_scale := EnemyRoster.step_rps_scale(step)
 			for member in group:
 				var base := _solo_of(member)
 				if base == null:
@@ -65,9 +76,10 @@ func _test_melee_mass_scale(check: Callable) -> void:
 					violations.append("%d体の%s: 質量%.4f (素%.4f×%.4f を期待)" % [
 						group.size(), member.display_name,
 						member.stats.mass, base.stats.mass, expected_scale])
-				if not is_equal_approx(member.stats.rps, base.stats.rps):
-					violations.append("%d体の%s: rpsが動いた(頭数割りの復活)" % [
-						group.size(), member.display_name])
+				if not is_equal_approx(member.stats.rps, base.stats.rps * expected_rps_scale):
+					violations.append("段%dの%d体の%s: rps%.4f (素%.4f×%.4f を期待)" % [
+						step, group.size(), member.display_name,
+						member.stats.rps, base.stats.rps, expected_rps_scale])
 				if not is_equal_approx(member.stats.radius, base.stats.radius):
 					violations.append("%d体の%s: 半径が動いた" % [
 						group.size(), member.display_name])
@@ -404,3 +416,220 @@ func _test_find_by_name(check: Callable) -> void:
 	check.call(
 		EnemyRoster.find_by_name("ENEMY_9_9") == null,
 		"find_by_name: 知らない名前はnull")
+
+
+## 帯(同じレベルが2段続く区間)の形。段1と、レベルが切り替わる段は「1段目」、
+## 直前の段と同レベルなら「2段目」。**ボス段(段9)は必ず1段目**＝ランプが乗らない
+## (roster の「ボスは据え置き」の約束をここで固定する)。
+## is_band_second_step を偶数判定に書き換えても現行の level_for_step では同じ答えに
+## なるが、レベル表を触ったときに黙って嘘にならないよう、レベルの一致で確かめる。
+func _test_band_second_step_shape(check: Callable) -> void:
+	var violations: Array[String] = []
+	for step in range(1, MapTree.STEP_GOAL + 1):
+		var same_as_prev := (
+			step > 1 and EnemyRoster.level_for_step(step) == EnemyRoster.level_for_step(step - 1)
+		)
+		if EnemyRoster.is_band_second_step(step) != same_as_prev:
+			violations.append("段%d: 帯の2段目判定が直前の段のレベルと食い違う" % step)
+		var expected := 1.0 + EnemyRoster.BAND_SECOND_STEP_RPS_RAMP if same_as_prev else 1.0
+		if not is_equal_approx(EnemyRoster.step_rps_scale(step), expected):
+			violations.append("段%d: 倍率%.4f (期待%.4f)" % [
+				step, EnemyRoster.step_rps_scale(step), expected])
+	check.call(
+		not EnemyRoster.is_band_second_step(MapTree.STEP_GOAL),
+		"帯: ボス段(段%d)は帯の1段目=ランプが乗らない(ボス据え置き)" % MapTree.STEP_GOAL
+	)
+	check.call(
+		EnemyRoster.is_band_second_step(2) and not EnemyRoster.is_band_second_step(1),
+		"帯: 段1は1段目・段2は2段目(判定が空回りしていない)"
+	)
+	# 値そのものは調整対象なので固定しないが、**向き**は固定する。0にすると仕組みごと
+	# 黙って無効になり、全テストが期待値を定数から組んでいるぶん全行一致で素通りする。
+	check.call(
+		EnemyRoster.BAND_SECOND_STEP_RPS_RAMP > 0.0
+			and EnemyRoster.step_rps_scale(2) > EnemyRoster.step_rps_scale(1),
+		"帯: 2段目のランプは正(0にすると仕組みごと無効になる) 実際=%.4f" % [
+			EnemyRoster.BAND_SECOND_STEP_RPS_RAMP]
+	)
+	check.call(
+		violations.is_empty(),
+		"帯: 2段目判定と倍率が全段で一致%s" % (
+			"" if violations.is_empty() else " / 例: " + violations[0])
+	)
+
+
+## 実際に生成した敵に、段のランプが**rpsだけ**・**2段目だけ**に乗ること。
+## 帯の1段目とボス段は素の表と厳密一致(ランプが全段に漏れたら落ちる)。
+## 質量は乱戦倍率のみ、半径・spin_decay は不変(ランプを別の軸へ移したら落ちる)。
+func _test_band_ramp_only_on_second_step(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260808
+	var violations: Array[String] = []
+	var seen_ramped := false
+	var seen_plain := false
+	for _iter in 300:
+		for step in range(1, MapTree.STEP_GOAL + 1):
+			# 期待値は step_rps_scale を呼ばず**定数と段の並びから**組み立てる。
+			# 被検査の関数から期待値を借りると、ランプを丸ごと落としても
+			# 期待値まで一緒に1.0へ落ちて「全行一致」の嘘が通る。
+			var second := step > 1 and (
+				EnemyRoster.level_for_step(step) == EnemyRoster.level_for_step(step - 1)
+			)
+			var scale := 1.0 + EnemyRoster.BAND_SECOND_STEP_RPS_RAMP if second else 1.0
+			if second:
+				seen_ramped = true
+			else:
+				seen_plain = true
+			for member in EnemyRoster.pick_group_for_step(step, rng):
+				var base := _solo_of(member)
+				if base == null:
+					violations.append("素の個体が引けない: %s" % member.display_name)
+					continue
+				if not is_equal_approx(member.stats.rps, base.stats.rps * scale):
+					violations.append("段%dの%s: rps%.4f (素%.4f×%.4f を期待)" % [
+						step, member.display_name, member.stats.rps, base.stats.rps, scale])
+				if not is_equal_approx(member.stats.radius, base.stats.radius):
+					violations.append("段%dの%s: 半径が動いた(ランプはrpsだけのはず)" % [
+						step, member.display_name])
+				if not is_equal_approx(member.stats.spin_decay, base.stats.spin_decay):
+					violations.append("段%dの%s: spin_decayが動いた" % [
+						step, member.display_name])
+	check.call(seen_ramped and seen_plain, "帯: ランプの有る段と無い段を両方見ている")
+	check.call(
+		violations.is_empty(),
+		"帯: ランプはrpsだけ・帯の2段目だけに乗る%s" % (
+			"" if violations.is_empty() else " / 例: " + violations[0])
+	)
+
+
+## **リトライで入れ替えた個体にもランプが乗り直すこと**。乱戦の質量倍率が同じ穴を
+## 空けていた(素の表から引くとリトライしただけで元の手強さに戻る)ので、段の軸でも
+## 同じ約束を守る。reroll_group に段を渡さない実装へ戻すと落ちる。
+func _test_band_ramp_survives_reroll(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260809
+	var violations: Array[String] = []
+	var seen := 0
+	for step in range(1, MapTree.STEP_GOAL + 1):
+		# 期待値は定数から組む(被検査の関数から借りない。上の注釈と同じ理由)。
+		var scale := 1.0 + EnemyRoster.BAND_SECOND_STEP_RPS_RAMP if (
+			step > 1 and EnemyRoster.level_for_step(step) == EnemyRoster.level_for_step(step - 1)
+		) else 1.0
+		for _iter in 40:
+			var group := EnemyRoster.pick_group_for_step(step, rng)
+			for member in EnemyRoster.reroll_group(group, rng, step):
+				var base := _solo_of(member)
+				if base == null:
+					continue
+				seen += 1
+				if not is_equal_approx(member.stats.rps, base.stats.rps * scale):
+					violations.append("段%dの入れ替え個体%s: rps%.4f (素%.4f×%.4f を期待)" % [
+						step, member.display_name, member.stats.rps, base.stats.rps, scale])
+	check.call(seen > 0, "帯: リトライの入れ替えを実際に見ている (%d体)" % seen)
+	check.call(
+		violations.is_empty(),
+		"帯: リトライで入れ替えてもランプが乗り直す%s" % (
+			"" if violations.is_empty() else " / 例: " + violations[0])
+	)
+
+
+## **配線のテスト**。ランプの規則が正しくても、リトライ経路とコールドプレイCLIの
+## 復元経路が段を渡し忘れると、その局面だけ敵が素の強さへ戻る——しかも
+## 「ランプは難易度を1ミリも動かさない」という嘘の測定結果が出る。
+## 前サイクルの BattleSim 配線落ち(素通り)と同じ穴なので、経路ごとに実際の値で見る。
+func _test_band_ramp_wiring(check: Callable) -> void:
+	const STEP := 2  # 帯の2段目。段9(ボス)と違って必ずランプが乗る。
+	# 期待値は定数から組む(被検査の関数から借りない)。
+	var scale := 1.0 + EnemyRoster.BAND_SECOND_STEP_RPS_RAMP
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260810
+	var group := EnemyRoster.pick_group_for_step(STEP, rng, false)
+
+	# 経路1: リトライ(相手を替える)。RetryPlan が段を落とすと素の値に戻る。
+	var retry_ok := true
+	for member in RetryPlan.next_enemies(group, false, rng, STEP):
+		var base := _solo_of(member)
+		if base != null and not is_equal_approx(member.stats.rps, base.stats.rps * scale):
+			retry_ok = false
+	check.call(retry_ok, "配線: RetryPlan.next_enemies が段のランプを引き継ぐ")
+
+	# 経路2: CLI(naive_play)の名前列からの復元。段を落とすと素の値に戻る。
+	var names: Array = []
+	for member in group:
+		names.append(member.display_name)
+	# naive_play.gd は SceneTree 直下のスクリプトで class_name を持たないので load する
+	# (test_playtest.gd と同じ流儀)。
+	var naive_play = load("res://playtest/naive_play.gd")
+	var restored: Array[EnemyData] = naive_play.group_from_names(names, group, STEP)
+	var cli_ok := true
+	for member in restored:
+		var base := _solo_of(member)
+		if base != null and not is_equal_approx(member.stats.rps, base.stats.rps * scale):
+			cli_ok = false
+	check.call(cli_ok, "配線: NaivePlay.group_from_names が段のランプを掛け直す")
+
+	# 経路3: 実UIのリトライ(Main)とCLIのリトライが、段を**実際に渡している**こと。
+	# 既定引数0(=倍率1.0)のまま呼べてしまうので、値のテストでは捕まらない。
+	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
+	check.call(
+		main.contains("GameState.map_tree.current_step()"),
+		"配線: Main のリトライが RetryPlan へ現在の段を渡している"
+	)
+	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
+	check.call(
+		cli.contains("node.coord.x"),
+		"配線: CLI のリトライが RetryPlan へノードの段を渡している"
+	)
+	var sim := FileAccess.get_file_as_string("res://playtest/run_sim.gd")
+	check.call(
+		sim.contains("EnemyRoster.reroll_group(group, rng, tree.current_step())"),
+		"配線: run_sim のリトライが段を渡している(統計が実プレイとずれない)"
+	)
+
+
+## **生成されたマップの全戦闘ノード**でランプが乗っていること。抽選の入り口
+## (pick_group_for_step)だけを見ていると、マップ生成の別経路が素の表から組んでいても
+## 気づけない——実際 `MapTree._promote_compensation`(1体部屋保証の埋め合わせで
+## 単体ノードを乱戦へ昇格する)は `group_of` を直接呼ぶので、そこが段を渡し忘れると
+## **昇格した部屋だけ敵が素の強さに戻る**。ここはノードの座標(段)を真として、
+## 盤面に実際に置かれた敵で確かめる。
+func _test_band_ramp_on_generated_maps(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260811
+	var violations: Array[String] = []
+	var checked := 0
+	var ramped := 0
+	for _iter in 60:
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			continue
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if not node.has_encounter():
+				continue
+			# 期待値は定数から組む(被検査の関数から借りない)。
+			var step: int = coord.x
+			var second := step > 1 and (
+				EnemyRoster.level_for_step(step) == EnemyRoster.level_for_step(step - 1)
+			)
+			var scale := 1.0 + EnemyRoster.BAND_SECOND_STEP_RPS_RAMP if second else 1.0
+			for member in node.enemies:
+				var base := _solo_of(member)
+				if base == null:
+					continue
+				checked += 1
+				if second:
+					ramped += 1
+				if not is_equal_approx(member.stats.rps, base.stats.rps * scale):
+					violations.append("段%d列%dの%s(%d体): rps%.4f (素%.4f×%.4f を期待)" % [
+						step, coord.y, member.display_name, node.enemy_count(),
+						member.stats.rps, base.stats.rps, scale])
+	check.call(
+		checked > 0 and ramped > 0,
+		"帯: 生成マップの戦闘ノードを実際に見ている (検査%d体 / うち2段目%d体)" % [checked, ramped]
+	)
+	check.call(
+		violations.is_empty(),
+		"帯: 生成マップの全戦闘ノードにランプが乗る(昇格補償の経路も含む)%s" % (
+			"" if violations.is_empty() else " / 例: " + violations[0])
+	)

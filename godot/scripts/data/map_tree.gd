@@ -323,7 +323,7 @@ func _promote_compensation(
 	# 乱戦の組み方は EnemyRoster.group_of に一本化してある(頭数ぶんの質量倍率も
 	# そこで掛かる)。ここで素の表から組むと、昇格した部屋だけ規則から外れる。
 	nodes[chosen].enemies = EnemyRoster.group_of(
-		EnemyRoster.level_for_step(child_step), count, rng
+		EnemyRoster.level_for_step(child_step), count, rng, child_step
 	)
 
 
