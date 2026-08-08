@@ -103,6 +103,11 @@ static func rows(stats: SpinnerStats, ghost_seconds: float = 0.0) -> Array[Dicti
 ## 上端を決め打たずに済む取り分 敵/(自分+敵) にする。ちょうど互角で PARITY、
 ## 目盛りを越えていれば「相手の方が硬い/長生き」と読める。
 ##
+## **1行目は打たれ強さ**(2026-08-08 深夜に追加)。硬さは1接触の痛さしか語らず、
+## 「先に回転が尽きた方が負ける」というこのゲームの決着条件を読まない。理由と
+## 一次証拠は endurance_share の doc に置いた。硬さの行は残す——打たれ強さの
+## 2つの成分(硬さと rps)のうち、攻め力の基準になるのは硬さの側だから。
+##
 ## 乱戦の集約は硬さと寿命で**別**にする。硬さは**頭数ぶんの和**、寿命は
 ## **いちばん粘る個体**。理由は問いが違うから: 硬さの行が答えるのは「この部屋を
 ## 片付けるのにどれだけの仕事が要るか/どれだけ殴られるか」で、どちらも敵ごとの
@@ -135,12 +140,60 @@ static func enemy_rows(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> Arr
 	if longest < 0.0:
 		return []
 	return [
+		{"label_key": "STAT_ENEMY_ENDURANCE", "fraction": endurance_share(stats, enemies)},
 		{"label_key": "STAT_ENEMY_TOUGHNESS", "fraction": toughness_share(stats, enemies)},
 		{
 			"label_key": "STAT_ENEMY_LIFETIME",
 			"fraction": _share(longest, PartPreview.lifetime(stats)),
 		},
 	]
+
+
+## 部屋ぜんぶの打たれ強さ(頭数ぶんの和)と自分との、打たれ強さの取り分。
+## enemy_rows の1行目そのもので、**マップの脅威メーター(ThreatMeter)がこれを呼ぶ**。
+##
+## **なぜ硬さではなく打たれ強さが脅威の軸なのか**(2026-08-08 深夜)
+## 硬さ(質量×半径²)は 1接触で削られる rps の**分母**でしかない。先に回転が尽きた方が
+## 負けるゲームなので、部屋を抜けられるかは「1発がどれだけ痛いか」だけでなく
+## 「何発ぶんの回転を持っているか」で決まる。打たれ強さ = rps × 硬さ ÷ (1−衝突軽減)
+## は PartPreview の doc のとおり**接触に何回耐えられるかに比例する**量で、
+## その2つをちょうど1本にまとめている。
+##
+## 一次証拠(コールドプレイ 2026-08-08 深夜, seed=4711):
+## 段4で「硬さ取り分 0.55 格上」の部屋を選び、**3連敗**した(敵の残rpsは 15/41/41%)。
+## 0.55 は互角の目盛りのすぐ隣なので五分の勝負に見えるが、実際は自分の rps 18 に対し
+## 相手が 31 で、**回転の持ち分が 1.7倍 違う**部屋だった。続く段5(硬さ取り分 0.55)でも
+## 2連敗して残機が尽きている。硬さの取り分は最後までこの差を1ミリも映さなかった。
+##
+## 統計(playtest/measure_threat_axis.gd): 硬さを固定して自機の rps だけを振ると、
+## Lv2×2体の勝率は **34% → 99%** と動くのに硬さ取り分は **0.51 で不動**。
+## 全セル対で順序の嘘(メーターが安全だと言う側の勝率が実際には低い)を数えると、
+## 硬さの取り分より打たれ強さの取り分の方がはっきり少ない(report は PR 参照)。
+##
+## 集約が**頭数ぶんの和**なのは room_toughness と同じ理由——削り切るべき回転も、
+## 飛んでくる衝突も頭数ぶんある。単体の部屋では和＝個体そのもの。
+##
+## 相手が居ない・値が取れないときは互角(PARITY)。0埋めは「相手が弱い」という別の嘘。
+static func endurance_share(stats: SpinnerStats, enemies: Array[SpinnerStats]) -> float:
+	if stats == null:
+		return PARITY
+	var room := room_endurance(enemies)
+	if room < 0.0:
+		return PARITY
+	return _share(room, PartPreview.endurance(stats))
+
+
+## 部屋の打たれ強さ＝有効な相手の打たれ強さの**和**。1体も居なければ -1.0
+## (打たれ強さ0の相手と「相手が居ない」を取り違えないため。room_toughness と同じ規約)。
+static func room_endurance(enemies: Array[SpinnerStats]) -> float:
+	var total := -1.0
+	for enemy in enemies:
+		if enemy == null:
+			continue
+		if total < 0.0:
+			total = 0.0
+		total += PartPreview.endurance(enemy)
+	return total
 
 
 ## 部屋ぜんぶの硬さ(頭数ぶんの和)と自分との、硬さの取り分。enemy_rows の1行目そのもの。

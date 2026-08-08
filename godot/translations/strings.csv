@@ -152,6 +152,7 @@ STAT_ATTACK,Attack,攻め力
 STAT_KNOCKBACK,Knockback,弾き
 STAT_ENDURANCE,Staying Power,打たれ強さ
 STAT_WALL_ENDURANCE,Wall Endurance,壁強さ
+STAT_ENEMY_ENDURANCE,vs Staying Power,打たれ強さ 相手
 STAT_ENEMY_TOUGHNESS,vs Toughness,硬さ 相手
 STAT_ENEMY_LIFETIME,vs Spin Time,寿命 相手
 REWARD_PREVIEW_HEADING,If you take it,取ると

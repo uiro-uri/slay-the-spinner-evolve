@@ -1,13 +1,14 @@
 extends RefCounted
 
-## threat_meter.gd のテスト。マップのノードに出す「相手の硬さの取り分」メーターの、
+## threat_meter.gd のテスト。マップのノードに出す「相手の打たれ強さの取り分」メーターの、
 ## 値・出す相手の選び方・バーの幾何を確かめる。
 ##
 ## 見た目そのものは静止画では確かめられない(CLAUDE.mdの方針)ので、ここで固定するのは
 ## 「調整で数値を動かしても生き残る性質」だけ:
-##   - 取り分が対戦画面の「硬さ 相手」の行と**同じ値**であること(定義の二重化を防ぐ)
+##   - 取り分が対戦画面の1行目「打たれ強さ 相手」と**同じ値**であること(定義の二重化を防ぐ)
 ##   - 互角でちょうど PARITY、格上で越える、格下で下回る(向き)
-##   - 乱戦の硬さは頭数ぶんの和で、頭数が増えれば取り分も上がる
+##   - メーターが rps を読むこと(硬さだけでは体力の差が出ない)
+##   - 乱戦の脅威は頭数ぶんの和で、頭数が増えれば取り分も上がる
 ##   - 出すのは**進める先の戦闘ノードだけ**(遠いノードにもスタートにも出さない)
 ##   - バーはノードの下・ノードの直径ぶんの幅で、目盛りは必ず幅の中央
 
@@ -20,6 +21,7 @@ const MapScreenScript := preload("res://scenes/map/MapScreen.gd")
 
 func run(check: Callable) -> void:
 	_test_share_direction(check)
+	_test_share_reads_rps(check)
 	_test_share_matches_stat_readout(check)
 	_test_group_counts_heads(check)
 	_test_share_degenerate(check)
@@ -55,7 +57,7 @@ func _test_share_direction(check: Callable) -> void:
 
 
 ## **定義の二重化を防ぐ検査**。マップの取り分は、対戦画面のビルド表示が出す
-## 「硬さ 相手」の行と1ptも違ってはいけない。片方だけ別式に直されたらここが落ちる。
+## 1行目「打たれ強さ 相手」と1ptも違ってはいけない。片方だけ別式に直されたらここが落ちる。
 func _test_share_matches_stat_readout(check: Callable) -> void:
 	var player := SpinnerStats.default_player()
 	var cases := [
@@ -69,12 +71,62 @@ func _test_share_matches_stat_readout(check: Callable) -> void:
 		var mine := ThreatMeter.share(player, typed)
 		var rows := StatReadout.enemy_rows(player, ThreatMeter.stats_of(typed))
 		check.call(
-			rows.size() == 2 and absf(float(rows[0]["fraction"]) - mine) < EPS,
-			"マップの取り分が対戦画面の「硬さ 相手」と一致: %.4f" % mine
+			rows.size() == 3 and absf(float(rows[0]["fraction"]) - mine) < EPS,
+			"マップの取り分が対戦画面の「打たれ強さ 相手」と一致: %.4f" % mine
 		)
 
 
-## 乱戦の硬さは**頭数ぶんの和**。最大にしていた頃は、同じレベルなら1体でも3体でも
+## **メーターが rps を読むこと**。硬さ(質量×半径²)だけの軸だった頃、体力が2倍違う
+## 相手が同じ長さのメーターで並んでいた。
+##
+## 一次証拠(コールドプレイ 2026-08-08 深夜, seed=4711): 段4で「取り分0.55 格上」と
+## 出た部屋に入って3連敗した。0.55 は互角の目盛りのすぐ隣なので五分に見えるが、
+## 実際は自分の rps 18 に対し相手が 31 で、回転の持ち分が 1.7倍 違う部屋だった。
+## 統計でも自機の rps だけを 12→36 に振ると Lv2×2体の勝率は 34%→99% と動くのに、
+## 硬さ取り分は 0.51 で不動(playtest/measure_threat_axis.gd)。
+func _test_share_reads_rps(check: Callable) -> void:
+	var player := SpinnerStats.default_player()
+
+	# 硬さは同じ・回転だけ2倍の相手。旧軸(硬さ)なら互角、新軸なら格上。
+	var same := _enemy(player.mass, player.radius)
+	var spun := _enemy(player.mass, player.radius)
+	spun.stats.rps = player.rps * 2.0
+	var sames: Array[EnemyData] = [same]
+	var spuns: Array[EnemyData] = [spun]
+	var flat := ThreatMeter.share(player, sames)
+	var fast := ThreatMeter.share(player, spuns)
+	check.call(
+		absf(flat - StatReadout.PARITY) < EPS,
+		"回転も同じ相手はちょうど互角: %.4f" % flat
+	)
+	check.call(
+		fast > flat + 0.05,
+		"硬さが同じでも回転が2倍なら格上に出る: %.4f -> %.4f" % [flat, fast]
+	)
+	# 硬さの軸では**同じ値**にしか見えない2部屋であることを、旧軸で直に押さえる。
+	# ここが等しくなければ、上の差は硬さ由来で rps を読んだ証拠にならない。
+	check.call(
+		absf(StatReadout.toughness_share(player, ThreatMeter.stats_of(sames))
+			- StatReadout.toughness_share(player, ThreatMeter.stats_of(spuns))) < EPS,
+		"この2部屋は硬さの取り分では見分けが付かない"
+	)
+
+	# 自分の回転が伸びれば同じ部屋の脅威は下がる。撃破ボーナス(+1.0)や回転札の効きが
+	# マップに出る、ということ。硬さの軸ではここも動かなかった。
+	var wound := SpinnerStats.default_player()
+	wound.rps = player.rps * 2.0
+	check.call(
+		ThreatMeter.share(wound, spuns) < fast,
+		"自分の回転が伸びると同じ部屋の取り分は下がる"
+	)
+	check.call(
+		absf(StatReadout.toughness_share(wound, ThreatMeter.stats_of(spuns))
+			- StatReadout.toughness_share(player, ThreatMeter.stats_of(spuns))) < EPS,
+		"硬さの取り分は自分の回転では動かない(比較用の錨)"
+	)
+
+
+## 乱戦の脅威は**頭数ぶんの和**。最大にしていた頃は、同じレベルなら1体でも3体でも
 ## メーターが同じ長さになり、部屋を選ぶ材料として頭数が完全に抜け落ちていた
 ## (コールドプレイ 2026-08-03: 段5の「Lv3 2体」と隣の「Lv3 1体」がどちらも0.6台で、
 ## 実測の勝率は 24.8% と 91.2%)。
