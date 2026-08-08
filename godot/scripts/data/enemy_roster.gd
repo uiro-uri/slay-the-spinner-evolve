@@ -374,9 +374,49 @@ const VANGUARD_CHANCE := 0.2
 const MELEE_MASS_EXP := 0.25
 
 
+## 質量の割引を効かせる最低レベル。**Lv1の乱戦にだけ割引を掛けない**。
+##
+## **なぜLv1を外すのか**(2026-08-08)
+## この割引は「乱戦が崖(Lv3で 91→24→9%)になっている」のを均すために入れた
+## 均等化装置で、**乱戦が既に床のレベルには逆向きに効く**。Lv1は割引を掛ける前から
+## 頭数が危険になっておらず、掛けたぶんだけ「無料の複数枚引き」が深まっていた:
+##
+##   measure_group_size.gd (自機=素, intercept, 各400〜500戦) Lv1の勝率
+##     割引あり(exp 0.25, 従来): 100.0% / 99.8% / 99.4%   ← 3体でも0.6pt しか払わない
+##     割引なし(このコミット)  : 100.0% / 98.8% / 93.2%   ← 3体は6.8pt を払う
+##   Lv2以降は従来のまま(割引を外すと 90.8→33.0% で崖が戻る。ここは割引が要る)
+##
+## Lv1が乗るのは段1〜2 ＝ **ランで最初に下す2つの判断**で、そこは
+## 「頭数の多い部屋を選ぶだけ」の作業だった。3体部屋は報酬3枚・レア出やすさ×3.00
+## という**ランで最大級の見返り**を、勝率0.6ptで買えていた。
+## `scripts/playtest.sh` のアラートも段2を「勝率99.3% ＝ 何をしても勝つので、
+## そこに選択がない」と挙げ続けている。
+##
+## 一次証拠(コールドプレイ 2026-08-08, seed=48231): 段1で3体部屋を反射的に選び、
+## 残rps67%で抜けて3枚引いた。うち `enemy2 削り13.7(自分0.0)` は**一度も触れて
+## いない**まま同士討ちと壁で果てている。次の段2(単体)は残rps73%＝ほぼ同じ代償で
+## 1枚。3倍の見返りが、ほぼ同じ危険で手に入っていた。
+##
+## 割引の**外し方**を選んだ理由。敵の表(_enemy)やLv1のrpsを触ると単体戦まで
+## 動いてチュートリアルの1戦目が変わるが、割引はそもそも乱戦にしか掛からないので、
+## **単体戦は1ビットも動かない**(melee_mass_scaleは頭数1で必ず1.0)。動くのは
+## 「Lv1で2体以上を選んだとき」だけ＝賭けた人にだけ risk が戻る。
+##
+## 先に「報酬を自分が削った頭数ぶんにする」案を実装して測ったが、却下した
+## (経緯は journal 2026-08-08)。報酬側を絞る規則は、発射方針を random から
+## intercept まで振っても平均枚数が 2.51 対 2.53 枚と**腕の差を作らず**、
+## 見えない一律の減額にしかならなかった。
+const MELEE_DISCOUNT_MIN_LEVEL := 2
+
+
 ## 頭数countの乱戦メンバーの質量倍率。1体は必ず1.0(単体戦は従来と厳密に同じ)。
-static func melee_mass_scale(count: int) -> float:
+## levelを渡すと MELEE_DISCOUNT_MIN_LEVEL 未満のレベルでは割引を掛けない。
+## 既定の0は「レベルが分からない」＝従来どおり割引ありで、レベルを知らない
+## 呼び手(テストの素の掃引など)の意味を変えない。
+static func melee_mass_scale(count: int, level: int = 0) -> float:
 	if count <= 1:
+		return 1.0
+	if level > 0 and level < MELEE_DISCOUNT_MIN_LEVEL:
 		return 1.0
 	return pow(float(count), -MELEE_MASS_EXP)
 
@@ -389,8 +429,12 @@ static func melee_mass_scale(count: int) -> float:
 static func melee_member(data: EnemyData, count: int) -> EnemyData:
 	if data == null or count <= 1:
 		return data
+	var scale := melee_mass_scale(count, data.level)
+	if is_equal_approx(scale, 1.0):
+		# 割引が掛からないレベル(Lv1)は複製すらしない=素の個体そのまま。
+		return data
 	var stats := data.stats.duplicate_stats()
-	stats.mass *= melee_mass_scale(count)
+	stats.mass *= scale
 	return EnemyData.make(data.level, data.display_name, stats)
 
 
