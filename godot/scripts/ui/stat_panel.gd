@@ -64,7 +64,8 @@ func _build_shell() -> void:
 ## 前回から埋まり具合が変わった行のバーは、組み直した直後に一瞬明るくして目立たせる。
 ##
 ## enemy_stats はこれから戦う相手のステータス。渡されたときだけ、自分のビルドの下に
-## 「硬さ 相手 / 寿命 相手」の取り分バーを敵色で足す(StatReadout.enemy_rows)。
+## 「打たれ強さ 相手 / 硬さ 相手 / 寿命 相手」の取り分バーを敵色で足す
+## (StatReadout.enemy_rows)。
 ## Mainは戦闘画面へ差し替えるときだけ渡す——GameState.pending_enemies は次の戦闘まで
 ## 消えないので、それを直接見るとマップ画面に前の相手が出たままになる。
 func refresh(enemy_stats: Array[SpinnerStats] = []) -> void:
@@ -98,7 +99,7 @@ func refresh(enemy_stats: Array[SpinnerStats] = []) -> void:
 			_flash(bar, Palette.PLAYER)
 
 	# これから戦う相手が渡されていれば、自分との取り分を敵色のバーで続ける。
-	# 互角の位置に目盛りが立つので、越えていれば「相手の方が硬い/長生き」と読める。
+	# 互角の位置に目盛りが立つので、越えていれば「相手の方が上」と読める。
 	for row in StatReadout.enemy_rows(GameState.player_stats, enemy_stats):
 		var key: String = row["label_key"]
 		var fraction: float = row["fraction"]

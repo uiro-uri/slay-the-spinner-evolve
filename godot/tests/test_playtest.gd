@@ -895,7 +895,7 @@ func _test_naive_play_route_text(check: Callable) -> void:
 		RewardQuality.ratio_for_node(vanguard) > 1.0,
 		"naive_play: 斥候の倍率は基準より大きい (%s)" % vanguard_text)
 
-	# 相手の硬さの取り分。実UIのマップに載ったメーターのCLI版で、**値も判定も
+	# 相手の打たれ強さの取り分。実UIのマップに載ったメーターのCLI版で、**値も判定も
 	# ThreatMeter と一致していなければならない**——ここがずれると、コールドプレイの
 	# エージェントと実プレイヤーが違う情報で部屋を選ぶ(過去4回踏んだ型のズレ)。
 	var player := SpinnerStats.default_player()
@@ -911,6 +911,11 @@ func _test_naive_play_route_text(check: Callable) -> void:
 	check.call(
 		("%.2f" % ThreatMeter.share(player, lv1.enemies)) in lv1_text,
 		"naive_play: 取り分の値がThreatMeterと一致 (%s)" % lv1_text)
+	# **軸の名前まで一致していること**。値だけ合っていても「硬さ取り分」と書いてあれば、
+	# CLIだけが古い軸を読んでいると誤解したまま部屋を選ぶことになる。
+	check.call(
+		"打たれ強さ取り分" in lv1_text,
+		"naive_play: 取り分の軸名が実UIと同じ打たれ強さ (%s)" % lv1_text)
 	check.call(
 		"格下" in lv1_text and not ("格上" in lv1_text),
 		"naive_play: 初期ビルドから見てLv1は格下と出る (%s)" % lv1_text)

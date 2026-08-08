@@ -859,7 +859,7 @@ static func route_text(col: int, n: MapTree.MapNode, player: SpinnerStats = null
 		col, n.level(), n.enemy_count(), threat, n.reward_count(), field_label]
 
 
-## 進める先1件ぶんの脅威表示。実UIのマップが出す「相手の硬さの取り分」メーターの
+## 進める先1件ぶんの脅威表示。実UIのマップが出す「相手の打たれ強さの取り分」メーターの
 ## CLI版で、値は ThreatMeter.share をそのまま呼ぶ。
 ##
 ## **ハーネスと実ゲームのズレを作らないため**に足してある。従来ここは「Lv3 2体」しか
@@ -872,7 +872,7 @@ static func threat_text(n: MapTree.MapNode, player: SpinnerStats) -> String:
 		return ""
 	var share := ThreatMeter.share(player, n.enemies)
 	var mark := "格上" if share > StatReadout.PARITY else "格下"
-	return "(硬さ取り分%.2f %s)" % [share, mark]
+	return "(打たれ強さ取り分%.2f %s)" % [share, mark]
 
 
 ## 対戦画面のビルド表示(StatPanel)が出す攻めの2行のCLI版。値は

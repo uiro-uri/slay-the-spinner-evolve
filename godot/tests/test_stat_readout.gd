@@ -24,6 +24,7 @@ func run(check: Callable) -> void:
 	_test_ghost_row(check)
 	_test_composite_rows(check)
 	_test_enemy_rows(check)
+	_test_enemy_endurance_row(check)
 	_test_offense_rows(check)
 	_test_enemy_rows_wiring(check)
 
@@ -194,35 +195,47 @@ func _test_enemy_rows(check: Callable) -> void:
 		"中身がnullだけでも行を出さない"
 	)
 
-	# 行はちょうど2行、キーと並びを固定する。
+	# 行の並び。打たれ強さ→硬さ→寿命。マップの脅威メーターが借りるのは1行目。
+	const ENDURE := 0
+	const TOUGH := 1
+	const LIFE := 2
+
+	# 行はちょうど3行、キーと並びを固定する。
 	var even := SpinnerStats.default_player()
 	var evens: Array[SpinnerStats] = [even]
 	var rows := StatReadout.enemy_rows(player, evens)
-	check.call(rows.size() == 2, "敵の行は2行(硬さ/寿命): %d" % rows.size())
 	check.call(
-		rows[0]["label_key"] == "STAT_ENEMY_TOUGHNESS",
-		"1行目は敵の硬さ -> %s" % rows[0]["label_key"]
+		rows.size() == 3,
+		"敵の行は3行(打たれ強さ/硬さ/寿命): %d" % rows.size()
 	)
 	check.call(
-		rows[1]["label_key"] == "STAT_ENEMY_LIFETIME",
-		"2行目は敵の寿命 -> %s" % rows[1]["label_key"]
+		rows[ENDURE]["label_key"] == "STAT_ENEMY_ENDURANCE",
+		"1行目は敵の打たれ強さ -> %s" % rows[ENDURE]["label_key"]
+	)
+	check.call(
+		rows[TOUGH]["label_key"] == "STAT_ENEMY_TOUGHNESS",
+		"2行目は敵の硬さ -> %s" % rows[TOUGH]["label_key"]
+	)
+	check.call(
+		rows[LIFE]["label_key"] == "STAT_ENEMY_LIFETIME",
+		"3行目は敵の寿命 -> %s" % rows[LIFE]["label_key"]
 	)
 
 	# 同じ性能の相手はちょうど互角(PARITY)。目盛りの位置と一致する。
 	check.call(
-		absf(rows[0]["fraction"] - StatReadout.PARITY) < EPS,
-		"同性能の相手は硬さが互角(PARITY=%f): %f" % [StatReadout.PARITY, rows[0]["fraction"]]
+		absf(rows[TOUGH]["fraction"] - StatReadout.PARITY) < EPS,
+		"同性能の相手は硬さが互角(PARITY=%f): %f" % [StatReadout.PARITY, rows[TOUGH]["fraction"]]
 	)
 	check.call(
-		absf(rows[1]["fraction"] - StatReadout.PARITY) < EPS,
-		"同性能の相手は寿命が互角: %f" % rows[1]["fraction"]
+		absf(rows[LIFE]["fraction"] - StatReadout.PARITY) < EPS,
+		"同性能の相手は寿命が互角: %f" % rows[LIFE]["fraction"]
 	)
 
 	# 相手が硬いほど取り分が伸び、必ず互角の目盛りを越える(=越えたら格上と読める)。
 	var hard := SpinnerStats.default_player()
 	hard.mass = player.mass * 4.0
 	var hards: Array[SpinnerStats] = [hard]
-	var hard_f: float = StatReadout.enemy_rows(player, hards)[0]["fraction"]
+	var hard_f: float = StatReadout.enemy_rows(player, hards)[TOUGH]["fraction"]
 	check.call(
 		hard_f > StatReadout.PARITY,
 		"自分より硬い相手は目盛りを越える: %f" % hard_f
@@ -230,7 +243,7 @@ func _test_enemy_rows(check: Callable) -> void:
 	var soft := SpinnerStats.default_player()
 	soft.mass = player.mass * 0.25
 	var softs: Array[SpinnerStats] = [soft]
-	var soft_f: float = StatReadout.enemy_rows(player, softs)[0]["fraction"]
+	var soft_f: float = StatReadout.enemy_rows(player, softs)[TOUGH]["fraction"]
 	check.call(
 		soft_f < StatReadout.PARITY,
 		"自分より柔らかい相手は目盛りに届かない: %f" % soft_f
@@ -243,11 +256,11 @@ func _test_enemy_rows(check: Callable) -> void:
 	var boss := SpinnerStats.default_player()
 	boss.mass = StatReadout.TOUGHNESS_MAX * 20.0
 	var bosses: Array[SpinnerStats] = [boss]
-	var boss_f: float = StatReadout.enemy_rows(player, bosses)[0]["fraction"]
+	var boss_f: float = StatReadout.enemy_rows(player, bosses)[TOUGH]["fraction"]
 	var bigger_boss := SpinnerStats.default_player()
 	bigger_boss.mass = StatReadout.TOUGHNESS_MAX * 60.0
 	var bigger_bosses: Array[SpinnerStats] = [bigger_boss]
-	var bigger_f: float = StatReadout.enemy_rows(player, bigger_bosses)[0]["fraction"]
+	var bigger_f: float = StatReadout.enemy_rows(player, bigger_bosses)[TOUGH]["fraction"]
 	check.call(boss_f < 1.0, "自分のレンジを超える相手でも満タンに張り付かない: %f" % boss_f)
 	check.call(
 		bigger_f > boss_f,
@@ -258,8 +271,8 @@ func _test_enemy_rows(check: Callable) -> void:
 	var grown := SpinnerStats.default_player()
 	grown.mass = player.mass * 4.0
 	check.call(
-		StatReadout.enemy_rows(grown, hards)[0]["fraction"]
-			< StatReadout.enemy_rows(player, hards)[0]["fraction"],
+		StatReadout.enemy_rows(grown, hards)[TOUGH]["fraction"]
+			< StatReadout.enemy_rows(player, hards)[TOUGH]["fraction"],
 		"自分が硬くなると同じ相手の取り分は下がる"
 	)
 
@@ -276,9 +289,9 @@ func _test_enemy_rows(check: Callable) -> void:
 	# 同じ長さのメーター」を潰している検査。
 	var two_tough: Array[SpinnerStats] = [tough_one, tough_one]
 	var three_tough: Array[SpinnerStats] = [tough_one, tough_one, tough_one]
-	var f1: float = StatReadout.enemy_rows(player, tough_only)[0]["fraction"]
-	var f2: float = StatReadout.enemy_rows(player, two_tough)[0]["fraction"]
-	var f3: float = StatReadout.enemy_rows(player, three_tough)[0]["fraction"]
+	var f1: float = StatReadout.enemy_rows(player, tough_only)[TOUGH]["fraction"]
+	var f2: float = StatReadout.enemy_rows(player, two_tough)[TOUGH]["fraction"]
+	var f3: float = StatReadout.enemy_rows(player, three_tough)[TOUGH]["fraction"]
 	check.call(f1 < f2 and f2 < f3, "硬さの取り分は頭数で単調に上がる: %f/%f/%f" % [f1, f2, f3])
 	# 単体の部屋は和＝その個体の硬さ。乱戦以外で値が動いていないことの錨。
 	check.call(
@@ -294,27 +307,27 @@ func _test_enemy_rows(check: Callable) -> void:
 	# ここは「変わらない」だった。
 	var padded: Array[SpinnerStats] = [tough_one, soft, soft, soft]
 	check.call(
-		StatReadout.enemy_rows(player, padded)[0]["fraction"] > f1,
+		StatReadout.enemy_rows(player, padded)[TOUGH]["fraction"] > f1,
 		"弱い個体でも足せば取り分は上がる(頭数は薄めない)"
 	)
 	# 寿命だけは最大のまま。頭数が増えても待ち時間は伸びない(同時に回っている)。
 	var mixed: Array[SpinnerStats] = [soft, tough_one, lasting_one]
 	var mixed_rows := StatReadout.enemy_rows(player, mixed)
 	check.call(
-		absf(mixed_rows[1]["fraction"]
-			- StatReadout.enemy_rows(player, lasting_only)[1]["fraction"]) < EPS,
-		"乱戦の寿命はいちばん寿命が長い個体を代表にする: %f" % mixed_rows[1]["fraction"]
+		absf(mixed_rows[LIFE]["fraction"]
+			- StatReadout.enemy_rows(player, lasting_only)[LIFE]["fraction"]) < EPS,
+		"乱戦の寿命はいちばん寿命が長い個体を代表にする: %f" % mixed_rows[LIFE]["fraction"]
 	)
 	var two_lasting: Array[SpinnerStats] = [lasting_one, lasting_one]
 	check.call(
-		absf(StatReadout.enemy_rows(player, two_lasting)[1]["fraction"]
-			- StatReadout.enemy_rows(player, lasting_only)[1]["fraction"]) < EPS,
+		absf(StatReadout.enemy_rows(player, two_lasting)[LIFE]["fraction"]
+			- StatReadout.enemy_rows(player, lasting_only)[LIFE]["fraction"]) < EPS,
 		"寿命の取り分は頭数では増えない(和にしていない)"
 	)
 	# nullが混じっても生きている個体で決まる(落ちない)。
 	var with_null: Array[SpinnerStats] = [null, tough_one]
 	check.call(
-		absf(StatReadout.enemy_rows(player, with_null)[0]["fraction"] - f1) < EPS,
+		absf(StatReadout.enemy_rows(player, with_null)[TOUGH]["fraction"] - f1) < EPS,
 		"nullが混じっても生きている個体で決まる"
 	)
 
@@ -324,14 +337,14 @@ func _test_enemy_rows(check: Callable) -> void:
 		PartPreview.toughness(tough_one) + PartPreview.toughness(player)
 	)
 	check.call(
-		absf(StatReadout.enemy_rows(player, tough_only)[0]["fraction"] - expected) < EPS,
+		absf(StatReadout.enemy_rows(player, tough_only)[TOUGH]["fraction"] - expected) < EPS,
 		"敵の硬さは PartPreview.toughness と同じ定義: %f" % expected
 	)
 	var expected_life := PartPreview.lifetime(lasting_one) / (
 		PartPreview.lifetime(lasting_one) + PartPreview.lifetime(player)
 	)
 	check.call(
-		absf(StatReadout.enemy_rows(player, lasting_only)[1]["fraction"] - expected_life) < EPS,
+		absf(StatReadout.enemy_rows(player, lasting_only)[LIFE]["fraction"] - expected_life) < EPS,
 		"敵の寿命は PartPreview.lifetime と同じ定義: %f" % expected_life
 	)
 
@@ -339,6 +352,118 @@ func _test_enemy_rows(check: Callable) -> void:
 	for row in StatReadout.enemy_rows(player, bigger_bosses):
 		var f: float = row["fraction"]
 		check.call(f >= 0.0 and f <= 1.0, "%s の取り分が0〜1: %f" % [row["label_key"], f])
+
+
+## 敵の1行目=打たれ強さの取り分(StatReadout.endurance_share)。マップの脅威メーターが
+## そのまま借りる値なので、ここが規則の置き場になる。
+##
+## 硬さの行との**違い**を押さえるのがこのテストの要点。硬さは 質量×半径² だけを見て
+## rps を読まないので、「体力が2倍違う相手が同じ長さのメーターで出る」という
+## 見落としが起きていた(実測: 自機の rps だけを 12→36 に振ると Lv2×2体の勝率は
+## 34%→99% と動くのに硬さ取り分は 0.51 で不動。playtest/measure_threat_axis.gd)。
+## 硬さの行が生きていることは _test_enemy_rows 側が別に押さえている。
+func _test_enemy_endurance_row(check: Callable) -> void:
+	const ENDURE := 0
+	var player := SpinnerStats.default_player()
+
+	# 同性能の相手はちょうど互角(目盛りの位置と一致)。
+	var evens: Array[SpinnerStats] = [SpinnerStats.default_player()]
+	check.call(
+		absf(StatReadout.enemy_rows(player, evens)[ENDURE]["fraction"] - StatReadout.PARITY) < EPS,
+		"同性能の相手は打たれ強さが互角"
+	)
+
+	# **硬さが同じでも rps が違えば取り分が動く**。硬さの行では動かない差。ここが
+	# この行を足した理由そのものなので、落ちたら軸が硬さへ戻っている。
+	var spun := SpinnerStats.default_player()
+	spun.rps = player.rps * 2.0
+	var spuns: Array[SpinnerStats] = [spun]
+	var spun_rows := StatReadout.enemy_rows(player, spuns)
+	check.call(
+		spun_rows[ENDURE]["fraction"] > StatReadout.PARITY + 0.05,
+		"回転が2倍の相手は打たれ強さで格上になる: %f" % spun_rows[ENDURE]["fraction"]
+	)
+	check.call(
+		absf(spun_rows[1]["fraction"] - StatReadout.PARITY) < EPS,
+		"同じ相手を硬さの行は互角と言う(=硬さだけでは見えない差): %f" % spun_rows[1]["fraction"]
+	)
+	# 自分の回転が伸びれば同じ相手の取り分は下がる(撃破ボーナスや回転札がメーターに出る)。
+	var wound := SpinnerStats.default_player()
+	wound.rps = player.rps * 2.0
+	check.call(
+		StatReadout.enemy_rows(wound, spuns)[ENDURE]["fraction"]
+			< spun_rows[ENDURE]["fraction"],
+		"自分の回転が伸びると同じ相手の取り分は下がる"
+	)
+
+	# 硬さの側も読む(rps だけの行になっていない)。
+	var hard := SpinnerStats.default_player()
+	hard.mass = player.mass * 4.0
+	var hards: Array[SpinnerStats] = [hard]
+	check.call(
+		StatReadout.enemy_rows(player, hards)[ENDURE]["fraction"] > StatReadout.PARITY + 0.05,
+		"硬い相手も打たれ強さで格上になる"
+	)
+
+	# 集約は**頭数ぶんの和**(硬さと同じ規約)。1体でも3体でも同じ長さ、を潰す検査。
+	var two: Array[SpinnerStats] = [hard, hard]
+	var three: Array[SpinnerStats] = [hard, hard, hard]
+	var e1: float = StatReadout.enemy_rows(player, hards)[ENDURE]["fraction"]
+	var e2: float = StatReadout.enemy_rows(player, two)[ENDURE]["fraction"]
+	var e3: float = StatReadout.enemy_rows(player, three)[ENDURE]["fraction"]
+	check.call(e1 < e2 and e2 < e3, "打たれ強さの取り分は頭数で単調に上がる: %f/%f/%f" % [e1, e2, e3])
+	check.call(
+		absf(StatReadout.room_endurance(hards) - PartPreview.endurance(hard)) < EPS,
+		"単体の部屋の打たれ強さはその個体そのもの"
+	)
+	check.call(
+		absf(StatReadout.room_endurance(two) - 2.0 * PartPreview.endurance(hard)) < EPS,
+		"2体の部屋の打たれ強さは和"
+	)
+
+	# 定義の共有: 報酬カードの「打たれ強さ」と同じ PartPreview を通す。別実装になると
+	# カードが約束した軸とメーターの軸が食い違う。
+	var expected := PartPreview.endurance(hard) / (
+		PartPreview.endurance(hard) + PartPreview.endurance(player)
+	)
+	check.call(
+		absf(e1 - expected) < EPS,
+		"敵の打たれ強さは PartPreview.endurance と同じ定義: %f" % expected
+	)
+
+	# 相手が居ない/nullだけ/自分がnull は互角に倒す(0埋めは「相手が弱い」という別の嘘)。
+	var empty: Array[SpinnerStats] = []
+	var only_null: Array[SpinnerStats] = [null]
+	check.call(
+		absf(StatReadout.endurance_share(player, empty) - StatReadout.PARITY) < EPS,
+		"相手が居なければ互角"
+	)
+	check.call(
+		absf(StatReadout.endurance_share(player, only_null) - StatReadout.PARITY) < EPS,
+		"nullだけでも互角"
+	)
+	check.call(
+		absf(StatReadout.endurance_share(null, hards) - StatReadout.PARITY) < EPS,
+		"自分がnullでも互角"
+	)
+	check.call(
+		absf(StatReadout.room_endurance(only_null) + 1.0) < EPS,
+		"有効な相手が居ない部屋の打たれ強さは -1.0(0体と打たれ強さ0を取り違えない)"
+	)
+
+	# 上端を決め打っていない: ボス級でも満タンに張り付かず、さらに上と区別が付く。
+	var boss := SpinnerStats.default_player()
+	boss.mass = StatReadout.TOUGHNESS_MAX * 20.0
+	boss.rps = 60.0
+	var bosses: Array[SpinnerStats] = [boss]
+	var bigger := SpinnerStats.default_player()
+	bigger.mass = StatReadout.TOUGHNESS_MAX * 60.0
+	bigger.rps = 60.0
+	var biggers: Array[SpinnerStats] = [bigger]
+	var boss_f: float = StatReadout.enemy_rows(player, bosses)[ENDURE]["fraction"]
+	var bigger_f: float = StatReadout.enemy_rows(player, biggers)[ENDURE]["fraction"]
+	check.call(boss_f < 1.0, "ボス級でも満タンに張り付かない: %f" % boss_f)
+	check.call(bigger_f > boss_f, "レンジ外どうしでも差が残る: %f -> %f" % [boss_f, bigger_f])
 
 
 ## 攻めの2行(攻め力・弾き)。動機は「報酬カードが約束した攻めが、取った瞬間に
@@ -544,7 +669,7 @@ func _test_enemy_rows_wiring(check: Callable) -> void:
 	)
 
 	# 翻訳(キーがそのまま出る=訳の抜けはこれで気付く)。
-	for key in ["STAT_ENEMY_TOUGHNESS", "STAT_ENEMY_LIFETIME"]:
+	for key in ["STAT_ENEMY_ENDURANCE", "STAT_ENEMY_TOUGHNESS", "STAT_ENEMY_LIFETIME"]:
 		for locale in ["en", "ja"]:
 			TranslationServer.set_locale(locale)
 			var text := tr(key)

@@ -15,10 +15,18 @@ extends RefCounted
 ## 塞いだが、**部屋を選ぶ決断はその1画面手前のマップで起きる**。戦闘画面で
 ## 「格上だ」と分かっても、そのときにはもう引き返せない。
 ##
-## 値は StatReadout.toughness_share をそのまま呼ぶ。部屋の硬さの定義が2箇所に
-## あると、マップと対戦画面で違う脅威を出すことになる。取り分 敵/(自分+敵) なので
-## 上端を決め打たずに済み(硬さは100倍動くので絶対レンジのバーでは Lv3 以上が
-## 全部満タンに張り付く)、互角でちょうど StatReadout.PARITY。
+## 値は StatReadout.endurance_share をそのまま呼ぶ。部屋の脅威の定義が2箇所に
+## あると、マップと対戦画面で違う脅威を出すことになる(対戦画面の enemy_rows も
+## 1行目がこれ)。取り分 敵/(自分+敵) なので上端を決め打たずに済み(打たれ強さは
+## 1000倍動くので絶対レンジのバーでは Lv3 以上が全部満タンに張り付く)、
+## 互角でちょうど StatReadout.PARITY。
+##
+## **軸は硬さから打たれ強さへ移した**(2026-08-08 深夜)。硬さ(質量×半径²)は
+## 1接触で削られる rps の分母でしかなく、**rps を一切読まない**。先に回転が尽きた方が
+## 負けるゲームなので、それだけでは部屋を抜けられるかを答えられない。実測では
+## 硬さを固定して自機の rps だけを振ると Lv2×2体の勝率が 34%→99% と動くのに、
+## 硬さ取り分は 0.51 で不動だった(playtest/measure_threat_axis.gd)。
+## 理由と一次証拠の全文は StatReadout.endurance_share の doc に置いてある。
 ##
 ## **部屋の硬さは頭数ぶんの和**(2026-08-03 のサイクル)。それ以前は群の最大だったので、
 ## **同じレベルなら1体でも3体でもメーターが同じ長さ**になっていた。頭数はピップで
@@ -59,9 +67,10 @@ static func stats_of(enemies: Array[EnemyData]) -> Array[SpinnerStats]:
 	return out
 
 
-## この部屋の脅威(相手の硬さの取り分)。定義は対戦画面の「硬さ 相手」の行と共有する。
+## この部屋の脅威(相手の打たれ強さの取り分)。
+## 定義は対戦画面の「打たれ強さ 相手」の行と共有する。
 static func share(player: SpinnerStats, enemies: Array[EnemyData]) -> float:
-	return StatReadout.toughness_share(player, stats_of(enemies))
+	return StatReadout.endurance_share(player, stats_of(enemies))
 
 
 ## 進める先のうち**戦闘ノードだけ**の脅威。座標 → 取り分。
