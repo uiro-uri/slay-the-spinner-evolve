@@ -247,6 +247,7 @@ func _assign_encounters(rng: RandomNumberGenerator) -> void:
 		node.field = FieldRoster.pick_for_step(coord.x, rng)
 	_ensure_single_escape(rng)
 	_ensure_vanguard_choice(rng)
+	_ensure_distinct_choice(rng)
 
 
 ## 段SINGLE_ESCAPE_FROM_STEP以降のノードの進める先に「1体部屋」を最低1つ保証する。
@@ -365,6 +366,213 @@ func _ensure_vanguard_choice(rng: RandomNumberGenerator) -> void:
 			var chosen: Vector2i = targets[rng.randi_range(0, targets.size() - 1)]
 			var chosen_node: MapNode = nodes[chosen]
 			chosen_node.enemies = [EnemyRoster.pick_for_step(chosen.x, rng)]
+
+
+## 「見分けの付かない2択」を潰す: 進める先が**全部**同じレベルの単体部屋なら、
+## そのうち1つを2体の乱戦へ昇格し、**同じ段の別の乱戦から頭数を1つもらって
+## 帳尻を合わせる**。
+##
+## 動機はコールドプレイの一次証拠(2026-08-08, seed=48213)。段4・段5・段7の3回、
+## 進める先の2つが
+##   `col+3 : Lv4 1体(硬さ取り分0.55 格上)→報酬1枚` と
+##   `col+4 : Lv4 1体(硬さ取り分0.55 格上)→報酬1枚`
+## のように**表示されている数字が1つ残らず同じ**だった(段8は1択)。危険(レベル・
+## 頭数・脅威メーター)も見返り(報酬枚数・レア倍率)も一致するので、選ぶ根拠が
+## どこにも無く、3回とも指の赴くままに押した。段1〜3は 1体/2体/3体 が並んで
+## 「安全に1枚か、賭けて2〜3枚か」の賭けになっていたのに、**後半はマップが
+## ただの通路になる**。
+##
+## 差が付いていない軸は頭数だけではないが、頭数以外は動かさない:
+## - **レベル**は斥候(`_ensure_vanguard_choice`)が既に持っている軸で、
+##   斥候が混ざった段(段6)は実際に見分けが付いていた=足す必要がない。
+## - **土俵**はマップに外周形状・等高線・柱として描かれてはいるが、難易度が
+##   どこにも数字で出ない(脅威メーターは土俵に無補正)。実測
+##   (`playtest/measure_field.gd`, Lv2各400戦)でも勝率は
+##   CLASSIC 93.8% / BOWL 91.8% / PLATE 91.2% / ARENA 87.5% / ROUND 87.0% と
+##   6pt に収まり、大きく外れるのは PILLARS 73.2% の1つだけ。つまり土俵違いは
+##   **賭けの内容を変えていない**ので、ここでは同一として扱う。
+##
+## 昇格する側の条件は `_promote_compensation` と同じ理屈で揃える:
+## - ゴール(ボス)は演出上つねに単体なので触らない。
+## - 斥候は昇格させない(次レベルの乱戦は脅威が読めず、斥候も黙って消える)。
+## - `_parents_keep_escape_without` を通ったノードだけ。**他の親から見た
+##   1体部屋の逃げ道**(`_ensure_single_escape`)を後から壊さないため。この保証は
+##   段5以降にしか要らないが、全段で掛けても失うのは昇格の機会だけなので、
+##   ここでは段を分けずに常に守る側へ倒す。
+## 昇格しても自分自身の進める先には昇格しなかった単体部屋が必ず残る(前提が
+## 「全部1体」なので2つ以上ある)ので、この段の逃げ道は定義から保たれる。
+## 斥候の集合も動かさない(素の段レベルの乱戦を作るだけ)ので
+## `_ensure_vanguard_choice` の保証も保たれる=**この関数は最後に走ってよい**。
+##
+## 頭数は2体で固定する。3体まで振ると「同一の2択」を消すためだけに部屋の危険度が
+## 大きく動いてしまう(Lv3の勝率は 1体91% → 2体54% → 3体41%)。対比を作るのに
+## 必要な最小の1歩が2体。
+##
+## **昇格だけでは経済が太る**。交換にせず「1体を2体へ」だけやった版をボットで
+## 測ると、頭数ぶん報酬が増えるぶんクリア率が **54.7% → 65.3%**、決戦の勝率が
+## **37.4% → 46.4%** と大きく跳ねた(intercept+greedy, 各300ラン)。ここで直したいのは
+## 「選ぶ根拠が無い」ことであって難易度ではないので、`_ensure_single_escape` が
+## 引き直しを昇格で相殺しているのと同じ理屈で、**同じ段の別の乱戦から頭数を1つ
+## もらう**(`_demote_donor`。3体→2体 か 2体→1体)。段の頭数の総和は1つも動かない。
+## 渡し手が見つからなければ昇格もしない——経済を動かさない方を優先する。
+##
+## **1周で足りる**。交換は「渡し手のいる分岐点」を1つ潰すだけで新しい渡し手を
+## 生まないので、2周目に回しても取り分は1つも増えない(500生成で総数が1つも
+## 動かないことを measure_map_choice で確認済み)。掃引は1回だけにしてある。
+##
+## 段の昇順・列の昇順で舐めるのは決定性のため(Dictionaryの挿入順に依存させない)。
+func _ensure_distinct_choice(rng: RandomNumberGenerator) -> void:
+	for step in range(0, STEP_GOAL):
+		var columns: Array[int] = []
+		for coord in nodes:
+			if coord.x == step:
+				columns.append(coord.y)
+		columns.sort()
+
+		for column in columns:
+			var node: MapNode = nodes[Vector2i(step, column)]
+			var targets := node.targets()
+			if targets.size() < 2:
+				continue
+			if not _targets_are_alike(targets):
+				continue
+			var candidates: Array[Vector2i] = []
+			for t in targets:
+				var tn: MapNode = nodes.get(t)
+				if tn == null or t == GOAL_COORD or tn.is_vanguard():
+					continue
+				if _parents_keep_escape_without(t):
+					candidates.append(t)
+			if candidates.is_empty():
+				continue
+			candidates.sort()  # 決定性: targets の並び順に依存しない
+			var chosen: Vector2i = candidates[rng.randi_range(0, candidates.size() - 1)]
+			var donor := _demote_donor(chosen, targets, rng)
+			if donor == GOAL_COORD:
+				continue  # 割に合う交換相手が居ない=経済を太らせないために何もしない
+			# 型付きのローカルへ受けてから代入する。`nodes[...]`(Variant)へ直接
+			# 代入すると Array[EnemyData] への変換が働かず、実行時に
+			# 「Invalid assignment ... value of type 'Array'」で**この関数だけが
+			# 黙って中断**する(呼び手は続行するので生成は成功したように見える)。
+			var donor_node: MapNode = nodes[donor]
+			donor_node.enemies = EnemyRoster.group_of(
+				EnemyRoster.level_for_step(donor.x),
+				donor_node.enemy_count() - 1,
+				rng,
+				donor.x
+			)
+			# 乱戦の組み方は EnemyRoster.group_of に一本化してある(頭数ぶんの質量倍率も
+			# 段のrpsランプもそこで掛かる)。_promote_compensation と同じ入り口。
+			var chosen_node: MapNode = nodes[chosen]
+			chosen_node.enemies = EnemyRoster.group_of(
+				EnemyRoster.level_for_step(chosen.x), 2, rng, chosen.x
+			)
+
+
+
+## 昇格の交換相手: step の乱戦ノードを1つ選んで返す。割に合う相手が居なければ
+## GOAL_COORD(ボスは常に単体＝乱戦ノードになりえないので「該当なし」の番兵に使える)。
+##
+## `exclude` はいま見ている分岐点の進める先。ここから落とすと、せっかく作った対比を
+## 自分で潰す(2択の片方を上げて片方を下げるだけ)ので除く。
+##
+## 渡す/貰う頭数は**1つだけ**。donor は頭数を1つ減らし(3体→2体 か 2体→1体)、
+## `chosen` は 1体→2体 になるので、段の頭数の総和はきっかり保たれる。
+##
+## **3体の donor が最優先になる**。3体→2体 ではそのノードは乱戦のままなので、
+## そこを目印にしていた親の2択は1つも平らにならない(損=0)。2体→1体 は目印が
+## 消えるので損が立つ。下の「損の少ない順」がそれを自動的に選ぶ。
+##
+## **交換は移動元を潰しうる**。乱戦ノードはこのマップで「見分け」を作っている
+## 主な実体なので、2体を動かすと移動元の親が平らになる。だから「潰さない相手」を
+## 探すのではなく、**差し引きで得になる交換だけ**を通す:
+##   得 = `chosen` を2体にすると平らでなくなる親の数
+##   損 = `donor` の頭数を1つ減らすと新しく平らになる親の数
+## で 得 > 損 のときだけ交換する。親を多く抱えた2体(＝多くの2択を1つで支えている)は
+## 損が大きくて選ばれず、3体や、親が既に別の乱戦を持っている冗長な2体から動く。
+## 同点は動かさない(意味のない揺らぎを入れない)。
+##
+## `chosen` と `donor` の両方を進める先に持つ親は損の側だけで数える(その親は昇格前も
+## 昇格後も平らではないので、実際には損でも得でもない)。多めに見積もる方向なので、
+## 経済を太らせる側へは倒れない。
+func _demote_donor(
+	chosen: Vector2i, exclude: Array[Vector2i], rng: RandomNumberGenerator
+) -> Vector2i:
+	var gain := _alike_parent_count(chosen, Vector2i(-1, -1))
+	if gain <= 0:
+		return GOAL_COORD
+	var best_loss := gain - 1  # 損が得に並んだ時点で「割に合わない」＝上限は得−1
+	var candidates: Array[Vector2i] = []
+	for coord in nodes:
+		if coord.x != chosen.x or coord in exclude or coord == GOAL_COORD:
+			continue
+		var node: MapNode = nodes[coord]
+		if node.enemy_count() < 2:
+			continue
+		# 損 = いま平らでない親のうち、coord の頭数が1つ減ると平らになる数。
+		# 3体→2体 は乱戦のままなので、定義から1つも平らにならない=損0。
+		var loss := 0
+		if node.enemy_count() == 2:
+			loss = (
+				_alike_parent_count(coord, coord)
+				- _alike_parent_count(coord, Vector2i(-1, -1))
+			)
+		if loss > best_loss:
+			continue
+		if loss < best_loss:
+			best_loss = loss
+			candidates.clear()
+		candidates.append(coord)
+	if candidates.is_empty():
+		return GOAL_COORD
+	candidates.sort()  # 決定性: Dictionaryの列挙順に依存しない
+	return candidates[rng.randi_range(0, candidates.size() - 1)]
+
+
+## coord を進める先に持つ親のうち、2択以上を持ち、かつ進める先が見分けの付かない
+## ものの数。`as_single` は `_targets_are_alike` へそのまま渡す仮定(coord を渡せば
+## 「coord が1体へ落ちたら」の数になる)。
+func _alike_parent_count(coord: Vector2i, as_single: Vector2i) -> int:
+	var total := 0
+	for parent_coord in nodes:
+		if parent_coord.x != coord.x - 1:
+			continue
+		var parent: MapNode = nodes[parent_coord]
+		var targets := parent.targets()
+		if targets.size() < 2 or not coord in targets:
+			continue
+		if _targets_are_alike(targets, as_single):
+			total += 1
+	return total
+
+
+## 進める先が全部「同じレベルの1体部屋」か＝マップ上で見分けが付かないか。
+##
+## マップのノードが出す判断材料は レベル・頭数・報酬枚数・レア倍率・脅威メーター で、
+## このうち独立に動くのは実レベルと頭数の2つだけ(報酬枚数は頭数そのもの、レア倍率と
+## 脅威メーターはレベルと頭数の関数)。だから両方一致＝表示が全一致になる。
+##
+## 頭数が2以上で揃っている場合は昇格の出番が無い(2体を3体にすると危険度が
+## 跳ねる)ので、ここで false を返して手を出さない。
+##
+## `as_single` に座標を渡すと、そのノードだけ「1体へ落ちたら」と仮定して判定する
+## (交換相手の下見。`_parents_keep_distinct_without` が使う)。落としてもレベルは
+## 段相応のまま変わらないので、仮定するのは頭数だけでよい。
+func _targets_are_alike(
+	targets: Array[Vector2i], as_single: Vector2i = Vector2i(-1, -1)
+) -> bool:
+	var level := -1
+	for t in targets:
+		var tn: MapNode = nodes.get(t)
+		if tn == null or not tn.has_encounter():
+			return false
+		if tn.enemy_count() != 1 and t != as_single:
+			return false
+		if level < 0:
+			level = tn.level()
+		elif tn.level() != level:
+			return false
+	return level > 0
 
 
 ## coord が複数体になっても、coord を進める先に持つ全ノードに
