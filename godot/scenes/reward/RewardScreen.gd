@@ -111,6 +111,27 @@ func _build_card(part: CustomPart) -> Control:
 				capped_label.add_theme_constant_override("outline_size", 3)
 			box.add_child(capped_label)
 
+	# 上限注記の対になる「まだ伸びる軸」。**上限注記が出るカードにだけ付く**
+	# (CustomPart.growing_note が空を返す)。片側だけを赤で告げると複合札が
+	# 死んで見えて、実際に前サイクルのコールドプレイは最強札を2回見送っている。
+	# 良し悪しは色で見せる約束どおり、止まった軸は STAT_DOWN、伸びる軸は STAT_UP。
+	var growing_label: Label = null
+	if _stats != null:
+		var growing_text := part.growing_note(_stats)
+		if growing_text != "":
+			growing_label = Label.new()
+			growing_label.text = growing_text
+			growing_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			growing_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			growing_label.add_theme_font_size_override("font_size", 12)
+			growing_label.add_theme_color_override("font_color", Palette.STAT_UP)
+			if is_rare:
+				growing_label.add_theme_color_override(
+					"font_outline_color", Palette.TEXT_OUTLINE
+				)
+				growing_label.add_theme_constant_override("outline_size", 3)
+			box.add_child(growing_label)
+
 	# 「取るとどうなるか」の見積もり。効果テキストは倍率までしか言わないので、
 	# 勝敗を決める複合量(硬さ・打たれ強さ)がどちらへ動くかをここで見せる。詳細は
 	# scripts/ui/part_preview.gd の冒頭コメント。

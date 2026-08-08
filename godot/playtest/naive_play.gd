@@ -720,10 +720,21 @@ static func card_capped_text(stats: SpinnerStats, part: CustomPart) -> String:
 	var axes := part.capped_axes(stats)
 	if axes.is_empty():
 		return ""
+	var text := "※%sはすでに上限(この札ではもう伸びない)" % _axis_names(axes)
+	# 対になる「まだ伸びる軸」。片側だけを告げると複合札が死んで見える
+	# (詳細は CustomPart.growing_axes の冒頭コメント)。
+	var growing := part.growing_axes(stats)
+	if not growing.is_empty():
+		text += "／%sはまだ伸びる" % _axis_names(growing)
+	return text
+
+
+## 軸名の翻訳キーの列を、CLI用の日本語の並びにする。
+static func _axis_names(axes: PackedStringArray) -> String:
 	var names := []
 	for key in axes:
 		names.append(_AXIS_LABELS.get(key, key))
-	return "※%sはすでに上限(この札ではもう伸びない)" % "・".join(names)
+	return "・".join(names)
 
 
 ## カードの効果を実効果と一致する日本語で出す(CustomPart.describe()のCLI版)。
