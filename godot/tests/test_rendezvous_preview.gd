@@ -947,8 +947,17 @@ func _test_cut_mark_wired(check: Callable) -> void:
 	var battle_src := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
 	var aim := _function_body(battle_src, "func _on_aim_changed(origin: Vector2, velocity: Vector2) -> void:")
 	check.call(aim.length() > 0, "打ち切りの文: _on_aim_changed の本体を取れた")
+	# 1行の組み立ては _lead_hint_text へ出してある(壁の通行料と並べるため)が、
+	# 打ち切りの判定が hint_key を通ることは変わらない=自前の判定を持たない。
 	check.call(
-		aim.contains("_set_lead_hint(RendezvousPreview.hint_key("),
+		aim.contains("_set_lead_hint(_lead_hint_text("),
+		"打ち切りの文: 実UIの1行は _lead_hint_text が組み立てる"
+	)
+	check.call(
+		_function_body(
+			battle_src,
+			"func _lead_hint_text(lead: Dictionary, origin: Vector2, velocity: Vector2) -> String:"
+		).contains("RendezvousPreview.hint_key(lead)"),
 		"打ち切りの文: 実UIの1行は hint_key を通る(自前の判定を持たない)"
 	)
 	# 先読みが消える経路では行も消えること。残ると「もう当てはまらない警告」が居座る。

@@ -12,7 +12,7 @@ var _failures: Array[String] = []
 var _completed: Array[String] = []
 
 const EXPECTED_TESTS: Array[String] = [
-	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "launchstance", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "walldraincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "cappedaxes", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "retryplan", "fieldflavor", "nextfieldlist", "gameoverpanel"
+	"translations", "gamestate", "font", "physics", "map", "mapglow", "enemies", "roster", "parts", "acquired", "acquiredlist", "spawn", "battle", "fields", "disc", "discweight", "discgradient", "spinaura", "wobble", "finishfocus", "contrast", "playtest", "screenlayout", "game_clear", "fadeout", "rainbow", "ghostvisual", "audio", "soundtest", "statreadout", "launchspeed", "standoff", "launchstance", "victorygrowth", "hitguard", "sharpedge", "drill", "deathcause", "battlemetrics", "rpsloss", "losstext", "remaintext", "growthtext", "wallimpact", "wallabsolute", "wallwedge", "bitefloor", "mutualdrain", "drainattribution", "draincap", "walldraincap", "sparkscale", "walldamage", "battledefaults", "pacing", "partpreview", "cappedaxes", "threatmeter", "obstaclemarks", "bossmark", "stageslope", "slopecontour", "lowcenter", "bossarena", "aimlength", "rarepity", "rewardquality", "rendezvous", "wallcost", "retryplan", "fieldflavor", "nextfieldlist", "gameoverpanel"
 ]
 
 
@@ -199,6 +199,9 @@ func _init() -> void:
 
 	print("== rendezvous ==")
 	_test_rendezvous_preview()
+
+	print("== wallcost ==")
+	_test_wall_cost_preview()
 
 	print("== retryplan ==")
 	_test_retry_plan()
@@ -760,6 +763,12 @@ func _test_playback_pacing() -> void:
 	var suite = load("res://tests/test_playback_pacing.gd").new()
 	suite.run(_check)
 	_done("pacing")
+
+
+func _test_wall_cost_preview() -> void:
+	var suite = load("res://tests/test_wall_cost_preview.gd").new()
+	suite.run(_check)
+	_done("wallcost")
 
 
 func _test_rendezvous_preview() -> void:

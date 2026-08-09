@@ -269,6 +269,10 @@ func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force:
 	var best := RendezvousPreview.primary_index(results)
 	if best >= 0:
 		print("  → 実UIが輪で見せるのは enemy%d のぶん" % [best + 1])
+		# 届くまでの壁の通行料。実UIが同じ場面で出す行と**同じ関数・同じ敷居**で出す
+		# (ハーネスと実UIの情報量を対等に保つ)。敷居の下でも、引きを振って比べる
+		# 道具としては生の数字が要るので、CLIだけは常に1行出す。
+		print("  %s" % _wall_cost_line(field, pstats, state, pos, vel, results[best]))
 
 
 func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, target: String, force: float, from_r: float = 1.0) -> void:
@@ -1242,6 +1246,39 @@ static func lead_text(lead: Dictionary) -> String:
 	if key == "":
 		return "外す"
 	return "外す(%s)" % _LEAD_CUT_LABELS[key]
+
+
+## 「届くまでに壁でいくら失うか」の1行(WallCostPreview)。
+##
+## 実UIは敷居(wall_cost_notable_share)を超えたときだけ喋るが、CLIは常に数字を
+## 出す。引きや角度を振って比べる道具なので、「敷居の下だった」と「0だった」を
+## 区別できる必要があるため。実UIが喋る側かどうかは行末に添える。
+func _wall_cost_line(
+	field: FieldData, pstats: SpinnerStats, state: Dictionary,
+	pos: Vector2, vel: Vector2, lead: Dictionary
+) -> String:
+	var req := BattleRequest.new()
+	req.arena_bounds = field.arena_bounds
+	req.wall_shape = field.wall_shape
+	req.obstacles = field.obstacles
+	req.stage_strength = field.stage_strength
+	req.stage_shape = field.stage_shape
+	req.ghost_duration = CustomPartCatalog.total_ghost_seconds(_ids(state))
+	# 見積もりは噛み合う時刻まで(噛み合わないなら地平まで)。実UIと同じ切り方。
+	var until: float = (
+		float(lead["time"]) if bool(lead["contact"]) else RendezvousPreview.DEFAULT_HORIZON
+	)
+	var cost := WallCostPreview.approach_cost(
+		pos, vel, pstats, field.center(), field.stage_strength, field.stage_shape,
+		field.walls(), field.obstacles, req, until
+	)
+	var line := "届くまでの壁の代償: 回転の%.0f%% (%.1frps, %d回, %.2fs後に進入速度%.1f)" % [
+		float(cost["loss_share"]) * 100.0, cost["rps_loss"], cost["hits"],
+		cost["first_time"], cost["first_speed"]]
+	if not WallCostPreview.is_notable(cost):
+		line += " ※実UIは敷居(%d%%)未満なので黙る" % [
+			int(round(WallCostPreview.DEFAULT_NOTABLE_SHARE * 100.0))]
+	return line
 
 
 ## 勝利成長の表示。回転が上限(RPS_CAP)に達すると成長量は0なのに、従来は
