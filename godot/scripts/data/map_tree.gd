@@ -248,6 +248,7 @@ func _assign_encounters(rng: RandomNumberGenerator) -> void:
 	_ensure_single_escape(rng)
 	_ensure_vanguard_choice(rng)
 	_ensure_distinct_choice(rng)
+	_ensure_distinct_field(rng)
 
 
 ## 段SINGLE_ESCAPE_FROM_STEP以降のノードの進める先に「1体部屋」を最低1つ保証する。
@@ -573,6 +574,133 @@ func _targets_are_alike(
 		elif tn.level() != level:
 			return false
 	return level > 0
+
+
+## 進める先が「数字も土俵も全部おなじ」＝ノードの絵が1ピクセルも違わない分岐を無くす。
+##
+## 動機はコールドプレイの一次証拠。9段のランで、段1→2 が
+## 「Lv1 1体 FIELD_BOWL」対「Lv1 1体 FIELD_BOWL」、段3→4 が
+## 「Lv2 2体 FIELD_BOWL」対「Lv2 2体 FIELD_BOWL」で、**どちらも完全な同一物の2択**
+## だった。選べる2つが同じなら、それは選択ではなく確認ボタンが2つ並んでいるだけ。
+##
+## `_ensure_distinct_choice` は既に「数字が全一致」を頭数の交換で崩しているが、
+## 手が出せる範囲が狭い: (a) 全部1体のときだけ(全部2体は「2体を3体にすると
+## 危険度が跳ねる」ので意図的に見送っている)、(b) 経済を太らせない交換相手
+## (`_demote_donor`)が見つかったときだけ。上のコールドプレイの2件は
+## ちょうど (a) と (b) の穴に落ちている。
+##
+## **土俵は経済に触れずに対比を作れる唯一の軸**。報酬枚数は頭数そのもの、レア倍率と
+## 脅威メーターはレベルと頭数の関数——つまり数字を動かすものは全部、報酬の総量を
+## 動かす。土俵はどれも同じ枚数・同じレア倍率なので、引き直しても
+## 「マップに置かれた報酬の総量」(measure_map_choice の頭数の総和)は1つも動かない。
+## しかも絵は確実に変わる: 土俵6種はノード上で外周形状・傾斜のケバ・柱の印の
+## いずれかが必ず違う(`StageSlopeMark` を入れたサイクルが作った差)。
+##
+## 手を出すのは**数字も土俵も全一致**のときだけ。数字が違えば(1体対2体など)報酬枚数と
+## 脅威メーターで既に見分けが付くので、そこで土俵まで違えるのは余計な作り込みになる。
+##
+## 引き直す先は「**その子の全ての親から見た兄弟**が使っていない土俵」に限る。
+## 子は複数の親を持ちうるので、目の前の2択を直すために別の親の2択を平らにしたら
+## 差し引きゼロになる。候補が無ければ次の的へ移り、どれも駄目なら諦める
+## (悪化させないことを最優先にする)。
+##
+## 決戦(ボス)の土俵は専用の大闘技場で固定なので触らない。そもそも段8→9 は
+## 進める先が1つしかないのでここへ来ない。
+##
+## 段の昇順・列の昇順で舐めるのは決定性のため(Dictionaryの挿入順に依存させない)。
+func _ensure_distinct_field(rng: RandomNumberGenerator) -> void:
+	for step in range(0, STEP_GOAL):
+		var columns: Array[int] = []
+		for coord in nodes:
+			if coord.x == step:
+				columns.append(coord.y)
+		columns.sort()
+
+		for column in columns:
+			var node: MapNode = nodes[Vector2i(step, column)]
+			var targets := node.targets()
+			if targets.size() < 2:
+				continue
+			if not _targets_look_identical(targets):
+				continue
+			var order := targets.duplicate()
+			order.sort()  # 決定性: targets の並び順(矢印の順)に依存しない
+			for t in order:
+				if _reassign_field(t, rng):
+					break
+
+
+## 進める先が「実レベルも頭数も土俵も」全部おなじか＝ノードの絵が完全に同じか。
+##
+## `_targets_are_alike` とは別実装にしてある。あちらは**昇格の下見**なので
+## 「全部1体」でなければ false を返す(2体を3体にはしない)が、こちらは
+## **遊ぶ側から見た同一性**で、全部2体の2択も等しく見分けが付かない。
+func _targets_look_identical(targets: Array[Vector2i]) -> bool:
+	var level := -1
+	var count := -1
+	var field_key := ""
+	for t in targets:
+		var tn: MapNode = nodes.get(t)
+		if tn == null or not tn.has_encounter() or tn.field == null:
+			return false
+		if level < 0:
+			level = tn.level()
+			count = tn.enemy_count()
+			field_key = tn.field.title_key
+		elif (
+			tn.level() != level
+			or tn.enemy_count() != count
+			or tn.field.title_key != field_key
+		):
+			return false
+	return level > 0
+
+
+## coord の土俵を、その全ての親から見た兄弟が使っていないものへ引き直す。
+## 引き直せたら true。ボスの土俵は固定なので触らず、候補が無ければ何もしない。
+func _reassign_field(coord: Vector2i, rng: RandomNumberGenerator) -> bool:
+	var node: MapNode = nodes.get(coord)
+	if node == null or not node.has_encounter() or node.field == null:
+		return false
+	# 決戦の土俵は専用の大闘技場で固定(FieldRoster.pick_for_step と同じ判定)。
+	if coord == GOAL_COORD or EnemyRoster.level_for_step(coord.x) >= 5:
+		return false
+
+	var taken := {node.field.title_key: true}
+	for sibling in _siblings_of(coord):
+		var sn: MapNode = nodes.get(sibling)
+		if sn != null and sn.field != null:
+			taken[sn.field.title_key] = true
+
+	var candidates: Array[FieldData] = []
+	for field in FieldRoster.all():
+		if not taken.has(field.title_key):
+			candidates.append(field)
+	if candidates.is_empty():
+		return false
+	node.field = candidates[rng.randi_range(0, candidates.size() - 1)]
+	return true
+
+
+## coord と親を共有するノード(coord 自身は除く)。同じノードが複数の親から
+## 兄弟として見えることがあるので座標で重複を潰す。
+func _siblings_of(coord: Vector2i) -> Array[Vector2i]:
+	var seen := {}
+	var result: Array[Vector2i] = []
+	for parent_coord in nodes:
+		if parent_coord.x != coord.x - 1:
+			continue
+		var parent: MapNode = nodes[parent_coord]
+		var targets := parent.targets()
+		if not coord in targets:
+			continue
+		for t in targets:
+			if t == coord or seen.has(t):
+				continue
+			seen[t] = true
+			result.append(t)
+	result.sort()  # 決定性: Dictionaryの列挙順に依存しない
+	return result
 
 
 ## coord が複数体になっても、coord を進める先に持つ全ノードに
