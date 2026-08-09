@@ -29,6 +29,7 @@ func run(check: Callable) -> void:
 	_test_primary_index(check)
 	_test_agrees_with_resolver(check)
 	_test_pillars_cut_preview(check)
+	_test_seated_pillar_cuts_when_driven_into(check)
 	_test_cut_side(check)
 	_test_cut_hint_key(check)
 	_test_cut_translations(check)
@@ -489,6 +490,103 @@ func _test_pillars_cut_preview(check: Callable) -> void:
 	check.call(
 		bool(seated["contact"]),
 		"先読み: 発射時から接している柱では打ち切らない (cut=%s)" % str(seated["cut_short"])
+	)
+
+
+## 発射時に接しているものへの免除は「離れるまで」ではなく「発射時の深さまで」。
+##
+## 一次証拠(コールドプレイ 2026-08-09, seed=48219 段3 FIELD_PILLARS)。矩形10×10の
+## 隅 (8.17, 8.17) から中央を狙った。この点は**矩形としては合法**だが内接円(半径5)
+## の外なので、先読みは発射の瞬間から「壁に接している」と見る。従来の実装は
+## 打ち切りを bool 1本の**遷移**で見ていたため、その免除が壁だけでなく
+## **同じ線上の柱(7,7)にも効き**、先読みは柱の芯(中心から0.09ユニット)を素通りして
+## 「0.30秒で噛み合う」と **contact=true で**予告した。本番は1歩目で柱に弾かれ、
+## 敵に一度も触れないまま壁で削られて敗北(衝突1回・壁34回・自分の喪失の92%が壁)。
+## **打ち切りの無言ではなく「噛み合う」という嘘**なので、輪の破線でも文言でも
+## 救えない。深さで見れば、免除は壁のぶんだけ・その深さまでに閉じる。
+##
+## ここが縛るのは3点: (a)貫く狙いは打ち切る (b)同じ狙いでも柱を見なければ
+## 噛み合う=**柱を貫通していたことの証明** (c)柱から離れる狙いは今までどおり残る
+## (_test_pillars_cut_preview の seated と対)。
+func _test_seated_pillar_cuts_when_driven_into(check: Callable) -> void:
+	var center := Vector2(5, 5)
+	var pillar: Array[Vector3] = [Vector3(7.0, 7.0, 0.6)]
+	var seat := Vector2(8.167433, 8.167433)
+	var into := Vector2(12, 0).rotated(deg_to_rad(-135))
+	var foe := Vector2(2.008389, 7.655232)
+	var foe_vel := Vector2(7.1, 0).rotated(deg_to_rad(-45))
+	var me := _stats(1.05, 0.98)
+	var them := _stats(0.55, 0.98)
+
+	var through := RendezvousPreview.closest_approach(
+		seat, into, me, foe, foe_vel, them,
+		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, [], 1.4
+	)
+	check.call(
+		bool(through["contact"]),
+		"隅からの狙い: 柱を見なければ噛み合うと出る(=柱を貫通していた証明)"
+	)
+
+	var driven := RendezvousPreview.closest_approach(
+		seat, into, me, foe, foe_vel, them,
+		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, pillar, 1.4
+	)
+	check.call(
+		bool(driven["cut_short"]),
+		"隅からの狙い: 線上の柱で打ち切る (cut=%s)" % str(driven["cut_short"])
+	)
+	check.call(
+		not bool(driven["contact"]),
+		"隅からの狙い: 柱越しの「噛み合う」は出さない (contact=%s)" % str(driven["contact"])
+	)
+	check.call(
+		int(driven["cut_by"]) == int(RendezvousPreview.CutBy.PLAYER),
+		"隅からの狙い: 打ち切ったのは自分の側 (cut_by=%d)" % int(driven["cut_by"])
+	)
+	check.call(
+		float(driven["time"]) < float(through["time"]),
+		"隅からの狙い: 貫き終わるまで待たない (t=%.3f < 貫通時の%.3f)"
+			% [float(driven["time"]), float(through["time"])]
+	)
+
+	# 壁を見ない同じ配置。免除の出所が壁だったことを名指しで押さえる
+	# ——柱だけなら従来の実装でも切れるので、壁があるときだけ嘘になっていた。
+	var no_wall := RendezvousPreview.closest_approach(
+		seat, into, me, foe, foe_vel, them,
+		center, 4.9, SpinnerPhysics.StageShape.DISH, 0.0, pillar, 1.4
+	)
+	check.call(
+		bool(no_wall["cut_short"]) and not bool(no_wall["contact"]),
+		"隅からの狙い: 壁を見なくても柱で打ち切る(免除は壁ごとに閉じる)"
+	)
+
+	# 柱の乗っていない対角の隅から、同じように中央へ降りる狙い。壁の免除そのものは
+	# 残っていること——隅発射を丸ごと無言にする直し方(免除を捨てる)との差を作る。
+	var clear_corner := RendezvousPreview.closest_approach(
+		Vector2(8.167433, 1.832567), Vector2(5, 0).rotated(deg_to_rad(135)), me,
+		Vector2(2.0, 5.0), Vector2.ZERO, them,
+		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, pillar, 0.5
+	)
+	check.call(
+		not RendezvousPreview.cut_player(clear_corner),
+		"隅からの狙い: 線上に柱が無ければ隅からでも打ち切らない (cut_by=%d)"
+			% int(clear_corner["cut_by"])
+	)
+
+	# 免除は**一度抜け出したら消える**。壁の外(内接円の外)から中央へ降り、すり鉢に
+	# 押し戻されて反対側の壁へ戻ってくる道: 戻りの深さ(0.24)は発射時(0.45)より浅いので、
+	# 免除を発射時の深さのまま持ち続ける実装だと1.4秒のあいだ一度も打ち切らない。
+	# 相手は傾斜も摩擦も効かない置物(grip=0/friction=0)にして、打ち切りの出所を
+	# 自分の側だけに絞る。
+	var returns := RendezvousPreview.closest_approach(
+		Vector2(5.0, 9.4), Vector2(0, -3), me,
+		Vector2(1.5, 5.0), Vector2.ZERO, _stats(0.55, 0.0, 0.0),
+		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, [], 1.4
+	)
+	check.call(
+		RendezvousPreview.cut_player(returns),
+		"壁の免除: 一度離れて戻ってきたら、発射時より浅くても打ち切る (cut_by=%d t=%.2f)"
+			% [int(returns["cut_by"]), float(returns["time"])]
 	)
 
 
