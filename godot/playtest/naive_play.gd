@@ -257,7 +257,7 @@ func _aim(state: Dictionary, bseed: int, from_deg: float, target: String, force:
 			pos, vel, pstats,
 			plans[i].position, plans[i].velocity, enemies[i].stats,
 			field.center(), field.stage_strength, field.stage_shape,
-			field.inradius(), field.obstacles))
+			field.walls(), field.obstacles))
 	print("=== 先読み(撃たない): pos=%s vel=%.1f@%d° force=%.2f ===" % [
 		str(pos), vel.length(), int(rad_to_deg(vel.angle())), clampf(force, 0.0, 1.0)])
 	for i in results.size():

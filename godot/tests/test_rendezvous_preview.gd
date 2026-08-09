@@ -30,11 +30,24 @@ func run(check: Callable) -> void:
 	_test_agrees_with_resolver(check)
 	_test_pillars_cut_preview(check)
 	_test_seated_pillar_cuts_when_driven_into(check)
+	_test_rect_walls_not_inscribed_circle(check)
 	_test_cut_side(check)
 	_test_cut_hint_key(check)
 	_test_cut_translations(check)
 	_test_launch_controller_wires_lead(check)
 	_test_cut_mark_wired(check)
+
+
+## 壁を見ない指定(調整・テスト用)。以前は inradius=0.0 がこれを意味していた。
+const _NO_WALLS: Array[ArenaWall] = []
+
+
+## 中心 center・辺までの距離 inradius の矩形の壁。先読みは本番と同じ半平面の列を
+## 受けるので、テストも4枚で渡す。軸方向の当たりは内接円と一致し、**隅だけが変わる**
+## ——それがこの直しの中身なので、既存のテストは軸方向の意図を保ったまま移せる。
+func _rect_walls(center: Vector2, inradius: float) -> Array[ArenaWall]:
+	return ArenaWall.from_rect(
+		Rect2(center - Vector2.ONE * inradius, Vector2.ONE * inradius * 2.0))
 
 
 func _stats(radius: float, friction: float = 0.0, grip: float = 1.0) -> SpinnerStats:
@@ -179,7 +192,7 @@ func _test_head_on_contacts(check: Callable) -> void:
 	var r := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
 		Vector2(9, 5), Vector2(-6, 0), _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(bool(r["contact"]), "先読み: 正面から寄せれば噛み合うと出る")
 	check.call(float(r["time"]) > 0.0, "先読み: 噛み合う時刻は発射より後 (%.2f)" % r["time"])
@@ -195,7 +208,7 @@ func _test_miss_reports_gap(check: Callable) -> void:
 	var r := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
 		Vector2(1, 9), Vector2(6, 0), _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(not bool(r["contact"]), "先読み: 平行に走る2体は噛み合わない")
 	check.call(float(r["gap"]) > 0.0, "先読み: 外すならgapが正 (%.2f)" % r["gap"])
@@ -216,7 +229,7 @@ func _test_lead_beats_aiming_at_spawn(check: Callable) -> void:
 	var at_spawn := RendezvousPreview.closest_approach(
 		start, (enemy_pos - start).normalized() * speed, mine,
 		enemy_pos, enemy_vel, theirs,
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(
 		not bool(at_spawn["contact"]),
@@ -228,7 +241,7 @@ func _test_lead_beats_aiming_at_spawn(check: Callable) -> void:
 	var led := RendezvousPreview.closest_approach(
 		start, (lead_point - start).normalized() * speed, mine,
 		enemy_pos, enemy_vel, theirs,
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(
 		float(led["gap"]) < float(at_spawn["gap"]),
@@ -244,7 +257,7 @@ func _test_wall_cuts_preview(check: Callable) -> void:
 	var cut := RendezvousPreview.closest_approach(
 		Vector2(5, 5), Vector2(0, -8), _stats(0.5),
 		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.0), [], 3.0
 	)
 	check.call(bool(cut["cut_short"]), "先読み: 壁へ届いたら打ち切る")
 	check.call(not bool(cut["contact"]), "先読み: 壁で打ち切ったなら噛み合いは出さない")
@@ -257,7 +270,7 @@ func _test_wall_cuts_preview(check: Callable) -> void:
 	var no_wall := RendezvousPreview.closest_approach(
 		Vector2(5, 5), Vector2(0, -8), _stats(0.5),
 		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 3.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 3.0
 	)
 	check.call(
 		not bool(no_wall["cut_short"]),
@@ -270,7 +283,7 @@ func _test_horizon_bounds(check: Callable) -> void:
 	var far_contact := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(3, 0), _stats(0.5),
 		Vector2(9, 5), Vector2(-3, 0), _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 3.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 3.0
 	)
 	check.call(bool(far_contact["contact"]), "先読み: 長く見れば遠い噛み合いも出る")
 	check.call(
@@ -281,7 +294,7 @@ func _test_horizon_bounds(check: Callable) -> void:
 	var short := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(3, 0), _stats(0.5),
 		Vector2(9, 5), Vector2(-3, 0), _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 0.3
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 0.3
 	)
 	check.call(not bool(short["contact"]), "先読み: horizonの手前までしか見ない")
 	check.call(
@@ -295,7 +308,7 @@ func _test_degenerate_step(check: Callable) -> void:
 	var r := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
 		Vector2(9, 5), Vector2(-6, 0), _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0, 0.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0, 0.0
 	)
 	check.call(not bool(r["contact"]), "先読み: dt=0なら先へ進まない")
 	check.call(is_equal_approx(float(r["time"]), 0.0), "先読み: dt=0の時刻は0")
@@ -306,7 +319,7 @@ func _test_overlap_at_start(check: Callable) -> void:
 	var r := RendezvousPreview.closest_approach(
 		Vector2(5.0, 5.0), Vector2(1, 0), _stats(0.5),
 		Vector2(5.4, 5.0), Vector2(-1, 0), _stats(0.5),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(bool(r["contact"]), "先読み: 最初から食い込んでいれば噛み合い")
 	check.call(is_equal_approx(float(r["time"]), 0.0), "先読み: その時刻は0")
@@ -317,12 +330,12 @@ func _test_radius_widens_contact(check: Callable) -> void:
 	var small := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.3),
 		Vector2(9, 5), Vector2(-6, 0), _stats(0.3),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	var big := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(1.2),
 		Vector2(9, 5), Vector2(-6, 0), _stats(1.2),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(
 		float(big["time"]) < float(small["time"]),
@@ -334,12 +347,12 @@ func _test_radius_widens_contact(check: Callable) -> void:
 	var thin := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.2),
 		Vector2(1, 5.9), Vector2(6, -0.2), _stats(0.2),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	var fat := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.6),
 		Vector2(1, 5.9), Vector2(6, -0.2), _stats(0.6),
-		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		Vector2(5, 5), 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(
 		not bool(thin["contact"]) and bool(fat["contact"]),
@@ -355,12 +368,12 @@ func _test_pure(check: Callable) -> void:
 	var first := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), mine,
 		Vector2(9, 5), Vector2(-6, 0), theirs,
-		Vector2(5, 5), 4.9, SpinnerPhysics.StageShape.DISH, 4.6, [], 1.4
+		Vector2(5, 5), 4.9, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.6), [], 1.4
 	)
 	var second := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), mine,
 		Vector2(9, 5), Vector2(-6, 0), theirs,
-		Vector2(5, 5), 4.9, SpinnerPhysics.StageShape.DISH, 4.6, [], 1.4
+		Vector2(5, 5), 4.9, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.6), [], 1.4
 	)
 	check.call(
 		is_equal_approx(float(first["time"]), float(second["time"]))
@@ -427,7 +440,7 @@ func _test_agrees_with_resolver(check: Callable) -> void:
 	var predicted := RendezvousPreview.closest_approach(
 		start, my_vel, mine, their_pos, their_vel, theirs,
 		center, request.stage_strength, request.stage_shape,
-		ArenaWall.inradius_for(request.wall_shape, request.arena_bounds), [], 2.0
+		ArenaWall.build(request.wall_shape, request.arena_bounds), [], 2.0
 	)
 	check.call(bool(predicted["contact"]), "先読み: この発射は噛み合うと予告する")
 
@@ -469,13 +482,13 @@ func _test_pillars_cut_preview(check: Callable) -> void:
 	var through := RendezvousPreview.closest_approach(
 		Vector2(1, 3), Vector2(6, 0), _stats(0.3),
 		Vector2(9, 3), Vector2(-6, 0), _stats(0.3),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(bool(through["contact"]), "先読み: 柱を見なければ柱越しに噛み合うと出る")
 	var blocked := RendezvousPreview.closest_approach(
 		Vector2(1, 3), Vector2(6, 0), _stats(0.3),
 		Vector2(9, 3), Vector2(-6, 0), _stats(0.3),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, pillar, 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, pillar, 2.0
 	)
 	check.call(bool(blocked["cut_short"]), "先読み: 柱へ届いたら打ち切る")
 	check.call(not bool(blocked["contact"]), "先読み: 柱で打ち切ったなら噛み合いは出さない")
@@ -485,7 +498,7 @@ func _test_pillars_cut_preview(check: Callable) -> void:
 	var seated := RendezvousPreview.closest_approach(
 		Vector2(5.0, 3.85), Vector2(0, 1.2), _stats(0.3),
 		Vector2(5.0, 7.5), Vector2(0, -8), _stats(0.3),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, pillar, 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, pillar, 2.0
 	)
 	check.call(
 		bool(seated["contact"]),
@@ -496,8 +509,9 @@ func _test_pillars_cut_preview(check: Callable) -> void:
 ## 発射時に接しているものへの免除は「離れるまで」ではなく「発射時の深さまで」。
 ##
 ## 一次証拠(コールドプレイ 2026-08-09, seed=48219 段3 FIELD_PILLARS)。矩形10×10の
-## 隅 (8.17, 8.17) から中央を狙った。この点は**矩形としては合法**だが内接円(半径5)
-## の外なので、先読みは発射の瞬間から「壁に接している」と見る。従来の実装は
+## 隅 (8.17, 8.17) から中央を狙った。当時の先読みは壁を内接円(半径5)1本で見ており、
+## この**矩形としては合法**な点を発射の瞬間から「壁に接している」と見ていた
+## (壁を辺の列で見る今はもう接していない)。従来の実装は
 ## 打ち切りを bool 1本の**遷移**で見ていたため、その免除が壁だけでなく
 ## **同じ線上の柱(7,7)にも効き**、先読みは柱の芯(中心から0.09ユニット)を素通りして
 ## 「0.30秒で噛み合う」と **contact=true で**予告した。本番は1歩目で柱に弾かれ、
@@ -520,7 +534,7 @@ func _test_seated_pillar_cuts_when_driven_into(check: Callable) -> void:
 
 	var through := RendezvousPreview.closest_approach(
 		seat, into, me, foe, foe_vel, them,
-		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, [], 1.4
+		center, 4.9, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 5.0), [], 1.4
 	)
 	check.call(
 		bool(through["contact"]),
@@ -529,7 +543,7 @@ func _test_seated_pillar_cuts_when_driven_into(check: Callable) -> void:
 
 	var driven := RendezvousPreview.closest_approach(
 		seat, into, me, foe, foe_vel, them,
-		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, pillar, 1.4
+		center, 4.9, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 5.0), pillar, 1.4
 	)
 	check.call(
 		bool(driven["cut_short"]),
@@ -549,11 +563,12 @@ func _test_seated_pillar_cuts_when_driven_into(check: Callable) -> void:
 			% [float(driven["time"]), float(through["time"])]
 	)
 
-	# 壁を見ない同じ配置。免除の出所が壁だったことを名指しで押さえる
-	# ——柱だけなら従来の実装でも切れるので、壁があるときだけ嘘になっていた。
+	# 壁を見ない同じ配置。当時この免除の出所は壁だった(柱だけなら従来の実装でも
+	# 切れた)。壁を辺で見るようになった今はどちらでも柱で切るが、
+	# 「免除は壁ごと・柱ごとに閉じる」の縛りとしてそのまま残す。
 	var no_wall := RendezvousPreview.closest_approach(
 		seat, into, me, foe, foe_vel, them,
-		center, 4.9, SpinnerPhysics.StageShape.DISH, 0.0, pillar, 1.4
+		center, 4.9, SpinnerPhysics.StageShape.DISH, _NO_WALLS, pillar, 1.4
 	)
 	check.call(
 		bool(no_wall["cut_short"]) and not bool(no_wall["contact"]),
@@ -565,7 +580,7 @@ func _test_seated_pillar_cuts_when_driven_into(check: Callable) -> void:
 	var clear_corner := RendezvousPreview.closest_approach(
 		Vector2(8.167433, 1.832567), Vector2(5, 0).rotated(deg_to_rad(135)), me,
 		Vector2(2.0, 5.0), Vector2.ZERO, them,
-		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, pillar, 0.5
+		center, 4.9, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 5.0), pillar, 0.5
 	)
 	check.call(
 		not RendezvousPreview.cut_player(clear_corner),
@@ -581,12 +596,120 @@ func _test_seated_pillar_cuts_when_driven_into(check: Callable) -> void:
 	var returns := RendezvousPreview.closest_approach(
 		Vector2(5.0, 9.4), Vector2(0, -3), me,
 		Vector2(1.5, 5.0), Vector2.ZERO, _stats(0.55, 0.0, 0.0),
-		center, 4.9, SpinnerPhysics.StageShape.DISH, 5.0, [], 1.4
+		center, 4.9, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 5.0), [], 1.4
 	)
 	check.call(
 		RendezvousPreview.cut_player(returns),
 		"壁の免除: 一度離れて戻ってきたら、発射時より浅くても打ち切る (cut_by=%d t=%.2f)"
 			% [int(returns["cut_by"]), float(returns["time"])]
+	)
+
+
+## 矩形の土俵の壁は**内接円ではなく4枚の辺**。以前の先読みは壁を内接半径1本に
+## 畳んでいたので、10×10 の土俵では中心から 5.0 を超える隅——`clamp_inside` が
+## 合法と認め、実UIならマウスで普通に置ける領域——が丸ごと壁の外に見えていた。
+##
+## 害は2つで、どちらも「先読みが嘘をつく」形:
+##  (a) **対角へ撃つと実際の辺の手前で打ち切る**。隅までは 7.07 あるのに 5.0 で
+##      切るので、届く狙いに「壁だ」と言う。
+##  (b) **隅に置いたコマが発射の瞬間から食い込み扱い**になり、免除の敷居
+##      (_cut_gates)が立つ。前サイクルはその免除が柱まで貫通させる嘘を生んでいた。
+##
+## 非矩形(多角形)の土俵では内接円とほぼ同じ答えのままであることも併せて縛る
+## ——「隅まで見る」を全形状へ一律に広げると、今度は円い土俵で壁を素通りする。
+func _test_rect_walls_not_inscribed_circle(check: Callable) -> void:
+	var center := Vector2(5, 5)
+	var rect := _rect_walls(center, 5.0)
+	# 相手は打ち切りの出所にならない置物(傾斜も摩擦も効かない)。返り値の
+	# player_point は「一番近づいた瞬間」なので、自分が近づき続ける位置に置く
+	# ——そうしないと点が発射位置に張り付いて、どこで切ったのか読めない。
+	var idle := _stats(0.1, 0.0, 0.0)
+
+	# (a) 中心から45°へ真っ直ぐ。内接円なら中心から4.5で切るが、実際の右壁は
+	#     x=9.5 まで無い。打ち切りまでに内接円の外まで走れていることが、
+	#     壁を辺で見た証拠になる。
+	var diagonal := RendezvousPreview.closest_approach(
+		center, Vector2(5, 5), _stats(0.5),
+		Vector2(9.6, 8.4), Vector2.ZERO, idle,
+		center, 0.0, SpinnerPhysics.StageShape.DISH, rect, [], 1.2
+	)
+	check.call(
+		bool(diagonal["cut_short"]) and not bool(diagonal["contact"]),
+		"矩形の壁: 対角へ撃てばいつかは辺で打ち切る (cut=%s)" % str(diagonal["cut_short"])
+	)
+	check.call(
+		int(diagonal["cut_by"]) == int(RendezvousPreview.CutBy.PLAYER),
+		"矩形の壁: 打ち切ったのは自分の側 (cut_by=%d)" % int(diagonal["cut_by"])
+	)
+	var cut_point: Vector2 = diagonal["player_point"]
+	check.call(
+		cut_point.distance_to(center) > 5.0,
+		"矩形の壁: 打ち切りまでに内接円(5.0)の外まで走れる＝隅まで見ている (%.2f)"
+			% cut_point.distance_to(center)
+	)
+
+	# (b) 矩形として合法な隅 (8.167, 8.167) に半径0.7 のコマを置く。右壁までは
+	#     まだ 1.13 空いているのに、内接円で見ると深さ +0.18 の「食い込み」になる。
+	#     そこから外向きへ撃つと、円で見る実装は発射時より深くなった1刻み目で
+	#     即座に打ち切る——まだ壁まで 0.38 秒あるのに「壁だ」と言う。
+	var seat := Vector2(8.167433, 8.167433)
+	var outward := Vector2(3, 3)
+	var early := RendezvousPreview.closest_approach(
+		seat, outward, _stats(0.7),
+		Vector2(1, 5), Vector2.ZERO, idle,
+		center, 0.0, SpinnerPhysics.StageShape.DISH, rect, [], 0.2
+	)
+	check.call(
+		not bool(early["cut_short"]),
+		"矩形の壁: 隅から外向きでも、辺(x=9.3)まで余裕がある間は打ち切らない (cut=%s)"
+			% str(early["cut_short"])
+	)
+	# ただし「隅なら何も見ない」ではない。同じ狙いを辺へ届くまで伸ばせば切る。
+	var late := RendezvousPreview.closest_approach(
+		seat, outward, _stats(0.7),
+		Vector2(1, 5), Vector2.ZERO, idle,
+		center, 0.0, SpinnerPhysics.StageShape.DISH, rect, [], 0.6
+	)
+	check.call(
+		RendezvousPreview.cut_player(late),
+		"矩形の壁: 隅からでも辺へ届けば打ち切る (cut_by=%d)" % int(late["cut_by"])
+	)
+
+	# (c) 円い土俵(32角形)は今までどおり内接円とほぼ同じ。同じ対角の発射で、
+	#     打ち切りは内接円のすぐ内側に戻る。「隅まで見る」を全形状へ一律に
+	#     広げると、ここが矩形と同じ 5.0 超えになって円い土俵で壁を素通りする。
+	var round_walls := ArenaWall.build(ArenaWall.WallShape.ROUND, Rect2(0, 0, 10, 10))
+	var circular := RendezvousPreview.closest_approach(
+		center, Vector2(5, 5), _stats(0.5),
+		Vector2(9.6, 8.4), Vector2.ZERO, idle,
+		center, 0.0, SpinnerPhysics.StageShape.DISH, round_walls, [], 1.2
+	)
+	var round_point: Vector2 = circular["player_point"]
+	check.call(
+		bool(circular["cut_short"]),
+		"円い土俵: 対角でも打ち切る (cut=%s)" % str(circular["cut_short"])
+	)
+	check.call(
+		round_point.distance_to(center) < 5.0
+			and round_point.distance_to(center) > 4.2,
+		"円い土俵: 打ち切り点は内接円のすぐ内側のまま (%.2f)"
+			% round_point.distance_to(center)
+	)
+
+	# (d) 実際に先読みへ渡るのは FieldData.walls()。**置ける場所の規則
+	#     (clamp_placement)と壁の見方が食い違わないこと**をここで縛る
+	#     ——矩形の土俵で clamp が合法と認めた点が、先読みでは壁の中、が今回の穴だった。
+	var rect_field := FieldData.make(
+		"", Rect2(0, 0, 10, 10), ArenaWall.WallShape.RECT,
+		SpinnerPhysics.StageShape.DISH, 4.9)
+	var placed := rect_field.clamp_placement(Vector2(20, 20), 0.7)
+	var deepest := -1e9
+	for w in rect_field.walls():
+		deepest = maxf(deepest, SpinnerPhysics.wall_gap(w.point, w.normal, placed, 0.7))
+	check.call(
+		deepest <= 0.001,
+		"土俵の壁: clamp_placement が置いた隅(%.2f, %.2f)は先読みの壁にも食い込まない (%.3f)"
+			% [placed.x, placed.y, deepest]
 	)
 
 
@@ -600,7 +723,7 @@ func _test_cut_side(check: Callable) -> void:
 	var mine := RendezvousPreview.closest_approach(
 		center, Vector2(0, -8), _stats(0.5),
 		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.0), [], 3.0
 	)
 	check.call(bool(mine["cut_short"]), "打ち切りの側: 自分が壁へ届いたら打ち切る")
 	check.call(
@@ -614,7 +737,7 @@ func _test_cut_side(check: Callable) -> void:
 	var theirs := RendezvousPreview.closest_approach(
 		center, Vector2(0.1, 0), _stats(0.5),
 		Vector2(5, 2), Vector2(0, -8), _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.0), [], 3.0
 	)
 	check.call(bool(theirs["cut_short"]), "打ち切りの側: 相手が壁へ届いても打ち切る")
 	check.call(
@@ -627,7 +750,7 @@ func _test_cut_side(check: Callable) -> void:
 	var both := RendezvousPreview.closest_approach(
 		Vector2(4, 5), Vector2(-8, 0), _stats(0.5),
 		Vector2(6, 5), Vector2(8, 0), _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.0), [], 3.0
 	)
 	check.call(
 		int(both["cut_by"]) == int(RendezvousPreview.CutBy.BOTH),
@@ -638,7 +761,7 @@ func _test_cut_side(check: Callable) -> void:
 	var hit := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
 		Vector2(9, 5), Vector2(-6, 0), _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(bool(hit["contact"]), "打ち切りの側: 前提として噛み合う配置")
 	check.call(
@@ -648,7 +771,7 @@ func _test_cut_side(check: Callable) -> void:
 	var no_wall := RendezvousPreview.closest_approach(
 		center, Vector2(0, -8), _stats(0.5),
 		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 3.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 3.0
 	)
 	check.call(
 		not bool(no_wall["cut_short"]) and int(no_wall["cut_by"]) == 0,
@@ -662,7 +785,7 @@ func _test_cut_hint_key(check: Callable) -> void:
 	var mine := RendezvousPreview.closest_approach(
 		center, Vector2(0, -8), _stats(0.5),
 		Vector2(5, 9), Vector2.ZERO, _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.0), [], 3.0
 	)
 	check.call(
 		RendezvousPreview.hint_key(mine) == "BATTLE_LEAD_CUT_PLAYER",
@@ -671,7 +794,7 @@ func _test_cut_hint_key(check: Callable) -> void:
 	var theirs := RendezvousPreview.closest_approach(
 		center, Vector2(0.1, 0), _stats(0.5),
 		Vector2(5, 2), Vector2(0, -8), _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.0), [], 3.0
 	)
 	check.call(
 		RendezvousPreview.hint_key(theirs) == "BATTLE_LEAD_CUT_ENEMY",
@@ -680,7 +803,7 @@ func _test_cut_hint_key(check: Callable) -> void:
 	var both := RendezvousPreview.closest_approach(
 		Vector2(4, 5), Vector2(-8, 0), _stats(0.5),
 		Vector2(6, 5), Vector2(8, 0), _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 4.0, [], 3.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _rect_walls(Vector2(5, 5), 4.0), [], 3.0
 	)
 	check.call(
 		RendezvousPreview.hint_key(both) == "BATTLE_LEAD_CUT_BOTH",
@@ -692,13 +815,13 @@ func _test_cut_hint_key(check: Callable) -> void:
 	var hit := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
 		Vector2(9, 5), Vector2(-6, 0), _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(RendezvousPreview.hint_key(hit) == "", "打ち切りの文: 噛み合うなら無言")
 	var miss := RendezvousPreview.closest_approach(
 		Vector2(1, 5), Vector2(6, 0), _stats(0.5),
 		Vector2(9, 8), Vector2(-6, 0), _stats(0.5),
-		center, 0.0, SpinnerPhysics.StageShape.DISH, 0.0, [], 2.0
+		center, 0.0, SpinnerPhysics.StageShape.DISH, _NO_WALLS, [], 2.0
 	)
 	check.call(not bool(miss["contact"]), "打ち切りの文: 前提として外す配置")
 	check.call(

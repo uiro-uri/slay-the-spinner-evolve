@@ -763,7 +763,7 @@ func _on_aim_changed(origin: Vector2, velocity: Vector2) -> void:
 			start, velocity, _player.stats,
 			_telegraphs[i].display_position(), _telegraphs[i].display_velocity(),
 			_enemies[i].stats,
-			_center(), _stage_strength(), _stage_shape(), _inradius(), _obstacles(),
+			_center(), _stage_strength(), _stage_shape(), _walls(), _obstacles(),
 			lead_horizon
 		))
 	var index := RendezvousPreview.primary_index(results)
@@ -795,6 +795,12 @@ func _stage_strength() -> float:
 
 func _stage_shape() -> SpinnerPhysics.StageShape:
 	return _field.stage_shape if _field != null else stage_shape
+
+
+## 土俵の壁。先読みは壁へ届いたところで打ち切る。**本番(BattleResolver)と同じ
+## 半平面の列**を渡すのが要で、内接円で代用すると矩形の隅が壁の外に見える。
+func _walls() -> Array[ArenaWall]:
+	return ArenaWall.build(_wall_shape(), _bounds())
 
 
 ## 土俵の柱。先読みは柱へ届いたところで打ち切る(跳ね返った先は追わない)。

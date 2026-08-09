@@ -52,6 +52,13 @@ func center() -> Vector2:
 	return arena_bounds.get_center()
 
 
+## 土俵の壁(半平面の列)。BattleResolverが本番で組むものと同じ。
+## 先読み(RendezvousPreview)へ渡す用で、内接円で代用すると矩形の隅が
+## 壁の外に見える(rendezvous_preview.gd の _block_depths 参照)。
+func walls() -> Array[ArenaWall]:
+	return ArenaWall.build(wall_shape, arena_bounds)
+
+
 ## コマ全体が壁の内側に収まる位置へ寄せる。矩形は矩形クランプ、非矩形は内接円。
 ## Battle._clamp_launch と同じ寄せ方の一本化(bot・CLIはこちらを使う)。
 func clamp_inside(pos: Vector2, radius: float) -> Vector2:

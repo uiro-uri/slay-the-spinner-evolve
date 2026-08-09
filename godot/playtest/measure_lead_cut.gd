@@ -96,7 +96,7 @@ func _row(step: int, force: float, count: int, seed_base: int, policy: LaunchPol
 				launch.position, launch.velocity, stats,
 				plans[k].position, plans[k].velocity, enemies[k].stats,
 				field.center(), field.stage_strength, field.stage_shape,
-				field.inradius(), field.obstacles
+				field.walls(), field.obstacles
 			))
 		# 実UIが輪で見せる1件だけを数える(乱戦でも画面に出るのは1つ)。
 		var index := RendezvousPreview.primary_index(results)
