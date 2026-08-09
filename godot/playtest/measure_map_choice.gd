@@ -43,33 +43,44 @@ func _init() -> void:
 			var targets := node.targets()
 			if targets.is_empty():
 				continue
-			var row: Array = per_step.get(coord.x, [0, 0, 0])
+			var row: Array = per_step.get(coord.x, [0, 0, 0, 0])
 			if targets.size() < 2:
 				row[2] += 1
 			else:
 				row[0] += 1
 				if _alike(tree, targets):
 					row[1] += 1
+					# 数字が全一致でも、土俵が違えば外周形状/傾斜のケバ/柱の印が
+					# 違う絵になる。土俵まで同じものだけが「本当に見分けが付かない」。
+					if _same_field(tree, targets):
+						row[3] += 1
 			per_step[coord.x] = row
 
 	print("# マップの分岐の中身 (%d回の生成, シード0..%d)" % [count, count - 1])
-	print("# 見分けが付かない＝進める先が全部おなじ(実レベル, 頭数)＝表示される数字が全一致。")
+	print("# 数字が全一致＝進める先が全部おなじ(実レベル, 頭数)＝表示される数字が同じ。")
+	print("# 土俵まで一致＝そのうえ土俵も同一＝ノードの絵(外周形状・傾斜のケバ・柱)まで同じ。")
 	print("")
-	print("| 親の段 | 分岐点(2択以上) | 見分けが付かない | 割合 | 1択ノード |")
-	print("|---|---|---|---|---|")
+	print("| 親の段 | 分岐点(2択以上) | 数字が全一致 | 割合 | 土俵まで一致 | 割合 | 1択ノード |")
+	print("|---|---|---|---|---|---|---|")
 	var steps := per_step.keys()
 	steps.sort()
 	var total_branch := 0
 	var total_alike := 0
 	var total_single := 0
+	var total_same_field := 0
 	for step in steps:
 		var row: Array = per_step[step]
 		total_branch += row[0]
 		total_alike += row[1]
 		total_single += row[2]
-		print("| 段%d | %d | %d | %s | %d |" % [step, row[0], row[1], _pct(row[1], row[0]), row[2]])
-	print("| **合計** | %d | %d | %s | %d |" % [
-		total_branch, total_alike, _pct(total_alike, total_branch), total_single
+		total_same_field += row[3]
+		print("| 段%d | %d | %d | %s | %d | %s | %d |" % [
+			step, row[0], row[1], _pct(row[1], row[0]),
+			row[3], _pct(row[3], row[0]), row[2]
+		])
+	print("| **合計** | %d | %d | %s | %d | %s | %d |" % [
+		total_branch, total_alike, _pct(total_alike, total_branch),
+		total_same_field, _pct(total_same_field, total_branch), total_single
 	])
 	print("")
 	print("全戦闘ノードの頭数の総和(=報酬の総量): **%d**" % heads)
@@ -92,6 +103,21 @@ func _alike(tree: MapTree, targets: Array[Vector2i]) -> bool:
 		elif node.level() != level or node.enemy_count() != count:
 			return false
 	return level > 0
+
+
+## 進める先の土俵が全部同一か。土俵が違えばノードの絵(外周形状・傾斜のケバの
+## 本数と長さ・柱の印)が違うので、数字が全一致でも見分けは付く。
+func _same_field(tree: MapTree, targets: Array[Vector2i]) -> bool:
+	var key := ""
+	for t in targets:
+		var node: MapTree.MapNode = tree.nodes.get(t)
+		if node == null or node.field == null:
+			return false
+		if key.is_empty():
+			key = node.field.title_key
+		elif node.field.title_key != key:
+			return false
+	return not key.is_empty()
 
 
 func _pct(part: int, whole: int) -> String:

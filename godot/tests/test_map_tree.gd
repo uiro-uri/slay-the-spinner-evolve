@@ -25,6 +25,9 @@ func run(check: Callable) -> void:
 	_test_melee_scale_on_every_node(check)
 	_test_distinct_choice_guarantee(check)
 	_test_targets_are_alike_predicate(check)
+	_test_distinct_field_guarantee(check)
+	_test_targets_look_identical_predicate(check)
+	_test_siblings_of(check)
 
 
 func _test_invariants(check: Callable) -> void:
@@ -726,4 +729,184 @@ func _test_targets_are_alike_predicate(check: Callable) -> void:
 	check.call(
 		tree._targets_are_alike(targets, b),
 		"見分け判定: 2体→1体の下見——全部1体になるなら平らになる(損が立つ)"
+	)
+
+
+## 進める先が「数字も土俵も全部おなじ」＝絵が1ピクセルも違わない2択が残っていないか。
+##
+## 統計側。`_ensure_distinct_field` は土俵しか動かさないので、報酬の総量(頭数の総和)を
+## 見張る既存の `_test_distinct_choice_guarantee` と対になっている
+## ——あちらが「経済を動かしていない」、こちらが「絵の同一物を消した」。
+##
+## 閾値ではなく **0** で見る。土俵は6種あり、引き直しの候補が尽きるのは
+## 「全ての親から見た兄弟が5種類の土俵を使い切っている」ときだけで、しかも
+## 進める先を1つずつ順に試すので、実際には起きない(2000生成で0件)。
+## 万一起きるようになったら、それは土俵を減らしたか分岐の形を変えたかで、
+## どちらもここで気付くべき変更。
+##
+## 土俵の合法性も一緒に見る。引き直しは「同じ段で引ける土俵」の中からでなければ
+## ならず、とくに決戦専用の大闘技場が道中に漏れると特別感が壊れる(逆に決戦の
+## 土俵が道中のものへ差し替わると、決戦だけ狭い土俵に戻る)。
+func _test_distinct_field_guarantee(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	var branch_points := 0
+	var identical := 0
+	var illegal_field := 0
+
+	var road_keys := {}
+	for field in FieldRoster.all():
+		road_keys[field.title_key] = true
+	var boss_key := FieldRoster.boss_field().title_key
+
+	for trial in TRIALS:
+		rng.seed = trial
+		var tree := MapTree.generate(rng)
+		if tree == null:
+			continue
+		for coord in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if node.has_encounter():
+				var key := "" if node.field == null else node.field.title_key
+				var wanted_boss := EnemyRoster.level_for_step(coord.x) >= 5
+				if wanted_boss:
+					if key != boss_key:
+						illegal_field += 1
+				elif not road_keys.has(key):
+					illegal_field += 1
+			var targets := node.targets()
+			if targets.size() < 2:
+				continue
+			branch_points += 1
+			if _targets_are_identical(tree, targets):
+				identical += 1
+
+	check.call(
+		branch_points > 0,
+		"絵の違う2択: 分岐点が数えられている(%d個)" % branch_points
+	)
+	check.call(
+		identical == 0,
+		"絵の違う2択: 数字も土俵も全一致の分岐点が無い(%d個, 保証なしは240前後)" % identical
+	)
+	check.call(
+		illegal_field == 0,
+		"絵の違う2択: 引き直した土俵がその段で合法(道中に決戦の大闘技場が漏れない, 違反%d件)"
+			% illegal_field
+	)
+
+
+## 進める先が全部おなじ(実レベル, 頭数, 土俵)か。生成器の
+## `_targets_look_identical` とは別実装にしてある(判定そのものを写すと、
+## 判定が緩んだときに統計側も一緒に緩んで何も落ちない)。
+func _targets_are_identical(tree: MapTree, targets: Array[Vector2i]) -> bool:
+	var seen := {}
+	for t in targets:
+		var node: MapTree.MapNode = tree.nodes.get(t)
+		if node == null or not node.has_encounter() or node.field == null:
+			return false
+		seen["%d/%d/%s" % [node.level(), node.enemy_count(), node.field.title_key]] = true
+		if seen.size() > 1:
+			return false
+	return seen.size() == 1
+
+
+## 「絵が同じか」の判定そのもの(MapTree._targets_look_identical)を直に確かめる。
+##
+## 統計側は 0 か否かしか見ないので、判定が**緩む**方向のサボタージュ(土俵の比較を
+## 落とす)は「引き直しが起きなくなる」形で 0 を割り、ちゃんと落ちる。逆に判定が
+## **きつくなる**方向(頭数の比較を落として全部を同一扱いにする)は統計側では 0 のまま
+## 素通りするので、合成した2択で1つずつ押さえる。
+##
+## `_targets_are_alike`(昇格の下見)との決定的な違いは**全部2体のとき**。あちらは
+## 「2体を3体にはしない」ので false を返すが、遊ぶ側から見れば同じ2択なので
+## こちらは true でなければならない——コールドプレイで踏んだ段3→4 がまさにこれ。
+func _test_targets_look_identical_predicate(check: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var tree := MapTree.new()
+	var a := Vector2i(1, 0)
+	var b := Vector2i(1, 1)
+	tree.nodes[a] = MapTree.MapNode.new(a)
+	tree.nodes[b] = MapTree.MapNode.new(b)
+	var node_a: MapTree.MapNode = tree.nodes[a]
+	var node_b: MapTree.MapNode = tree.nodes[b]
+	var targets: Array[Vector2i] = [a, b]
+	var fields := FieldRoster.all()
+
+	node_a.enemies = EnemyRoster.group_of(1, 1, rng, 0)
+	node_b.enemies = EnemyRoster.group_of(1, 1, rng, 0)
+	node_a.field = fields[0]
+	node_b.field = fields[0]
+	check.call(
+		tree._targets_look_identical(targets),
+		"絵の同一判定: 同レベル・同頭数・同じ土俵なら絵が同じ"
+	)
+
+	node_b.field = fields[1]
+	check.call(
+		not tree._targets_look_identical(targets),
+		"絵の同一判定: 土俵が違えば絵が違う(数字が全一致でも手を出さない)"
+	)
+
+	node_b.field = fields[0]
+	node_b.enemies = EnemyRoster.group_of(1, 2, rng, 0)
+	check.call(
+		not tree._targets_look_identical(targets),
+		"絵の同一判定: 頭数が違えば報酬枚数と脅威で見分けが付く"
+	)
+
+	node_b.enemies = EnemyRoster.group_of(2, 1, rng, 0)
+	check.call(
+		not tree._targets_look_identical(targets),
+		"絵の同一判定: レベルが違えば見分けが付く"
+	)
+
+	node_a.enemies = EnemyRoster.group_of(1, 2, rng, 0)
+	node_b.enemies = EnemyRoster.group_of(1, 2, rng, 0)
+	check.call(
+		tree._targets_look_identical(targets),
+		"絵の同一判定: どちらも2体でも土俵が同じなら絵が同じ(昇格の下見とはここが違う)"
+	)
+
+	node_b.field = null
+	check.call(
+		not tree._targets_look_identical(targets),
+		"絵の同一判定: 土俵未設定のノードには手を出さない"
+	)
+
+
+## 兄弟の洗い出し(MapTree._siblings_of)。
+##
+## 引き直す土俵は「**その子の全ての親**から見た兄弟」が使っていないものでなければ
+## ならない。子は複数の親を持つので、片方の親だけ見て引き直すと、もう片方の親の
+## 2択を平らにして差し引きゼロになる。親をまたいで集められているかと、
+## 同じノードが2つの親から見えても1度しか出ないことを押さえる。
+func _test_siblings_of(check: Callable) -> void:
+	var tree := MapTree.new()
+	for coord in [
+		Vector2i(0, 1), Vector2i(0, 2),
+		Vector2i(1, 1), Vector2i(1, 2), Vector2i(1, 3)
+	]:
+		tree.nodes[coord] = MapTree.MapNode.new(coord)
+	var left: MapTree.MapNode = tree.nodes[Vector2i(0, 1)]
+	var right: MapTree.MapNode = tree.nodes[Vector2i(0, 2)]
+	# (0,1) → (1,1)真下 と (1,2)右下 / (0,2) → (1,1)左下 と (1,2)真下 と (1,3)右下
+	left.arrows.append(MapTree.Arrow.STRAIGHT)
+	left.arrows.append(MapTree.Arrow.RIGHT)
+	right.arrows.append(MapTree.Arrow.LEFT)
+	right.arrows.append(MapTree.Arrow.STRAIGHT)
+	right.arrows.append(MapTree.Arrow.RIGHT)
+
+	var siblings := tree._siblings_of(Vector2i(1, 2))
+	check.call(
+		siblings == [Vector2i(1, 1), Vector2i(1, 3)],
+		"兄弟の洗い出し: 親をまたいで集め、重複は1度だけ(%s)" % str(siblings)
+	)
+	check.call(
+		tree._siblings_of(Vector2i(1, 3)) == [Vector2i(1, 1), Vector2i(1, 2)],
+		"兄弟の洗い出し: 親が1つでもその親の他の進める先が全部出る"
+	)
+	check.call(
+		tree._siblings_of(Vector2i(0, 1)).is_empty(),
+		"兄弟の洗い出し: 親が居ないノードに兄弟は無い"
 	)
