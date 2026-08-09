@@ -98,11 +98,12 @@ func _pending_enemy_stats() -> Array[SpinnerStats]:
 func _on_battle_finished(
 	player_won: bool, knockout: bool, enemy_tracks: Array, player_rps_loss: Dictionary = {}
 ) -> void:
-	# 報酬画面と**次の戦いの発射前**まで持って行く。頭数ぶん報酬が続くあいだ同じ戦いの
-	# 内訳を出し続けるので、goto_reward の中ではなくここで受ける。持ち先が GameState
-	# なのは、次の Battle が _ready() の時点でこれを読むため(Main のローカルだと
-	# instantiate 後に差し込むことになり、_ready には間に合わない)。
-	GameState.last_battle_rps_loss = player_rps_loss
+	# 報酬画面(直前の1戦)と**次の戦いの発射前**(ランの累計)まで持って行く。頭数ぶん
+	# 報酬が続くあいだ同じ戦いの内訳を出し続けるので、goto_reward の中ではなく
+	# ここで受ける。持ち先が GameState なのは、次の Battle が _ready() の時点で
+	# これを読むため(Main のローカルだと instantiate 後に差し込むことになり、
+	# _ready には間に合わない)。負けた戦いも積む——ここは勝敗を見る前。
+	GameState.record_battle_rps_loss(player_rps_loss)
 	if not player_won:
 		# 相手の軌跡を持って行く。ゲームオーバー画面の3択のうち2つは「相手をどう
 		# 扱うか」なのに、Battleごと差し替わるせいで相手の情報が画面から消えていた。

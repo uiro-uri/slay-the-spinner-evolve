@@ -34,6 +34,12 @@ func run(check: Callable) -> void:
 	_test_carryover_hides_without_loss(check)
 	_test_carryover_locales(check)
 	_test_carryover_screen_wiring(check)
+	_test_accumulate_sums(check)
+	_test_accumulate_is_pure(check)
+	_test_accumulate_ignores_empty_and_negative(check)
+	_test_accumulate_weighs_by_absolute_amount(check)
+	_test_accumulate_survives_json(check)
+	_test_run_carryover_beats_single_battle(check)
 	TranslationServer.set_locale(saved_locale)
 
 
@@ -363,7 +369,7 @@ func _test_share_screen_wiring(check: Callable) -> void:
 
 	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
 	check.call(
-		main.contains("GameState.last_battle_rps_loss = player_rps_loss"),
+		main.contains("GameState.record_battle_rps_loss(player_rps_loss)"),
 		"Main.gdが戦闘終了時に内訳を受け取ってGameStateへ置く"
 	)
 	check.call(
@@ -408,13 +414,17 @@ func _test_share_screen_wiring(check: Callable) -> void:
 	)
 
 
-## ---- 次の戦いの発射前に据え置きで出す「前の戦いの喪失の構成比」(carryover_line) ----
+## ---- 次の戦いの発射前に据え置きで出す「このランの喪失の構成比」(carryover_line) ----
 ##
 ## 一次証拠(コールドプレイ 2026-08-09 昼, seed=48213): 段1で満引きして勝ったが自分の
 ## 喪失の63%が壁で、それを知ったのは報酬画面へ移った後だった。段5(壁52%)・段6(壁47%)も
 ## 同じで、**発射を決める画面では毎回この事実が消えていた**。発射前の見積もり
 ## (WallCostPreview)は相手に届くまでしか見ないので、噛み合った後に払った壁は
 ## こちらの実測でしか出せない。
+##
+## 渡す内訳を1戦ぶんからランの累計へ替えたのは、次のコールドプレイ(2026-08-09 夜,
+## seed=4821)の一次証拠。壁で1度死んだランなのに、行の壁の欄は戦いごとに
+## 60%→5%→21%→13%→25%→5%→10% と暴れ、段4では「壁5%」と出た(同時点の累計は壁55%)。
 
 
 ## 割合と壁回数が、share_line と同じ値で行に転記される。中身が同じであることが要件
@@ -455,7 +465,7 @@ func _test_carryover_values(check: Callable) -> void:
 	)
 
 
-## ランの1戦目(前の戦いが無い)・総量0では行ごと出さない。0/0/0 を割って
+## ランの1戦目(まだ積んでいない)・総量0では行ごと出さない。0/0/0 を割って
 ## 「33/33/34」と出すと、起きていない戦いの構成比を語ることになる。
 func _test_carryover_hides_without_loss(check: Callable) -> void:
 	check.call(RpsLossText.carryover_line({}) == "", "内訳なし(ランの1戦目)は空文字")
@@ -466,14 +476,16 @@ func _test_carryover_hides_without_loss(check: Callable) -> void:
 
 
 ## 両言語に訳があり、キーが素通し(訳が無いとキー名がそのまま出る)になっていない。
-## 報酬画面の行(REWARD_RECENT_LOSS)とは別のキー＝「前の戦い」と断る文言を持つ。
+## 報酬画面の行(REWARD_RECENT_LOSS)とは別のキー＝「このラン」と断る文言を持つ。
+## 報酬画面の行は「直前の1戦」のままなので、同じ文言だと2つの画面が同じ範囲の話を
+## しているように読める。
 func _test_carryover_locales(check: Callable) -> void:
 	var loss := {"drain": 1.0, "wall": 2.0, "decay": 3.0, "wall_hits": 4}
 	for locale in ["ja", "en"]:
 		TranslationServer.set_locale(locale)
 		var line := RpsLossText.carryover_line(loss)
 		check.call(
-			not line.contains("BATTLE_LAST_LOSS_CARRYOVER"),
+			not line.contains("BATTLE_RUN_LOSS_CARRYOVER"),
 			"%s に訳がある(キーが素通ししていない): %s" % [locale, line]
 		)
 		check.call(line != "", "%s で空にならない" % locale)
@@ -489,17 +501,40 @@ func _test_carryover_screen_wiring(check: Callable) -> void:
 	var state := FileAccess.get_file_as_string("res://autoloads/GameState.gd")
 	check.call(
 		state.contains("var last_battle_rps_loss: Dictionary = {}"),
-		"GameStateが直前の戦いの内訳を持つ(画面を2つまたぐので Main のローカルでは足りない)"
+		"GameStateが直前の戦いの内訳を持つ(頭数ぶん続く報酬画面が読む)"
 	)
 	check.call(
-		state.contains("last_battle_rps_loss = {}\n\troll_spawn_seed()"),
-		"reset_run()が新しいランで内訳を捨てる(前のランの戦いを持ち越さない)"
+		state.contains("var run_rps_loss: Dictionary = {}"),
+		"GameStateがランの累計を持つ(画面を2つまたぐので Main のローカルでは足りない)"
+	)
+	check.call(
+		state.contains("run_rps_loss = {}\n\troll_spawn_seed()"),
+		"reset_run()が新しいランで累計を捨てる(前のランの戦いを持ち越さない)"
+	)
+	check.call(
+		state.contains("run_rps_loss = RpsLossText.accumulate(run_rps_loss, loss)"),
+		"GameStateが累計をRpsLossText.accumulateで畳む(自前で足さない)"
+	)
+
+	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
+	check.call(
+		main.contains("GameState.record_battle_rps_loss(player_rps_loss)"),
+		"Mainが決着のたびに記録する(直前の1戦と累計を同時に更新する1本の口)"
+	)
+	# 勝敗を見る前に記録すること。負けた戦いこそ「何で死んだか」の一次証拠で、
+	# ここを勝ち筋の中へ移すと、いちばん効く警告だけが累計から落ちる。
+	var finished_at := main.find("func _on_battle_finished(")
+	var record_at := main.find("GameState.record_battle_rps_loss(", finished_at)
+	var lose_at := main.find("if not player_won:", finished_at)
+	check.call(
+		finished_at >= 0 and record_at >= 0 and lose_at >= 0 and record_at < lose_at,
+		"記録が敗北の分岐より前にある(負けた戦いも積む): %d < %d" % [record_at, lose_at]
 	)
 
 	var battle := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
 	check.call(
-		battle.contains("RpsLossText.carryover_line(GameState.last_battle_rps_loss)"),
-		"Battle.gdが発射前の行をRpsLossTextから得る(自前で割らない)"
+		battle.contains("RpsLossText.carryover_line(GameState.run_rps_loss)"),
+		"Battle.gdが発射前の行をランの累計からRpsLossText経由で得る(自前で割らない)"
 	)
 	check.call(
 		battle.contains("show_last_loss"),
@@ -516,6 +551,129 @@ func _test_carryover_screen_wiring(check: Callable) -> void:
 
 	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
 	check.call(
-		cli.contains('RpsLossText.carryover_line(state.get("last_loss", {}))'),
+		cli.contains('RpsLossText.carryover_line(state.get("run_loss", {}))'),
 		"naive_playの予告にも同じ行が出る(ハーネスと実ゲームの情報量を対等に保つ)"
+	)
+	check.call(
+		cli.contains("RpsLossText.accumulate(\n\t\tstate.get(\"run_loss\", {}), result.player_rps_loss)"),
+		"naive_playも実UIと同じaccumulateで畳む(別々に足すとハーネスだけ違う数字になる)"
+	)
+
+
+## ---- ランを通した蓄積(accumulate) ----
+
+
+## 2戦ぶんの内訳が機構ごとに足され、壁回数も足される。
+func _test_accumulate_sums(check: Callable) -> void:
+	var a := {"drain": 2.0, "wall": 3.0, "decay": 1.0, "wall_hits": 2}
+	var b := {"drain": 4.0, "wall": 1.0, "decay": 0.5, "wall_hits": 3}
+	var total := RpsLossText.accumulate(RpsLossText.accumulate({}, a), b)
+	check.call(is_equal_approx(float(total["drain"]), 6.0), "削りが足される: %s" % total)
+	check.call(is_equal_approx(float(total["wall"]), 4.0), "壁が足される: %s" % total)
+	check.call(is_equal_approx(float(total["decay"]), 1.5), "減衰が足される: %s" % total)
+	check.call(int(total["wall_hits"]) == 5, "壁回数が足される: %s" % total)
+	# 累計を行にすると、和の構成比がそのまま出る(6/4/1.5 → 52/35/13、壁回数5)。
+	var line := RpsLossText.carryover_line(total)
+	check.call(line.contains("5"), "壁回数の累計が行に出る: %s" % line)
+	check.call(
+		RpsLossText.shares(total) == RpsLossText.shares({
+			"drain": 6.0, "wall": 4.0, "decay": 1.5}),
+		"累計の構成比は和の構成比と同じ: %s" % [RpsLossText.shares(total)]
+	)
+
+
+## 引数を書き換えない。GameState は `run_rps_loss = accumulate(run_rps_loss, loss)` と
+## 自分自身を渡すので、その場で足す実装だと二重に積まれる(そして loss 側を書き換えると
+## 報酬画面が読む last_battle_rps_loss まで壊れる——同じ Dictionary を共有している)。
+func _test_accumulate_is_pure(check: Callable) -> void:
+	var total := {"drain": 2.0, "wall": 3.0, "decay": 1.0, "wall_hits": 2}
+	var loss := {"drain": 4.0, "wall": 1.0, "decay": 0.5, "wall_hits": 3}
+	var out := RpsLossText.accumulate(total, loss)
+	check.call(is_equal_approx(float(total["drain"]), 2.0), "引数のtotalが元のまま: %s" % total)
+	check.call(int(total["wall_hits"]) == 2, "引数のtotalの壁回数が元のまま: %s" % total)
+	check.call(is_equal_approx(float(loss["drain"]), 4.0), "引数のlossが元のまま: %s" % loss)
+	check.call(int(loss["wall_hits"]) == 3, "引数のlossの壁回数が元のまま: %s" % loss)
+	check.call(is_equal_approx(float(out["drain"]), 6.0), "返り値には足されている: %s" % out)
+
+
+## 空の内訳(旧結果・未解決)は素通し。負の値は0に潰す。
+## 空を足して欄が生えると、1戦も終えていないランで「33/33/34」が出る。
+func _test_accumulate_ignores_empty_and_negative(check: Callable) -> void:
+	check.call(
+		RpsLossText.carryover_line(RpsLossText.accumulate({}, {})) == "",
+		"空に空を足しても総量0＝行は出ない"
+	)
+	var base := {"drain": 5.0, "wall": 1.0, "decay": 0.0, "wall_hits": 1}
+	var kept := RpsLossText.accumulate(base, {})
+	check.call(
+		is_equal_approx(float(kept.get("drain", -1.0)), 5.0)
+			and int(kept.get("wall_hits", -1)) == 1,
+		"空を足しても累計は減らない: %s" % kept
+	)
+	# 行そのものでも見る。上の欄ごとの比較は、累計を丸ごと空にするサボタージュだと
+	# 欄が消えて**実行時エラーで関数が中断**し、check が1件も走らないまま
+	# スイートは「完走」扱いになる(GDScriptの実行時エラーは関数を抜けるだけ)。
+	# 行の比較なら空Dictionaryは空文字になるので、必ず値の不一致として落ちる。
+	check.call(
+		RpsLossText.carryover_line(kept) == RpsLossText.carryover_line(base),
+		"空を足しても行が変わらない: '%s' / '%s'" % [
+			RpsLossText.carryover_line(kept), RpsLossText.carryover_line(base)]
+	)
+	var neg := RpsLossText.accumulate({}, {"drain": -3.0, "wall": 2.0, "decay": 0.0, "wall_hits": -1})
+	check.call(is_equal_approx(float(neg["drain"]), 0.0), "負の削りは0に潰す: %s" % neg)
+	check.call(int(neg["wall_hits"]) == 0, "負の壁回数は0に潰す: %s" % neg)
+
+
+## 割合ではなく**絶対量**で積む。1戦ごとに割ってから平均すると、総喪失1.0の小競り合いが
+## 総喪失20.0の総力戦と同じ重みになる。ここでは 壁だけの小さい戦い1回と
+## 削りだけの大きい戦い1回を積み、大きい方が構成比を支配することで測る
+## (割合の平均なら 50/50 になり、絶対量の和なら 5/95 になる)。
+func _test_accumulate_weighs_by_absolute_amount(check: Callable) -> void:
+	var small := {"drain": 0.0, "wall": 1.0, "decay": 0.0, "wall_hits": 1}
+	var big := {"drain": 19.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0}
+	var s := RpsLossText.shares(RpsLossText.accumulate(RpsLossText.accumulate({}, small), big))
+	check.call(
+		s[0] > 90 and s[1] < 10,
+		"大きい戦いが構成比を支配する(割合の単純平均なら50/50になる): %s" % [s]
+	)
+
+
+## JSON往復で壊れない。naive_play は state をJSONで持ち越すので、wall_hits が
+## float(5.0)で戻ってくる。int() を通していないと壁回数の欄が「5.0回」になる。
+func _test_accumulate_survives_json(check: Callable) -> void:
+	var total := RpsLossText.accumulate({}, {"drain": 2.0, "wall": 3.0, "decay": 1.0, "wall_hits": 5})
+	var back: Dictionary = JSON.parse_string(JSON.stringify(total))
+	var line := RpsLossText.carryover_line(back)
+	check.call(not line.contains("5.0"), "壁回数が整数で出る(JSON往復後): %s" % line)
+	check.call(
+		line == RpsLossText.carryover_line(total),
+		"JSON往復で行が変わらない: %s / %s" % [line, RpsLossText.carryover_line(total)]
+	)
+
+
+## この変更の動機そのもの。コールドプレイ(2026-08-09 夜, seed=4821)の段1〜段3の実測を
+## 順に積み、段4の発射前に何が出るかを見る。1戦ぶん(段3)なら壁5%で「壁はもう
+## 気にしなくていい」と読めるが、累計では壁が最大の欄になる——実際このランは
+## 段2で壁に6回当たって死んでいる。
+func _test_run_carryover_beats_single_battle(check: Callable) -> void:
+	var s1 := {"drain": 2.2, "wall": 0.0, "decay": 0.6, "wall_hits": 0}   # 段1
+	var s2 := {"drain": 2.2, "wall": 13.0, "decay": 0.8, "wall_hits": 6}  # 段2(壁で敗北)
+	var s2r := {"drain": 3.1, "wall": 6.3, "decay": 1.1, "wall_hits": 3}  # 段2リトライ
+	var s3 := {"drain": 5.7, "wall": 0.3, "decay": 0.6, "wall_hits": 1}   # 段3
+	var single := RpsLossText.shares(s3)
+	check.call(
+		single[1] < 10,
+		"1戦ぶん(段3)では壁は1割未満に見える: %s" % [single]
+	)
+	var total := {}
+	for loss in [s1, s2, s2r, s3]:
+		total = RpsLossText.accumulate(total, loss)
+	var run := RpsLossText.shares(total)
+	check.call(
+		run[1] > run[0] and run[1] > run[2],
+		"累計では壁が最大の欄になる(このランは壁で死んでいる): %s" % [run]
+	)
+	check.call(
+		int(total["wall_hits"]) == 10,
+		"壁回数もランを通して積む: %s" % total
 	)

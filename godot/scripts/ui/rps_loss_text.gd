@@ -161,8 +161,33 @@ static func share_line(loss: Dictionary) -> String:
 	])
 
 
-## **次の戦いの発射前**に据え置きで出す「前の戦いで自分の回転がどこへ消えたか」の1行。
-## 中身は share_line と同じ3つの割合で、違うのは訳文(「前の戦い」と断る)だけ。
+## 自分の喪失の内訳を**ランを通して積む**。carryover_line が読む蓄積を作る純関数で、
+## 戦いが終わるたびに `total = accumulate(total, その戦いの内訳)` と畳む。
+##
+## 積むのは割合ではなく**絶対量**。1戦ごとに割ってから平均すると、総喪失2.0の小競り合いと
+## 総喪失25.0の総力戦が同じ重みになる。絶対量で積めば大きい戦いほど自然に重く、
+## しかも回転はランを通して育つので、後半の戦いほど重くなる=そのまま直近寄りになる。
+##
+## 空の内訳(旧結果・未解決)は何も足さずに素通し。負の値は0に潰す(蓄積は非負のはず)。
+## 引数は書き換えず、必ず新しい Dictionary を返す(呼び手が前の値を持っていても壊れない)。
+static func accumulate(total: Dictionary, loss: Dictionary) -> Dictionary:
+	var out := {
+		"drain": maxf(float(total.get("drain", 0.0)), 0.0),
+		"wall": maxf(float(total.get("wall", 0.0)), 0.0),
+		"decay": maxf(float(total.get("decay", 0.0)), 0.0),
+		"wall_hits": maxi(int(total.get("wall_hits", 0)), 0),
+	}
+	if loss.is_empty():
+		return out
+	for key in _SHARE_KEYS:
+		out[key] = float(out[key]) + maxf(float(loss.get(key, 0.0)), 0.0)
+	out["wall_hits"] = int(out["wall_hits"]) + maxi(int(loss.get("wall_hits", 0)), 0)
+	return out
+
+
+## **次の戦いの発射前**に据え置きで出す「このランで自分の回転がどこへ消えたか」の1行。
+## 中身は share_line と同じ3つの割合で、違うのは訳文と、渡す内訳が**1戦ぶんではなく
+## ランの累計**(accumulate で畳んだもの)であること。
 ##
 ## 動機はコールドプレイ(2026-08-09 昼, seed=48213)の一次証拠。段1で満引きして勝ったが、
 ## **自分の喪失の63%が壁**(削り2.5 / 壁5.9・4回 / 減衰1.0)で、残りrpsは37%まで削られていた。
@@ -172,17 +197,23 @@ static func share_line(loss: Dictionary) -> String:
 ## 発射を決める画面ではその事実が毎回消えていた——「次はもう少し弱く引こう」を
 ## いちばん思い出したい瞬間に、思い出す材料が画面に無い。
 ##
-## 発射前の見積もり(WallCostPreview)は**相手に届くまで**しか見ない。噛み合った後の
-## もみ合いで払う壁は自由飛行の先読みでは出せないので、そこは実測の据え置きで補う
-## ——この行が答えるのは「この狙いは何を払うか」ではなく「**自分のビルドは何で
-## 死にかけているか**」で、土俵も相手も変わっても持ち越して意味のある問い。
+## 累計にするのは、その次のコールドプレイ(2026-08-09 夜, seed=4821)の一次証拠。
+## 1戦ぶんだと**戦いごとに数字が跳ねて助言にならない**——段2で満引きして壁で死に
+## (壁81%・6回)、その反省で以後は弱く引いて9戦を抜けたのに、行の壁の欄は
+## 60%→5%→21%→13%→25%→5%→10% と暴れた。とくに段4で「壁5%」と出た時点の
+## **ランの累計は壁55%**で、行はそこで「壁はもう気にしなくていい」と嘘をついていた。
+## 1戦ぶんの構成比が答えるのは「さっきの戦いはどうだったか」だが、発射前に効くのは
+## 「**自分のビルドは何で死にかけているか**」で、それはランを通した傾向でしか出ない。
 ##
-## 前の戦いの内訳が無い(ランの1戦目・旧結果・総量0)なら空文字。呼び手は行ごと落とす。
+## 発射前の見積もり(WallCostPreview)は**相手に届くまで**しか見ない。噛み合った後の
+## もみ合いで払う壁は自由飛行の先読みでは出せないので、そこは実測の据え置きで補う。
+##
+## 累計が無い(ランの1戦目・旧結果・総量0)なら空文字。呼び手は行ごと落とす。
 static func carryover_line(loss: Dictionary) -> String:
 	var s := shares(loss)
 	if s.is_empty():
 		return ""
-	return TranslationServer.translate("BATTLE_LAST_LOSS_CARRYOVER").format([
+	return TranslationServer.translate("BATTLE_RUN_LOSS_CARRYOVER").format([
 		s[0], s[1], int(loss.get("wall_hits", 0)), s[2],
 	])
 
