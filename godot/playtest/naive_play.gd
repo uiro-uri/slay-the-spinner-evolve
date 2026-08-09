@@ -76,6 +76,8 @@ func _default_state(seed_value: int) -> Dictionary:
 		"pending": null,       # 交戦中ノードの col (未突破)
 		"stats": stats_dict(s),
 		"parts": [],
+		"last_loss": {},       # 直前の戦いの自分の喪失内訳 (報酬画面の行)
+		"run_loss": {},        # 上をランを通して積んだもの (発射前の据え置き行)
 		"offered": null,       # 直前のrewardで提示した札id列 (pickの検証と再抽選防止)
 		"rare_drought": 0,     # RAREを1枚も含まなかった提示の連続数 (天井。GameState.rare_drought相当)
 		"rewards_left": null,  # この勝利で残っている報酬選択回数 (乱戦=頭数ぶん)
@@ -217,10 +219,10 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		field.inradius() - float(state["stats"]["radius"]) - 0.5])
 	print(offense_index_text(stats_from(state["stats"])))
 	print("ゴースト(初衝突後すり抜け): %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
-	# 実UIが発射前に据え置きで出す「前の戦いで自分の回転がどこへ消えたか」
+	# 実UIが発射前に据え置きで出す「このランで自分の回転がどこへ消えたか」の累計
 	# (Battleの_remain_label / RpsLossText.carryover_line)。ハーネスと実UIで
-	# 発射を決める材料を揃える。ランの1戦目は前の戦いが無いので出ない。
-	var carryover := RpsLossText.carryover_line(state.get("last_loss", {}))
+	# 発射を決める材料を揃える。ランの1戦目は積んだものが無いので出ない。
+	var carryover := RpsLossText.carryover_line(state.get("run_loss", {}))
 	if carryover != "":
 		print(carryover)
 	var enemies := node_group(state, node)
@@ -374,6 +376,10 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 	# 割合で出すので、CLIも同じ情報を持って行く——ハーネスと実ゲームの情報量を
 	# 対等に保つ約束(過去サイクルで何度も踏んでいるズレ)。
 	state["last_loss"] = result.player_rps_loss.duplicate()
+	# 発射前の据え置き行が読むランの累計(実UIの GameState.record_battle_rps_loss と同じ畳み方)。
+	# 負けた戦いも積む——ここは勝敗を見る前。
+	state["run_loss"] = RpsLossText.accumulate(
+		state.get("run_loss", {}), result.player_rps_loss)
 	if won:
 		if tree.is_goal():
 			# 実ゲーム(Main._on_battle_finished)はボス撃破で即クリアし報酬はない。

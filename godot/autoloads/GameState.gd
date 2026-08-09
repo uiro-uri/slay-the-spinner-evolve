@@ -46,14 +46,23 @@ var last_rejected_ids: Array[int] = []
 var rare_drought: int = 0
 
 ## 直前に終えた戦いで、自分の回転がどこへ消えたかの機構別内訳
-## (BattleResult.player_rps_loss)。報酬画面が軽減札の選択材料として割合で出し
-## (RpsLossText.share_line)、**次の戦いの発射前**にも据え置きで出す
-## (RpsLossText.carryover_line)。1戦も終えていないうちは空＝どちらの行も出ない。
+## (BattleResult.player_rps_loss)。報酬画面が軽減札の選択材料として割合で出す
+## (RpsLossText.share_line)。1戦も終えていないうちは空＝行が出ない。
 ##
-## Mainのローカル変数ではなくここに置くのは、報酬画面だけでなく**画面を2つまたいだ
-## 次の戦闘**が読むため。Battleは_ready()の時点でこれを読むので、Mainが
-## instantiate後に差し込む形では間に合わない。
+## Mainのローカル変数ではなくここに置くのは、勝利1回につき頭数ぶん続く報酬画面が
+## 同じ内訳を読み続けるため。
 var last_battle_rps_loss: Dictionary = {}
+
+## 上と同じ内訳を、**このランを通して積んだ**もの(RpsLossText.accumulate)。
+## 次の戦いの発射前に据え置きで出す(RpsLossText.carryover_line)。
+##
+## 1戦ぶんではなく累計なのは、発射前に効く問いが「さっきの戦いはどうだったか」ではなく
+## 「自分のビルドは何で死にかけているか」だから。1戦ぶんは戦いごとに跳ねて、
+## たまたま壁に当たらなかった戦いの直後は「壁0%」と出てしまう。
+##
+## リトライで失った分も積む——負けた戦いこそ何で死んだかの一次証拠なので落とさない。
+## ランの状態なので reset_run() で捨てる。
+var run_rps_loss: Dictionary = {}
 
 ## 連続クリア記録（連勝数）。ランをまたいで持ち越すので reset_run() では消さない。
 ## クリアで +1、ギブアップ（ランを勝ち切れず終了）で 0 に戻る。メモリ上のみ＝
@@ -77,7 +86,16 @@ func reset_run() -> void:
 	last_rejected_ids = []
 	rare_drought = 0
 	last_battle_rps_loss = {}
+	run_rps_loss = {}
 	roll_spawn_seed()
+
+
+## 終えた戦いの自分の喪失内訳を記録する。報酬画面が読む「直前の1戦」と、
+## 次の発射前が読む「ランの累計」を同時に更新する——2つを別々の場所で更新すると
+## 片方だけ更新し忘れる形になり、画面ごとに違う戦いの話をすることになる。
+func record_battle_rps_loss(loss: Dictionary) -> void:
+	last_battle_rps_loss = loss
+	run_rps_loss = RpsLossText.accumulate(run_rps_loss, loss)
 
 
 ## 次の立ち合いの出現を引き直す。マップでノードを選んだときに呼ぶ。
