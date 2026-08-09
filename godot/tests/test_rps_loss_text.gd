@@ -30,6 +30,10 @@ func run(check: Callable) -> void:
 	_test_share_ignores_negative_and_missing(check)
 	_test_share_locales(check)
 	_test_share_screen_wiring(check)
+	_test_carryover_values(check)
+	_test_carryover_hides_without_loss(check)
+	_test_carryover_locales(check)
+	_test_carryover_screen_wiring(check)
 	TranslationServer.set_locale(saved_locale)
 
 
@@ -359,11 +363,13 @@ func _test_share_screen_wiring(check: Callable) -> void:
 
 	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
 	check.call(
-		main.contains("_last_player_rps_loss = player_rps_loss"),
-		"Main.gdが戦闘終了時に内訳を受け取って持つ"
+		main.contains("GameState.last_battle_rps_loss = player_rps_loss"),
+		"Main.gdが戦闘終了時に内訳を受け取ってGameStateへ置く"
 	)
 	check.call(
-		main.contains("ThreatMeter.reachable_hardest_stats(GameState.map_tree),\n\t\t_last_player_rps_loss"),
+		main.contains(
+			"ThreatMeter.reachable_hardest_stats(GameState.map_tree),\n\t\tGameState.last_battle_rps_loss"
+		),
 		"Main.gdが報酬画面のsetup()へ内訳を渡す"
 	)
 
@@ -399,4 +405,117 @@ func _test_share_screen_wiring(check: Callable) -> void:
 	check.call(
 		cli.contains("RpsLossText.share_line(state.get(\"last_loss\", {}))"),
 		"naive_playの報酬にも同じ行が出る(ハーネスと実ゲームの情報量を対等に保つ)"
+	)
+
+
+## ---- 次の戦いの発射前に据え置きで出す「前の戦いの喪失の構成比」(carryover_line) ----
+##
+## 一次証拠(コールドプレイ 2026-08-09 昼, seed=48213): 段1で満引きして勝ったが自分の
+## 喪失の63%が壁で、それを知ったのは報酬画面へ移った後だった。段5(壁52%)・段6(壁47%)も
+## 同じで、**発射を決める画面では毎回この事実が消えていた**。発射前の見積もり
+## (WallCostPreview)は相手に届くまでしか見ないので、噛み合った後に払った壁は
+## こちらの実測でしか出せない。
+
+
+## 割合と壁回数が、share_line と同じ値で行に転記される。中身が同じであることが要件
+## ——同じ内訳を2つの画面が別々に割ると、報酬画面と発射前で数字が食い違う。
+func _test_carryover_values(check: Callable) -> void:
+	var loss := {"drain": 5.0, "wall": 3.0, "decay": 2.0, "wall_hits": 4}
+	var line := RpsLossText.carryover_line(loss)
+	check.call(line.contains("50"), "削り50%% が行に出る: %s" % line)
+	check.call(line.contains("30"), "壁30%% が行に出る: %s" % line)
+	check.call(line.contains("20"), "減衰20%% が行に出る: %s" % line)
+	check.call(line.contains("4"), "壁回数4が行に出る: %s" % line)
+
+	# 壁が最大の出費だった戦い(コールドプレイ段1: 削り2.5 / 壁5.9 / 減衰1.0)。
+	# 壁の欄が3つの中で最大になっていること＝この行を出す動機そのもの。
+	var cold := {"drain": 2.5, "wall": 5.9, "decay": 1.0, "wall_hits": 4}
+	var s := RpsLossText.shares(cold)
+	check.call(
+		s[1] > s[0] and s[1] > s[2],
+		"壁が最大の欄になる(段1の実測 2.5/5.9/1.0): %s" % [s]
+	)
+	# 欄の並びも share_line/summary_line と同じ 削り→壁→減衰。3つの値が別々の
+	# 数字になる内訳(26/63/11)で、行の中の**出現位置**まで見る——contains だけだと
+	# 差し込む順を入れ替えるサボタージュを素通しする。
+	var cold_line := RpsLossText.carryover_line(cold)
+	var at_drain := cold_line.find(str(s[0]))
+	var at_wall := cold_line.find(str(s[1]))
+	var at_decay := cold_line.find(str(s[2]))
+	check.call(at_wall >= 0, "壁の割合がそのまま行に出る: %s" % cold_line)
+	check.call(
+		at_drain >= 0 and at_drain < at_wall and at_wall < at_decay,
+		"並びが 削り→壁→減衰 (%d/%d/%d): %s" % [at_drain, at_wall, at_decay, cold_line]
+	)
+	# 壁回数は割合とは別の数字(9回)で見る。上の 26/63/11 とも桁が被らない。
+	var many := {"drain": 2.5, "wall": 5.9, "decay": 1.0, "wall_hits": 9}
+	check.call(
+		RpsLossText.carryover_line(many).contains("9"),
+		"壁回数が行に出る: %s" % RpsLossText.carryover_line(many)
+	)
+
+
+## ランの1戦目(前の戦いが無い)・総量0では行ごと出さない。0/0/0 を割って
+## 「33/33/34」と出すと、起きていない戦いの構成比を語ることになる。
+func _test_carryover_hides_without_loss(check: Callable) -> void:
+	check.call(RpsLossText.carryover_line({}) == "", "内訳なし(ランの1戦目)は空文字")
+	check.call(
+		RpsLossText.carryover_line({"drain": 0.0, "wall": 0.0, "decay": 0.0, "wall_hits": 0}) == "",
+		"総量0は空文字"
+	)
+
+
+## 両言語に訳があり、キーが素通し(訳が無いとキー名がそのまま出る)になっていない。
+## 報酬画面の行(REWARD_RECENT_LOSS)とは別のキー＝「前の戦い」と断る文言を持つ。
+func _test_carryover_locales(check: Callable) -> void:
+	var loss := {"drain": 1.0, "wall": 2.0, "decay": 3.0, "wall_hits": 4}
+	for locale in ["ja", "en"]:
+		TranslationServer.set_locale(locale)
+		var line := RpsLossText.carryover_line(loss)
+		check.call(
+			not line.contains("BATTLE_LAST_LOSS_CARRYOVER"),
+			"%s に訳がある(キーが素通ししていない): %s" % [locale, line]
+		)
+		check.call(line != "", "%s で空にならない" % locale)
+		check.call(
+			line != RpsLossText.share_line(loss),
+			"%s で報酬画面の行とは別の文になる: %s" % [locale, line]
+		)
+
+
+## 画面側の配線。発射前の据え置き行は「実UIとCLIとGameStateの3点が同じ
+## Dictionaryを読む」ことで成り立つので、その3本を名指しで見る。
+func _test_carryover_screen_wiring(check: Callable) -> void:
+	var state := FileAccess.get_file_as_string("res://autoloads/GameState.gd")
+	check.call(
+		state.contains("var last_battle_rps_loss: Dictionary = {}"),
+		"GameStateが直前の戦いの内訳を持つ(画面を2つまたぐので Main のローカルでは足りない)"
+	)
+	check.call(
+		state.contains("last_battle_rps_loss = {}\n\troll_spawn_seed()"),
+		"reset_run()が新しいランで内訳を捨てる(前のランの戦いを持ち越さない)"
+	)
+
+	var battle := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
+	check.call(
+		battle.contains("RpsLossText.carryover_line(GameState.last_battle_rps_loss)"),
+		"Battle.gdが発射前の行をRpsLossTextから得る(自前で割らない)"
+	)
+	check.call(
+		battle.contains("show_last_loss"),
+		"Battle.gdに据え置き行のon/offがある"
+	)
+	# 発射の瞬間に消えること。_begin が残り回転の行を空にするのは決着後の
+	# リザルトが同じ行を使うためで、消し忘れると戦闘中ずっと前の戦いの話が残る。
+	var begin_at := battle.find("func _begin(")
+	var begin_body := battle.substr(begin_at, 400) if begin_at >= 0 else ""
+	check.call(
+		begin_body.contains('_remain_label.text = ""'),
+		"_begin()が発射の瞬間に据え置き行を消す"
+	)
+
+	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
+	check.call(
+		cli.contains('RpsLossText.carryover_line(state.get("last_loss", {}))'),
+		"naive_playの予告にも同じ行が出る(ハーネスと実ゲームの情報量を対等に保つ)"
 	)
