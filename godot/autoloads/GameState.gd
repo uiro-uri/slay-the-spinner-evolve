@@ -115,9 +115,11 @@ func apply_part(part: CustomPart) -> void:
 
 ## 戦闘に勝つたびに呼ぶ。回転が少しだけ確実に成長する(SpinnerStats.grow_rps_by_victory)。
 ## knockout=真(接触で決着)なら撃破ボーナスで成長が大きい。
+## rps_shareは決着時に残していた回転の割合(BattleResult.player_rps_share)で、
+## 撃破ボーナスだけがこれで伸び縮みする。負(既定)は「不明」＝従来の成長。
 ## 報酬札より先に適用する(倍率札はこの成長込みのrpsに掛かる)。
-func grow_after_victory(knockout: bool = false) -> void:
-	player_stats.grow_rps_by_victory(knockout)
+func grow_after_victory(knockout: bool = false, rps_share: float = -1.0) -> void:
+	player_stats.grow_rps_by_victory(knockout, rps_share)
 
 
 ## ボスを倒してランを勝ち切ったときに呼ぶ。連続クリア記録を1伸ばす。

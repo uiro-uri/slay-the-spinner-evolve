@@ -393,18 +393,21 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			print("！！！全段突破・ラン完了！！！")
 		else:
 			# 実ゲーム(Main._on_battle_finished)と同じく、勝利のたびに回転が少し成長する。
-			# 接触で仕留めた勝ち(knockout)は撃破ボーナスで大きく育つ。
-			# 報酬(倍率札)より先に適用して保存する。
+			# 接触で仕留めた勝ち(knockout)は撃破ボーナスで大きく育ち、その額は
+			# 余力(残り回転)で伸び縮みする。報酬(倍率札)より先に適用して保存する。
 			var knockout := result.finished_by_knockout()
 			var grown := stats_from(state["stats"])
 			# 成長量は現在rpsに比例する(下限あり)ので、定数でなく実増加量を表示する。
 			# 余勢転化(上限超過ぶんのspin_decay低下)も前後の実値で表示する。
 			var decay_before := grown.spin_decay
-			var gained := grown.grow_rps_by_victory(knockout)
+			# すぐ上で出した「残りrps」と同じ2フレームから出る余力。
+			var share := result.player_rps_share()
+			var gained := grown.grow_rps_by_victory(knockout, share)
 			state["stats"] = stats_dict(grown)
 			state["won"] = true    # 撃ち直しによる勝利成長の二重取りを防ぐ
 			_save(state, path)
-			print(victory_text(knockout, gained, grown.rps, decay_before, grown.spin_decay))
+			print(victory_text(
+				knockout, gained, grown.rps, decay_before, grown.spin_decay, share))
 			print("→ reward --bseed=<R> で報酬を見る")
 	else:
 		# 敗北も保存する。以前は敗北が状態に残らず、残機を消費せずに同じノードを
@@ -1303,9 +1306,12 @@ func _wall_cost_line(
 ## 寿命へ転化した(SpinnerStats.grow_rps_by_victoryの余勢転化)ときは頭打ちでなく
 ## 転化の事実を出す。閾値0.005は表示丸め(%.2f)と同じ境界
 ## (VictoryGrowthText.DECAY_SHOWN_MINと同値)。省略時(-1.0)は従来どおり。
+## rps_shareは決着時に残していた回転の割合(BattleResult.player_rps_share)。
+## 0以上なら撃破ボーナスの行に残量を併記する(実UIのVictoryGrowthTextと同じ規則)。
 static func victory_text(
 	knockout: bool, gained: float, rps_now: float,
-	decay_before: float = -1.0, decay_after: float = -1.0
+	decay_before: float = -1.0, decay_after: float = -1.0,
+	rps_share: float = -1.0
 ) -> String:
 	var cap := SpinnerStats.RPS_CAP
 	if knockout and decay_before > 0.0 and decay_before - decay_after >= 0.005:
@@ -1316,6 +1322,9 @@ static func victory_text(
 			return "★撃破ボーナス★ 接触で仕留めたが、回転は上限%.0fで頭打ち・成長なし (rps=%.1f)" % [cap, rps_now]
 		return "回転は上限%.0fで頭打ち・勝利成長なし (rps=%.1f)" % [cap, rps_now]
 	if knockout:
+		if rps_share >= 0.0:
+			return "★撃破ボーナス★ 残り%d%%で仕留めた勝利で回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [
+				VictoryGrowthText.share_percent(rps_share), rps_now, gained, cap]
 		return "★撃破ボーナス★ 接触で仕留めた勝利で回転が大きく成長 rps=%.1f (+%.1f, 上限%.0f)" % [
 			rps_now, gained, cap]
 	return "勝利の勢いで回転が成長 rps=%.1f (+%.1f, 上限%.0f)" % [rps_now, gained, cap]

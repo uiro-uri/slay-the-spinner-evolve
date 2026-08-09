@@ -15,6 +15,7 @@ func run(check: Callable) -> void:
 	_test_overflow_line(check)
 	_test_locales(check)
 	_test_matches_real_growth(check)
+	_test_margin_line(check)
 	_test_battle_wires_label(check)
 	_test_knockout_color_readable(check)
 	TranslationServer.set_locale(saved_locale)
@@ -153,3 +154,46 @@ func _test_knockout_color_readable(check: Callable) -> void:
 	check.call(vs_floor >= 4.5, "金色は床に対しWCAG AA(4.5)以上: %.2f" % vs_floor)
 	var vs_outline := ColorContrast.ratio(Palette.GOLD_CARD, Palette.TEXT_OUTLINE)
 	check.call(vs_outline >= 4.5, "金色は縁取りに対しWCAG AA(4.5)以上: %.2f" % vs_outline)
+
+
+## 余力(残り回転)を渡した撃破の行には残量が出る。成長量が余力で伸び縮みする
+## (SpinnerStats.KNOCKOUT_MARGIN_MIN/MAX)のに数字だけ黙って変わると、
+## 「なぜ今回は +0.8 なのか」がどこにも出ない。渡さない経路は従来の文言のまま。
+func _test_margin_line(check: Callable) -> void:
+	TranslationServer.set_locale("ja")
+	var narrow := VictoryGrowthText.growth_line(true, 0.8, 15.8, -1.0, -1.0, 0.11)
+	check.call(narrow.contains("11"), "余力: 残り11%%が行に出る: %s" % narrow)
+	check.call(narrow.contains("0.8"), "余力: 成長量も残る: %s" % narrow)
+	check.call(narrow.contains("撃破ボーナス"), "余力: 撃破ボーナスだと分かる: %s" % narrow)
+
+	var clean := VictoryGrowthText.growth_line(true, 2.2, 17.2, -1.0, -1.0, 0.9)
+	check.call(clean.contains("90"), "余力: 残り90%%が行に出る: %s" % clean)
+
+	# 余力を渡さない(不明)経路は従来の文言のまま＝互換。
+	var unknown := VictoryGrowthText.growth_line(true, 1.0, 16.0)
+	check.call(
+		unknown == TranslationServer.translate("BATTLE_GROWTH_KNOCKOUT").format(["1.0", "16.0"]),
+		"余力: 不明なら従来の撃破文言のまま: %s" % unknown
+	)
+	# 受け身の勝ちは余力を渡しても残量を名乗らない(係数が掛からない側なので嘘になる)。
+	var passive := VictoryGrowthText.growth_line(false, 0.5, 15.5, -1.0, -1.0, 0.9)
+	check.call(
+		passive == TranslationServer.translate("BATTLE_GROWTH_VICTORY").format(["0.5", "15.5"]),
+		"余力: 受け身の勝ちは残量を出さない: %s" % passive
+	)
+	# 丸めはリザルトの残量行(RemainingRpsText.percent)と同じ規則。
+	check.call(
+		VictoryGrowthText.share_percent(0.114) == 11
+			and VictoryGrowthText.share_percent(0.116) == 12
+			and VictoryGrowthText.share_percent(1.5) == 100
+			and VictoryGrowthText.share_percent(-0.5) == 0,
+		"余力: 百分率の丸めと頭打ち"
+	)
+	# 英日どちらの訳もキー名のまま出ない(訳漏れの検知)。
+	for locale in ["ja", "en"]:
+		TranslationServer.set_locale(locale)
+		var line := VictoryGrowthText.growth_line(true, 1.2, 16.2, -1.0, -1.0, 0.42)
+		check.call(
+			not line.contains("BATTLE_GROWTH_KNOCKOUT_MARGIN") and line.contains("42"),
+			"余力: %s の訳がある: %s" % [locale, line]
+		)

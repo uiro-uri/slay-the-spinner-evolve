@@ -24,6 +24,13 @@ func run(check: Callable) -> void:
 	_test_passive_no_overflow(check)
 	_test_below_cap_no_overflow(check)
 	_test_overflow_floor_single_source(check)
+	_test_margin_factor_monotone(check)
+	_test_margin_unknown_is_neutral(check)
+	_test_margin_scales_knockout(check)
+	_test_margin_does_not_touch_passive(check)
+	_test_narrow_knockout_still_beats_passive(check)
+	_test_margin_from_result_frames(check)
+	_test_margin_wiring(check)
 
 
 func _stats(rps: float) -> SpinnerStats:
@@ -242,4 +249,201 @@ func _test_overflow_floor_single_source(check: Callable) -> void:
 	check.call(
 		is_equal_approx(SpinnerStats.OVERFLOW_DECAY_FLOOR, CustomPartCatalog.FULL_STEAM_FLOOR),
 		"余勢転化: OVERFLOW_DECAY_FLOORはFULL_STEAM_FLOORと同値 (%.2f)" % SpinnerStats.OVERFLOW_DECAY_FLOOR
+	)
+
+
+func _test_margin_factor_monotone(check: Callable) -> void:
+	# 余力係数: 残量が多いほど大きく、両端は定数そのもの。範囲外は端で頭打ち
+	# (相打ちの丸め誤差で負の残量が来ても下端を割らない)。
+	check.call(
+		absf(SpinnerStats.knockout_margin_factor(0.0) - SpinnerStats.KNOCKOUT_MARGIN_MIN) < EPS,
+		"余力係数: 残り0%%は下端 (%.3f)" % SpinnerStats.knockout_margin_factor(0.0)
+	)
+	check.call(
+		absf(SpinnerStats.knockout_margin_factor(1.0) - SpinnerStats.KNOCKOUT_MARGIN_MAX) < EPS,
+		"余力係数: 残り100%%は上端 (%.3f)" % SpinnerStats.knockout_margin_factor(1.0)
+	)
+	var prev := -1.0
+	for i in 11:
+		var f := SpinnerStats.knockout_margin_factor(float(i) / 10.0)
+		check.call(f > prev, "余力係数: 残り%d%%で単調に増える (%.3f)" % [i * 10, f])
+		prev = f
+	check.call(
+		absf(SpinnerStats.knockout_margin_factor(2.0) - SpinnerStats.KNOCKOUT_MARGIN_MAX) < EPS
+			and absf(SpinnerStats.knockout_margin_factor(0.0)
+				- SpinnerStats.knockout_margin_factor(-0.0)) < EPS,
+		"余力係数: 1を超える残量は上端で頭打ち"
+	)
+	# 下端は1未満・上端は1超。片側だけだと「快勝で伸びる」か「辛勝で縮む」の
+	# 一方しか起きず、平均が従来からずれる。
+	check.call(
+		SpinnerStats.KNOCKOUT_MARGIN_MIN < 1.0 and SpinnerStats.KNOCKOUT_MARGIN_MAX > 1.0,
+		"余力係数: 1.0をまたぐ(辛勝は縮み・快勝は伸びる)"
+	)
+
+
+func _test_margin_unknown_is_neutral(check: Callable) -> void:
+	# 余力が分からない(負)なら係数1.0＝従来の成長と厳密に一致する。フレームを
+	# 持たない旧dictの結果や、成長だけを直接呼ぶ経路が壊れないための互換。
+	check.call(
+		absf(SpinnerStats.knockout_margin_factor(-1.0) - 1.0) < EPS,
+		"余力係数: 不明(-1)は1.0"
+	)
+	var unknown := _stats(24.0)
+	var omitted := _stats(24.0)
+	var g_unknown := unknown.grow_rps_by_victory(true, -1.0)
+	var g_omitted := omitted.grow_rps_by_victory(true)
+	check.call(
+		absf(g_unknown - g_omitted) < EPS
+			and absf(g_unknown - 24.0 * SpinnerStats.KNOCKOUT_RPS_GROWTH_RATE) < EPS,
+		"余力不明: 省略時と同じ＝従来の比例成長そのまま (+%.3f)" % g_unknown
+	)
+
+
+func _test_margin_scales_knockout(check: Callable) -> void:
+	# 撃破ボーナスは余力で伸び縮みする。同じrps・同じ撃破でも、快勝は辛勝より
+	# 厳密に大きく育つ——これが今回の変更の本体。
+	var narrow := _stats(30.0)
+	var mid := _stats(30.0)
+	var clean := _stats(30.0)
+	var g_narrow := narrow.grow_rps_by_victory(true, 0.0)
+	var g_mid := mid.grow_rps_by_victory(true, 0.5)
+	var g_clean := clean.grow_rps_by_victory(true, 1.0)
+	check.call(
+		g_narrow < g_mid and g_mid < g_clean,
+		"余力: 撃破ボーナスは残量が多いほど大きい (%.3f < %.3f < %.3f)" % [
+			g_narrow, g_mid, g_clean]
+	)
+	# 額そのものも照合する(向きだけだと係数の大きさを1/100にしても通る)。
+	var base := 30.0 * SpinnerStats.KNOCKOUT_RPS_GROWTH_RATE
+	check.call(
+		absf(g_clean - base * SpinnerStats.KNOCKOUT_MARGIN_MAX) < EPS,
+		"余力: 残り100%%は基準額×上端 (%.3f)" % g_clean
+	)
+	check.call(
+		absf(g_narrow - base * SpinnerStats.KNOCKOUT_MARGIN_MIN) < EPS,
+		"余力: 残り0%%は基準額×下端 (%.3f)" % g_narrow
+	)
+
+
+func _test_margin_does_not_touch_passive(check: Callable) -> void:
+	# 受け身の勝ち(VICTORY_RPS_GROWTH)は引き運の振れ幅を狭める下支えなので、
+	# 余力では動かさない。ここに勾配を掛けると弱いランほど成長も細り、
+	# 下支えの目的そのものが裏返る。
+	var lo := _stats(20.0)
+	var hi := _stats(20.0)
+	var g_lo := lo.grow_rps_by_victory(false, 0.0)
+	var g_hi := hi.grow_rps_by_victory(false, 1.0)
+	check.call(
+		absf(g_lo - SpinnerStats.VICTORY_RPS_GROWTH) < EPS
+			and absf(g_hi - SpinnerStats.VICTORY_RPS_GROWTH) < EPS,
+		"余力: 受け身の勝ちは残量で変わらない (%.3f / %.3f)" % [g_lo, g_hi]
+	)
+
+
+func _test_narrow_knockout_still_beats_passive(check: Callable) -> void:
+	# 抜け道封じ。残量は「触らずに逃げ回る」ほど増えるので、辛勝の撃破が
+	# 快勝の逃げ切りより小さくなると「当てにいくな」という逆の教えになる。
+	# 下端でも撃破が受け身を上回ることを定数レベルで固定する。
+	check.call(
+		SpinnerStats.KNOCKOUT_RPS_GROWTH * SpinnerStats.KNOCKOUT_MARGIN_MIN
+			> SpinnerStats.VICTORY_RPS_GROWTH,
+		"余力: 最悪の撃破(下限×下端 %.3f)でも受け身(%.3f)より大きい" % [
+			SpinnerStats.KNOCKOUT_RPS_GROWTH * SpinnerStats.KNOCKOUT_MARGIN_MIN,
+			SpinnerStats.VICTORY_RPS_GROWTH]
+	)
+	# 実際に呼んでも同じ順序になること(下限が効くrps帯で相打ち撃破 vs 無傷の逃げ切り)。
+	var ko := _stats(15.0)
+	var passive := _stats(15.0)
+	var g_ko := ko.grow_rps_by_victory(true, 0.0)
+	var g_passive := passive.grow_rps_by_victory(false, 1.0)
+	check.call(
+		g_ko > g_passive,
+		"余力: 相打ち寸前の撃破(+%.3f)は無傷の逃げ切り(+%.3f)より大きい" % [g_ko, g_passive]
+	)
+
+
+func _test_margin_from_result_frames(check: Callable) -> void:
+	# 余力の出どころ。BattleResult.player_rps_share は先頭/末尾フレームの比で、
+	# フレームが無ければ -1.0(不明)。0.0(相打ち)と取り違えないことまで見る。
+	var result := BattleResult.new()
+	check.call(
+		result.player_rps_share() < 0.0,
+		"余力の出どころ: フレームの無い結果は不明(-1) (%.2f)" % result.player_rps_share()
+	)
+	result.player_frames = [
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 20.0),
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 5.0),
+	]
+	check.call(
+		absf(result.player_rps_share() - 0.25) < EPS,
+		"余力の出どころ: 20.0→5.0 は 0.25 (%.3f)" % result.player_rps_share()
+	)
+	var dead := BattleResult.new()
+	dead.player_frames = [
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 20.0),
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 0.0),
+	]
+	check.call(
+		absf(dead.player_rps_share()) < EPS,
+		"余力の出どころ: 相打ちは0.0(不明の-1ではない) (%.3f)" % dead.player_rps_share()
+	)
+	# 開始rpsが0近傍の結果を「満タン生還」と読まない(0除算避けではなく嘘避け)。
+	var stopped := BattleResult.new()
+	stopped.player_frames = [
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 0.0),
+		BattleResult.Snapshot.new(Vector2.ZERO, Vector2.ZERO, 0.0),
+	]
+	check.call(
+		absf(stopped.player_rps_share()) < EPS,
+		"余力の出どころ: 開始0は0%%(100%%ではない) (%.3f)" % stopped.player_rps_share()
+	)
+	# JSON往復でも同じ余力が出ること(結果は辞書で運ばれる=サーバー交換点)。
+	var revived := BattleResult.from_dict(result.to_dict())
+	check.call(
+		absf(revived.player_rps_share() - result.player_rps_share()) < EPS,
+		"余力の出どころ: JSON往復で変わらない (%.3f)" % revived.player_rps_share()
+	)
+
+
+## 余力が「戦いの事実」から「ランの成長」まで実際に届いているかの配線検知。
+##
+## 単体テストは grow_rps_by_victory(true, share) を直に呼ぶので、呼び出し側が
+## share を渡し忘れても全部 green のまま **既定の -1.0＝従来の成長** へ静かに
+## 戻る——機能まるごとが消えても誰も落ちない。実プレイ(Battle→Main→GameState)と
+## シミュレーション(BattleSim→RunSim)とCLI(naive_play)の3経路を源で押さえる。
+func _test_margin_wiring(check: Callable) -> void:
+	var battle := FileAccess.get_file_as_string("res://scenes/battle/Battle.gd")
+	check.call(
+		battle.contains("_result.player_rps_share()"),
+		"配線: Battle.gdが結果から余力を読む"
+	)
+	check.call(
+		battle.contains("grow_rps_by_victory(knockout, share)"),
+		"配線: Battle.gdの表示プレビューが余力込みで成長させる"
+	)
+	var main := FileAccess.get_file_as_string("res://scenes/main/Main.gd")
+	check.call(
+		main.contains("grow_after_victory(knockout, rps_share)"),
+		"配線: Mainが余力をGameStateへ渡す"
+	)
+	var gamestate := FileAccess.get_file_as_string("res://autoloads/GameState.gd")
+	check.call(
+		gamestate.contains("grow_rps_by_victory(knockout, rps_share)"),
+		"配線: GameStateが余力を成長へ渡す"
+	)
+	var sim := FileAccess.get_file_as_string("res://playtest/battle_sim.gd")
+	check.call(
+		sim.contains("\"rps_share\": result.player_rps_share()"),
+		"配線: BattleSimの記録に余力が載る"
+	)
+	var run_sim := FileAccess.get_file_as_string("res://playtest/run_sim.gd")
+	check.call(
+		run_sim.contains("record.get(\"rps_share\""),
+		"配線: RunSimが記録の余力を成長へ渡す(統計が実ゲームとずれない)"
+	)
+	var cli := FileAccess.get_file_as_string("res://playtest/naive_play.gd")
+	check.call(
+		cli.contains("grow_rps_by_victory(knockout, share)"),
+		"配線: naive_playが余力込みで成長させる"
 	)
