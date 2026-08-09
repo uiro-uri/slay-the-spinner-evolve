@@ -34,6 +34,7 @@ BATTLE_LEAD_CUT_PLAYER,▲ Preview ends here — you hit the wall first,▲ 先�
 BATTLE_LEAD_CUT_ENEMY,▲ Preview ends here — they hit the wall first,▲ 先読みはここまで（相手が先に壁・柱へ届く）
 BATTLE_LEAD_CUT_BOTH,▲ Preview ends here — both hit the wall first,▲ 先読みはここまで（両者とも壁・柱へ届く）
 BATTLE_LEAD_WALL_COST,◆ Walls cost you {pct}% spin ({hits} hits) before you reach them,◆ 届くまでに壁で回転の{pct}%を失う（{hits}回）
+BATTLE_LAST_LOSS_CARRYOVER,Previous fight — you lost clash {0}% / wall {1}% (x{2}) / decay {3}%,前の戦いで自分が失った回転 — 削り{0}% / 壁{1}%({2}回) / 減衰{3}%
 GAMEOVER_TITLE,GAME OVER,ゲームオーバー
 GAMEOVER_REMATCH,Rematch (same opponent),同じ相手にもう一度
 GAMEOVER_CONTINUE,Face a new opponent,相手を替えて挑む

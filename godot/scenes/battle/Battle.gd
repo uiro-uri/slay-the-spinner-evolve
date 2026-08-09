@@ -86,6 +86,11 @@ const BAR_ROW_H := 60.0
 	WallCostPreview.DEFAULT_NOTABLE_SHARE
 )
 
+## 前の戦いで自分の回転がどこへ消えたかを、発射前に据え置きで出す
+## (RpsLossText.carryover_line)。上の見積もりが**届くまで**しか見ないのに対し、
+## こちらは噛み合った後も含む実測。ランの1戦目は前の戦いが無いので出ない。
+@export var show_last_loss: bool = true
+
 @export_group("")
 
 ## ステージの傾斜の強さ。
@@ -467,6 +472,14 @@ func _ready() -> void:
 	# 決着まで空いている内訳行を借りる。_begin() が発射の瞬間に消し、
 	# 決着後は内訳が同じ行へ入る——2つの文が同時に出ることはない。
 	_loss_label.text = FieldFlavor.line(_field)
+
+	# 前の戦いの喪失内訳も、決着まで空いている残り回転の行を借りて据え置きで出す
+	# (土俵の名前・先読みの行と同じ寿命で、_begin() が発射の瞬間に消す)。
+	# 発射前の見積もり(WallCostPreview)は相手に届くまでしか見ないので、
+	# 噛み合った後に払った壁は実測のこちらでしか出せない(RpsLossText.carryover_line)。
+	_remain_label.text = (
+		RpsLossText.carryover_line(GameState.last_battle_rps_loss) if show_last_loss else ""
+	)
 
 	# 画面比に合わせてアリーナとUIを置き直す。縦画面のときだけ効く。
 	get_viewport().size_changed.connect(_recompute_layout)

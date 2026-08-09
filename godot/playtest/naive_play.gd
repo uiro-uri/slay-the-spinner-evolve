@@ -217,6 +217,12 @@ func _reveal(state: Dictionary, tree: MapTree, bseed: int) -> void:
 		field.inradius() - float(state["stats"]["radius"]) - 0.5])
 	print(offense_index_text(stats_from(state["stats"])))
 	print("ゴースト(初衝突後すり抜け): %.1fs" % CustomPartCatalog.total_ghost_seconds(_ids(state)))
+	# 実UIが発射前に据え置きで出す「前の戦いで自分の回転がどこへ消えたか」
+	# (Battleの_remain_label / RpsLossText.carryover_line)。ハーネスと実UIで
+	# 発射を決める材料を揃える。ランの1戦目は前の戦いが無いので出ない。
+	var carryover := RpsLossText.carryover_line(state.get("last_loss", {}))
+	if carryover != "":
+		print(carryover)
 	var enemies := node_group(state, node)
 	var plans := _enemy_plans(enemies, field, bseed)
 	print("敵 %d体 (bseed=%d):" % [enemies.size(), bseed])
