@@ -89,6 +89,78 @@ static func dealt_line(enemies: Array) -> String:
 	])
 
 
+## 割合の行に並べる機構の順。summary_line の並び(削り→壁→減衰)と同じにする
+## ——同じ内訳を2つの画面で別の順に出すと、縦に読み比べる相手が入れ替わる。
+const _SHARE_KEYS := ["drain", "wall", "decay"]
+
+
+## 「自分の回転がどこへ消えたか」を**割合**にした3つ組 [削り%, 壁%, 減衰%]。
+## 総量が0(または内訳なし)なら空配列を返し、呼び手は行ごと落とす。
+##
+## 絶対量ではなく割合なのが要。報酬の軽減札は**その機構の何%を減らすか**で効く
+## (RAGE = 壁の喪失-17% / SHOCK_ABSORBER = 衝突削り-17%、上限も0.5で同じ)ので、
+## 2枚のどちらが得かを決めるのは自分の喪失の**構成比**であって、戦いごとに変わる
+## 絶対量ではない。絶対量はリザルト画面(summary_line)が既に言っている。
+##
+## 端数は最大剰余法で配る。単純な四捨五入だと合計が99%や101%になり、
+## 「内訳の割合」を名乗る行として壊れて見える。
+static func shares(loss: Dictionary) -> Array[int]:
+	var out: Array[int] = []
+	if loss.is_empty():
+		return out
+	var values: Array[float] = []
+	var total := 0.0
+	for key in _SHARE_KEYS:
+		var v := maxf(float(loss.get(key, 0.0)), 0.0)
+		values.append(v)
+		total += v
+	if total <= 0.0:
+		return out
+	var remainders: Array[float] = []
+	var floored := 0
+	for v in values:
+		var exact := v / total * 100.0
+		var f := int(floor(exact))
+		out.append(f)
+		remainders.append(exact - float(f))
+		floored += f
+	var left := 100 - floored
+	while left > 0:
+		var best := 0
+		var best_remainder := -1.0
+		for i in remainders.size():
+			if remainders[i] > best_remainder:
+				best_remainder = remainders[i]
+				best = i
+		out[best] += 1
+		remainders[best] = -1.0
+		left -= 1
+	return out
+
+
+## 報酬画面に出す「直前の戦いで自分の回転がどこへ消えたか」の1行。
+##
+## 動機はコールドプレイ(2026-08-09)の一次証拠。段5の報酬で
+## PART_RAGE_REFLECTION(壁での喪失-17%)を取ったが、**自分の壁の取り分を知らないまま
+## 取った**。直前の戦いは 削り7.1 / 壁7.6 とほぼ五分で、実際にはコイントスだった。
+## 続く段8では鏡写しの PART_SHOCK_ABSORBER(衝突削り-17%)が出て、直前の戦いは
+## 削り16.1 / 壁9.7 と削り優勢——**取るべき札が測定済みの数字で決まっていたのに、
+## その数字は1画面前で消えていた**。リザルト画面には出ている(summary_line)が、
+## 報酬を選ぶ画面に移った時点で見えなくなる。
+##
+## 出すのは**自分の喪失だけ**。相手の喪失(dealt_line)は「相手を倒せたか」の話で、
+## 軽減札が効く先ではない。攻めの見積もりはカードの行(PartPreview)が既に言う。
+##
+## 内訳なし・総量0(旧結果、報酬画面が戦闘を経ずに開かれた場合)は空文字を返す。
+static func share_line(loss: Dictionary) -> String:
+	var s := shares(loss)
+	if s.is_empty():
+		return ""
+	return TranslationServer.translate("REWARD_RECENT_LOSS").format([
+		s[0], s[1], int(loss.get("wall_hits", 0)), s[2],
+	])
+
+
 ## 表示用の数値。小数1桁固定(丸めで桁が揺れない)。負は0に潰す(蓄積は非負のはずだが表示の防衛)。
 static func _fmt(value: float) -> String:
 	return "%.1f" % maxf(value, 0.0)
