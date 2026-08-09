@@ -15,6 +15,11 @@ const CHOICE_COUNT := 3
 ## カードの中ではなくカードの外に1行だけ置く(PartPreview.attack_basis_text)。
 ## 基準の相手が居ない決戦のあとは行ごと隠す。
 @onready var _attack_basis: Label = $CenterContainer/VBoxContainer/AttackBasis
+## 直前の戦いで自分の回転がどこへ消えたかの割合(RpsLossText.share_line)。
+## 軽減札(RAGE=壁 / SHOCK_ABSORBER=衝突削り)はどちらも同率で同じ機構を減らす鏡写しで、
+## どちらが得かは自分の喪失の構成比でしか決まらない。その数字はリザルト画面には
+## 出ているのに、報酬を選ぶ画面へ移ると消えていた。戦闘を経ずに開かれたら行ごと隠す。
+@onready var _recent_loss: Label = $CenterContainer/VBoxContainer/RecentLoss
 
 var _shine := 0.0
 
@@ -33,15 +38,22 @@ var _opponent: SpinnerStats = null
 
 ## 選択肢を並べる。stats/continues/ghost_secondsは各カードの「取るとどうなるか」
 ## (PartPreview)の基準で、Mainが今のGameStateから渡す。
+## recent_lossは直前の戦いの自分のrps喪失内訳(BattleResult.player_rps_loss)。
+## 空Dictionary(既定)なら割合の行は出ない。
 func setup(
 	parts: Array[CustomPart], stats: SpinnerStats = null,
 	continues: int = -1, ghost_seconds: float = 0.0,
-	opponent: SpinnerStats = null
+	opponent: SpinnerStats = null, recent_loss: Dictionary = {}
 ) -> void:
 	_stats = stats
 	_continues = continues
 	_ghost_seconds = ghost_seconds
 	_opponent = opponent
+
+	# 直前の戦いの喪失の構成比。数字を差し込むのでこのラベルも自動翻訳は切ってある。
+	var recent := RpsLossText.share_line(recent_loss)
+	_recent_loss.text = recent
+	_recent_loss.visible = recent != ""
 
 	# 攻めの行の基準。翻訳済みの文に数字を差し込むので、このラベルだけ
 	# 自動翻訳を切ってある(tscn の auto_translate_mode)。

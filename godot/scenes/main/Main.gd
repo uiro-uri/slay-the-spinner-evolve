@@ -21,6 +21,10 @@ var _rewards_remaining: int = 0
 ## いま報酬画面に提示している札。選択時に見送り札(選ばなかった残り)を割り出し、
 ## 次の報酬抽選から除外する(GameState.last_rejected_ids)ために覚えておく。
 var _reward_offer: Array[CustomPart] = []
+## 直前の戦いで自分がどこで回転を失ったか(BattleResult.player_rps_loss)。
+## 報酬画面が軽減札の選択材料として割合で出す(RpsLossText.share_line)。
+## 戦闘を1度も終えていないうちは空＝行が出ない。
+var _last_player_rps_loss: Dictionary = {}
 
 ## ランを通して出しっぱなしにするビルド表示HUD。ScreenHolderの外(Main直下)に置いて
 ## 画面差し替えで消えないようにし、_swap_screenのたびに現在のGameStateへ追従させる。
@@ -96,8 +100,11 @@ func _pending_enemy_stats() -> Array[SpinnerStats]:
 
 ## 負けたらゲームオーバー画面へ。勝てば報酬を選んでマップへ戻る。
 func _on_battle_finished(
-	player_won: bool, knockout: bool, enemy_tracks: Array
+	player_won: bool, knockout: bool, enemy_tracks: Array, player_rps_loss: Dictionary = {}
 ) -> void:
+	# 報酬画面まで持って行く。頭数ぶん報酬が続くあいだ同じ戦いの内訳を出し続けるので、
+	# goto_reward の中ではなくここで受けて持っておく(_reward_offer と同じ持ち方)。
+	_last_player_rps_loss = player_rps_loss
 	if not player_won:
 		# 相手の軌跡を持って行く。ゲームオーバー画面の3択のうち2つは「相手をどう
 		# 扱うか」なのに、Battleごと差し替わるせいで相手の情報が画面から消えていた。
@@ -208,7 +215,8 @@ func goto_reward() -> void:
 	reward.setup(
 		_reward_offer, GameState.player_stats, GameState.continues_left,
 		CustomPartCatalog.total_ghost_seconds(GameState.acquired_part_ids),
-		ThreatMeter.reachable_hardest_stats(GameState.map_tree)
+		ThreatMeter.reachable_hardest_stats(GameState.map_tree),
+		_last_player_rps_loss
 	)
 
 

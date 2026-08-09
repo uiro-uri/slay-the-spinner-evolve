@@ -19,7 +19,13 @@ extends Node2D
 ## 画面へ渡す——この画面はBattleごと差し替わるので、リザルトに出した
 ## 「あとどれだけだったか」は敗北の瞬間に消えてしまう
 ## (RemainingRpsText.opponent_margin_line 参照)。軌跡を持たない結果では空配列。
-signal finished(player_won: bool, knockout: bool, enemy_tracks: Array)
+## player_rps_lossは自分のrps喪失の機構別内訳(BattleResult.player_rps_loss)。
+## Mainが報酬画面へ渡す——軽減札(壁/衝突削り)のどちらが得かは自分の喪失の構成比で
+## しか決まらないのに、その数字はリザルト画面と一緒に消えていた
+## (RpsLossText.share_line 参照)。内訳を持たない結果では空Dictionary。
+signal finished(
+	player_won: bool, knockout: bool, enemy_tracks: Array, player_rps_loss: Dictionary
+)
 
 const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark.tscn")
 const DAMAGE_NUMBER: PackedScene = preload("res://scenes/battle/DamageNumber.tscn")
@@ -1206,7 +1212,12 @@ func _finish() -> void:
 	# RemainingRpsText の側にあり(テストがそこに掛かっている)、ここは素通し。
 	# 負けたときだけ使われるが勝敗で分けずに常に渡す＝この値が嘘をつくなら
 	# リザルトの _remain_label も同時に嘘をつく、という結び付きを保つ。
-	finished.emit(player_won, _result.finished_by_knockout(), _result.enemy_tracks)
+	# 自分の喪失内訳も素通しで渡す。割合への畳み方は RpsLossText.share_line の側にあり、
+	# リザルトの _loss_label が読む値と**同じ Dictionary** なので2画面が食い違わない。
+	finished.emit(
+		player_won, _result.finished_by_knockout(), _result.enemy_tracks,
+		_result.player_rps_loss
+	)
 
 
 ## この戦闘がボス(ゴール)戦か。ボス勝利は成長せずクリア画面へ直行するので、

@@ -360,6 +360,10 @@ func _launch(state: Dictionary, path: String, bseed: int, from_deg: float, targe
 			rem_parts.append(rem)
 	if not rem_parts.is_empty():
 		print("  残りrps: %s" % " / ".join(rem_parts))
+	# 直前の戦いの自分の喪失内訳。報酬画面(実UIの RewardScreen.RecentLoss)が
+	# 割合で出すので、CLIも同じ情報を持って行く——ハーネスと実ゲームの情報量を
+	# 対等に保つ約束(過去サイクルで何度も踏んでいるズレ)。
+	state["last_loss"] = result.player_rps_loss.duplicate()
 	if won:
 		if tree.is_goal():
 			# 実ゲーム(Main._on_battle_finished)はボス撃破で即クリアし報酬はない。
@@ -451,6 +455,12 @@ func _reward(state: Dictionary, path: String, bseed: int) -> void:
 	)
 	if basis != "":
 		print("  %s" % basis)
+	# 実UIの報酬画面と同じ「直前の戦いで自分の回転がどこへ消えたか」の割合
+	# (RewardScreenのRecentLoss)。軽減札(RAGE=壁 / SHOCK_ABSORBER=衝突削り)は
+	# 鏡写しの同率なので、どちらが得かはこの構成比でしか決まらない。
+	var recent := RpsLossText.share_line(state.get("last_loss", {}))
+	if recent != "":
+		print("  %s" % recent)
 	for c in choices:
 		print("  id=%d '%s' [%s] %s" % [c.id, c.title_key, _rarity(c.rarity), card_text(c)])
 		print("      → %s" % card_preview_text(
