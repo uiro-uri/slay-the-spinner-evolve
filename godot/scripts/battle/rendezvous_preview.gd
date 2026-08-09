@@ -90,9 +90,17 @@ static func advance(
 ## 発射前の2体を自由飛行させ、**一番近づく瞬間**を返す。触れるならその瞬間で
 ## 打ち切る(触れた後の未来は衝突を無視した嘘になるため)。
 ##
-## inradius は土俵の内接半径、obstacles は柱(xy=中心・z=半径)。どちらかのコマの
-## 縁がそこへ届いたら打ち切って cut_short を立てる。inradius が0以下なら壁を、
-## obstacles が空なら柱を見ない(調整・テスト用)。
+## walls は土俵の壁(ArenaWall.build と同じ半平面の列)、obstacles は柱
+## (xy=中心・z=半径)。どちらかのコマの縁がそこへ届いたら打ち切って cut_short を
+## 立てる。walls が空なら壁を、obstacles が空なら柱を見ない(調整・テスト用)。
+##
+## 壁を**内接円1本ではなく本番と同じ半平面の列**で受けるのが要
+## (コールドプレイ 2026-08-09 の積み残し)。矩形の土俵で内接円を使うと、
+## `clamp_inside` が合法と認める隅——10×10 なら中心から 5.0 を超えて 7.07 まで——が
+## 丸ごと「壁の外」に見え、(a)隅に置いたコマが発射の瞬間から食い込み扱いになって
+## 免除の敷居が立ち、(b)対角へ撃つと実際の辺より 1〜2 ユニット手前で打ち切る。
+## どちらも先読みが嘘をつく形なので、壁は BattleResolver と同じ
+## `SpinnerPhysics.wall_gap` で測る。
 ##
 ## 戻り値:
 ##   time          その瞬間の時刻(秒)。発射を0とする
@@ -112,7 +120,7 @@ static func closest_approach(
 	center: Vector2,
 	stage_strength: float,
 	stage_shape: SpinnerPhysics.StageShape,
-	inradius: float,
+	walls: Array[ArenaWall],
 	obstacles: Array[Vector3] = [],
 	horizon: float = DEFAULT_HORIZON,
 	dt: float = DEFAULT_STEP
@@ -140,9 +148,9 @@ static func closest_approach(
 	# 壁・柱は「めり込みが発射時より深くなった瞬間」で打ち切る(_cut_gates)。
 	# 免除を「発射時の深さまで」に限るのが要。詳しくは _cut_gates の注釈。
 	var p_gates := _cut_gates(
-		_block_depths(pp, player_stats.radius, center, inradius, obstacles))
+		_block_depths(pp, player_stats.radius, walls, obstacles))
 	var e_gates := _cut_gates(
-		_block_depths(ep, enemy_stats.radius, center, inradius, obstacles))
+		_block_depths(ep, enemy_stats.radius, walls, obstacles))
 
 	# 発射の瞬間から噛み合っている場合(本番も1歩目で衝突する)。判定は下の刻みと
 	# 同じ述語で採る。
@@ -183,8 +191,8 @@ static func closest_approach(
 			best["contact"] = true
 			return best
 
-		var p_now := _block_depths(pp, player_stats.radius, center, inradius, obstacles)
-		var e_now := _block_depths(ep, enemy_stats.radius, center, inradius, obstacles)
+		var p_now := _block_depths(pp, player_stats.radius, walls, obstacles)
+		var e_now := _block_depths(ep, enemy_stats.radius, walls, obstacles)
 		# 同じ刻みで両者が届くこともあるので、片方を見つけた時点では抜けない。
 		var cut := int(CutBy.NONE)
 		if _past_gates(p_now, p_gates):
@@ -202,22 +210,28 @@ static func closest_approach(
 	return best
 
 
-## コマの縁が壁(内接円)・柱それぞれへ**どれだけ食い込んでいるか**。
+## コマの縁が壁1枚1枚・柱それぞれへ**どれだけ食い込んでいるか**。
 ## 正なら食い込み、0でちょうど接触、負なら離れている(その距離)。
-## 並びは [壁] + obstacles と同順。inradiusが0以下なら壁の要素そのものを置かず、
+## 並びは walls + obstacles と同順。wallsが空なら壁の要素そのものを置かず、
 ## obstaclesが空なら柱の要素が無い(調整・テスト用の「見ない」がそのまま出る)。
+##
+## 壁は本番のリゾルバと同じ `SpinnerPhysics.wall_gap`(半平面までの符号付き深さ)で
+## 測る。以前は「中心からの距離＋半径－内接半径」＝**内接円1本**だったので、
+## 矩形の土俵では隅が丸ごと壁の外に見えていた: 10×10 の (8.17, 8.17) に半径0.7 の
+## コマを置くと、実際には右壁まで 1.13 ユニット空いているのに深さ +0.18 の
+## 「食い込み」になる。壁を1枚に畳んでいたぶん、免除も全方向へ一括で効いていた。
 ##
 ## 「届いたか」のboolではなく深さを返すのは、_cut_gates が
 ## 「発射時より深くなったか」を問うため。boolでは同じ答えしか出せない。
 static func _block_depths(
-	pos: Vector2, radius: float, center: Vector2, inradius: float,
+	pos: Vector2, radius: float, walls: Array[ArenaWall],
 	obstacles: Array[Vector3]
 ) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
-	if inradius > 0.0:
-		out.append(pos.distance_to(center) + radius - inradius)
+	for w in walls:
+		out.append(SpinnerPhysics.wall_gap(w.point, w.normal, pos, radius))
 	for o in obstacles:
-		out.append(o.z + radius - pos.distance_to(Vector2(o.x, o.y)))
+		out.append(SpinnerPhysics.obstacle_gap(Vector2(o.x, o.y), o.z, pos, radius))
 	return out
 
 
