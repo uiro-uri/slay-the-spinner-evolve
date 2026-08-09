@@ -23,8 +23,12 @@ extends Node2D
 ## Mainが報酬画面へ渡す——軽減札(壁/衝突削り)のどちらが得かは自分の喪失の構成比で
 ## しか決まらないのに、その数字はリザルト画面と一緒に消えていた
 ## (RpsLossText.share_line 参照)。内訳を持たない結果では空Dictionary。
+## rps_shareは決着時に自分が残していた回転の割合(BattleResult.player_rps_share)。
+## Mainが撃破ボーナスの余力係数(SpinnerStats.KNOCKOUT_MARGIN_MIN/MAX)へ渡す。
+## フレームを持たない結果では -1.0 =「不明」で、成長は従来どおり。
 signal finished(
-	player_won: bool, knockout: bool, enemy_tracks: Array, player_rps_loss: Dictionary
+	player_won: bool, knockout: bool, enemy_tracks: Array, player_rps_loss: Dictionary,
+	rps_share: float
 )
 
 const COLLISION_SPARK: PackedScene = preload("res://scenes/battle/CollisionSpark.tscn")
@@ -1254,9 +1258,12 @@ func _finish() -> void:
 		var knockout := _result.finished_by_knockout()
 		var preview := _player.stats.duplicate_stats()
 		var decay_before := preview.spin_decay
-		var gained := preview.grow_rps_by_victory(knockout)
+		# 余力(残り回転)で撃破ボーナスが伸び縮みする。すぐ上の _remain_label が
+		# 出しているのと同じ2フレームから出た値なので、2行が食い違わない。
+		var share := _result.player_rps_share()
+		var gained := preview.grow_rps_by_victory(knockout, share)
 		_growth_label.text = VictoryGrowthText.growth_line(
-			knockout, gained, preview.rps, decay_before, preview.spin_decay
+			knockout, gained, preview.rps, decay_before, preview.spin_decay, share
 		)
 		_growth_label.add_theme_color_override(
 			"font_color", Palette.GOLD_CARD if knockout else Palette.TEXT_PRIMARY
@@ -1275,9 +1282,11 @@ func _finish() -> void:
 	# リザルトの _remain_label も同時に嘘をつく、という結び付きを保つ。
 	# 自分の喪失内訳も素通しで渡す。割合への畳み方は RpsLossText.share_line の側にあり、
 	# リザルトの _loss_label が読む値と**同じ Dictionary** なので2画面が食い違わない。
+	# 余力も素通しで渡す。表示(_growth_label)と適用(Main)が**同じ関数の戻り値**を
+	# 使うので、画面に出た成長量とランに乗る成長量が必ず一致する。
 	finished.emit(
 		player_won, _result.finished_by_knockout(), _result.enemy_tracks,
-		_result.player_rps_loss
+		_result.player_rps_loss, _result.player_rps_share()
 	)
 
 

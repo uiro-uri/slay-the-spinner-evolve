@@ -96,7 +96,8 @@ func _pending_enemy_stats() -> Array[SpinnerStats]:
 
 ## 負けたらゲームオーバー画面へ。勝てば報酬を選んでマップへ戻る。
 func _on_battle_finished(
-	player_won: bool, knockout: bool, enemy_tracks: Array, player_rps_loss: Dictionary = {}
+	player_won: bool, knockout: bool, enemy_tracks: Array, player_rps_loss: Dictionary = {},
+	rps_share: float = -1.0
 ) -> void:
 	# 報酬画面(直前の1戦)と**次の戦いの発射前**(ランの累計)まで持って行く。頭数ぶん
 	# 報酬が続くあいだ同じ戦いの内訳を出し続けるので、goto_reward の中ではなく
@@ -114,8 +115,9 @@ func _on_battle_finished(
 		goto_gameclear()
 		return
 	# 勝利の勢いで回転が少し成長する。接触で仕留めた勝ち(knockout)は撃破ボーナスで
-	# 大きく育つ。報酬選択より先(倍率札は成長込みに掛かる)。
-	GameState.grow_after_victory(knockout)
+	# 大きく育ち、その額は余力(残り回転 rps_share)で伸び縮みする。
+	# 報酬選択より先(倍率札は成長込みに掛かる)。
+	GameState.grow_after_victory(knockout, rps_share)
 	# 倒した頭数だけ報酬を選ぶ。乱戦はrps据え置きで手強いぶん、見返りも頭数ぶん。
 	_rewards_remaining = maxi(GameState.pending_enemies.size(), 1)
 	goto_reward()

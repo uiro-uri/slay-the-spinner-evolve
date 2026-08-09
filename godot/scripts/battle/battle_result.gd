@@ -184,6 +184,28 @@ func finished_by_knockout() -> bool:
 	return loser_death_cause in CONTACT_CAUSES and loser_hit_by_player
 
 
+## 決着の瞬間に自分が残していた回転の割合(0〜1)。撃破ボーナスの余力係数
+## (SpinnerStats.knockout_margin_factor)の入力で、リザルトの残量表示
+## (RemainingRpsText)が読むのと**同じ2フレーム**から出す——画面が「残り11%」と
+## 言った戦いの成長が、別の値で計算されることが無いようにする。
+##
+## フレームを持たない結果(to_dict/from_dict の旧データ・手組み)は -1.0 =「不明」を
+## 返し、成長側が従来の係数1.0へ落ちる。0.0(相打ち)と取り違えないため負で返す。
+func player_rps_share() -> float:
+	if player_frames.is_empty():
+		return -1.0
+	var start := float(player_frames[0].rps)
+	if start < _RPS_SHARE_EPS:
+		return 0.0
+	return clampf(float(player_frames[player_frames.size() - 1].rps) / start, 0.0, 1.0)
+
+
+## 割合を出す下限の開始rps。これ以下は「そもそも回っていなかった」として0%に倒す。
+## 0近傍で割ると 5.0/0.0005 が頭打ちで100%になり、満タン生還という正反対の嘘になる
+## (RemainingRpsText._START_EPS と同じ理由・同じ値)。
+const _RPS_SHARE_EPS := 0.001
+
+
 func duration() -> float:
 	return finish_time
 

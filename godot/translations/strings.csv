@@ -24,6 +24,7 @@ BATTLE_RPS_DEALT_BREAKDOWN_MUTUAL,Spin they lost — your clash {0} / each other
 BATTLE_RPS_REMAINING,Spin left standing — you {0} ({1}%) / them {2} ({3}%),決着時に残った回転 — 自分 {0}({1}%) / 相手 {2}({3}%)
 BATTLE_GROWTH_KNOCKOUT,Knockout bonus! Spin +{0} → {1},撃破ボーナス! 接触で仕留めて回転 +{0} → {1}
 BATTLE_GROWTH_VICTORY,Victory — spin +{0} → {1},勝利の勢いで回転 +{0} → {1}
+BATTLE_GROWTH_KNOCKOUT_MARGIN,Knockout bonus — {2}% left! Spin +{0} → {1},撃破ボーナス! 残り{2}%で仕留めて回転 +{0} → {1}
 BATTLE_GROWTH_KNOCKOUT_CAPPED,Knockout bonus — but spin is capped at {0},撃破ボーナス — だが回転は上限{0}で頭打ち
 BATTLE_GROWTH_KNOCKOUT_OVERFLOW,Knockout bonus! Overflow steadies your spin — decay {0}→{1},撃破ボーナス! 勢い余って回転が長持ちに 回転減衰 {0}→{1}
 BATTLE_GROWTH_CAPPED,Spin at cap {0} — no growth,回転は上限{0}で頭打ち・成長なし

@@ -150,8 +150,10 @@ static func play_one(
 
 		# Main._on_battle_finished と同じく、勝利のたびに回転が少し成長する
 		# (報酬選択より先。倍率札は成長込みのrpsに掛かる)。接触で仕留めた勝ち
-		# (knockout)は撃破ボーナスで大きく育つ。
-		stats.grow_rps_by_victory(bool(record.get("knockout", false)))
+		# (knockout)は撃破ボーナスで大きく育ち、その額は余力(残り回転)で伸び縮みする。
+		stats.grow_rps_by_victory(
+			bool(record.get("knockout", false)), float(record.get("rps_share", -1.0))
+		)
 
 		# 勝利報酬。Main._on_battle_finished/_on_part_chosen(GameState.apply_part)と
 		# 同じく、倒した頭数ぶん報酬を選ぶ(乱戦はrps据え置きで手強いぶん見返りも頭数ぶん)。

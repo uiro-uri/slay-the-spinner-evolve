@@ -162,6 +162,10 @@ static func play_one(
 		# リゾルバが記録した事実。BattleMetrics(軌跡からの推定)とは別に持つ。
 		# RunSimが撃破ボーナス(勝利成長の増額)の判定に使う。
 		"knockout": result.finished_by_knockout(),
+		# 決着時に自分が残していた回転の割合。RunSimが撃破ボーナスの余力係数
+		# (SpinnerStats.KNOCKOUT_MARGIN_MIN/MAX)へ渡す。実ゲームのMainが
+		# Battleから受け取るのと同じ事実。
+		"rps_share": result.player_rps_share(),
 		# 機構別のrps喪失内訳(drain/wall/decay/wall_hits)。バランス調整で
 		# 「何が勝敗を決めたか」を統計で追うために事実のまま載せる。
 		"player_rps_loss": result.player_rps_loss,

@@ -84,6 +84,37 @@ const KNOCKOUT_RPS_GROWTH := 1.0
 ## 撃破ボーナスの存在意義(当てにいく方が報われる)が崩れるため。
 const KNOCKOUT_RPS_GROWTH_RATE := 0.05
 
+## 撃破ボーナスの余力係数の下端(残り回転0%＝相打ち)と上端(残り回転100%＝無傷)。
+## 撃破ボーナスに「**どれだけ回転を残して勝ったか**」の勾配を付ける。
+##
+## 動機(コールドプレイ 2026-08-09 深夜, seed=4821・9戦全勝でクリア): 残りrpsは
+## 90% / 16% / 54% / 56% / 16% / 48% / 38% / 11% / 0% と大きく振れ、段5(16%)・
+## 段8(11%)・決戦(相打ち)は本当に痺れたのに、**それらの勝ちは残り90%の快勝と
+## 1ミリも違う成長しかくれない**。勝った戦いは回転が全快して次へ進むので、
+## 際どさは残りrpsの表示に出るだけで、ランには一切持ち越されない。
+## journal が「勝った戦闘に持ち越す代償が1つも無い」を「前半が易しすぎる」の
+## 根として何サイクルも挙げながら、分割の当てが無いまま残っていた部分。
+##
+## **なぜ撃破ボーナスの側だけを揺らすのか**。受け身の勝ち(VICTORY_RPS_GROWTH)は
+## 「RARE札を引けないランが段3〜5で機構的に詰む」を防ぐ**下支え**として入った
+## 定数で、引き運の振れ幅を狭めるのが仕事(あちらのコメント参照)。そこへ腕前の
+## 勾配を掛けると、弱いランほど成長も細って振れ幅が逆に開く。一方 撃破ボーナスは
+## 最初から「当てにいく楽しい方の遊びが報われる」ための腕前の褒賞なので、
+## 「当てにいって、しかも綺麗に勝った」を上乗せするのは同じ向きの拡張になる。
+## 下支えは平らなまま、上澄みだけが余力で伸び縮みする。
+##
+## **受け身に逃げる抜け道は開かない**。残り回転は「触らずに逃げ回る」ほど増えるが、
+## 係数が掛かるのは接触で仕留めた勝ちだけで、逃げ切りは平らな +0.5 のまま。
+## 下端でも 1.0×0.7=0.7 > 0.5 なので、**辛勝の撃破は快勝の逃げ切りより必ず大きい**
+## ——この不等式はテストが照合する。
+##
+## 端の値は「実測の平均残量あたりでちょうど従来と同じ」になるよう置いた。上の
+## コールドプレイの勝ち9戦の残量平均は 41%、`scripts/playtest.sh` のラン群でも
+## 勝ちの残量はおおむね3〜4割で、lerp(0.7, 1.5) は s=0.375 で 1.00 を通る。
+## つまり平均的な勝ちの成長は据え置きで、快勝と辛勝が上下に開くだけ。
+const KNOCKOUT_MARGIN_MIN := 0.7
+const KNOCKOUT_MARGIN_MAX := 1.5
+
 ## 撃破ボーナスの余勢転化でspin_decayを下げるときの下限。MOMENTUM札
 ## (CustomPartCatalog.FULL_STEAM_FLOOR)と同じ0.4で、勝ち続けても自然減衰は
 ## 通常の40%までしか軽くならない(無限に回るコマを作らないための床)。
@@ -103,10 +134,16 @@ const OVERFLOW_DECAY_FLOOR := 0.4
 ## 寿命目安はrps/(radius×spin_decay)なので、spin_decayをRPS_CAP/(RPS_CAP+余り)倍
 ## することで、堰き止められたrpsが入っていた場合と厳密に同じだけ寿命が伸びる。
 ## 受け身の勝ち(knockout=偽)は転化しない: 上限後こそ差を付けたい場面だから。
-func grow_rps_by_victory(knockout: bool = false) -> float:
+##
+## rps_share は決着時に自分が残していた回転の割合(0〜1。BattleResult.player_rps_share)。
+## 撃破ボーナスにだけ余力の勾配を掛ける(KNOCKOUT_MARGIN_MIN/MAX 参照)。
+## 負(既定の-1.0)は「余力が分からない」= 従来どおり係数1.0。フレームを持たない
+## 旧dictの結果や、成長だけを直接呼ぶ古い経路・テストがここに落ちる。
+func grow_rps_by_victory(knockout: bool = false, rps_share: float = -1.0) -> float:
 	var growth := VICTORY_RPS_GROWTH
 	if knockout:
 		growth = maxf(KNOCKOUT_RPS_GROWTH, rps * KNOCKOUT_RPS_GROWTH_RATE)
+		growth *= knockout_margin_factor(rps_share)
 	var before := rps
 	rps = minf(rps + growth, RPS_CAP)
 	var gained := rps - before
@@ -117,6 +154,15 @@ func grow_rps_by_victory(knockout: bool = false) -> float:
 				OVERFLOW_DECAY_FLOOR, spin_decay * RPS_CAP / (RPS_CAP + overflow)
 			)
 	return gained
+
+
+## 撃破ボーナスに掛ける余力係数。rps_share は 0〜1 の残り回転の割合で、
+## 負(不明)なら 1.0 = 従来の成長そのまま。範囲外は端で頭打ちにする
+## (相打ちの丸め誤差で負の残量が来ても下端より下がらない)。
+static func knockout_margin_factor(rps_share: float) -> float:
+	if rps_share < 0.0:
+		return 1.0
+	return lerpf(KNOCKOUT_MARGIN_MIN, KNOCKOUT_MARGIN_MAX, clampf(rps_share, 0.0, 1.0))
 
 
 func duplicate_stats() -> SpinnerStats:
