@@ -264,6 +264,35 @@ static func capped_wall_drain(drain: float, max_rps: float, cap_share: float) ->
 	return minf(drain, maxf(max_rps, 0.0) * cap_share)
 
 
+## 壁・柱に1回ぶつかった後のrps。上の3本(effective_wall_damping /
+## impact_scaled_wall_damping / absolute_wall_drain / capped_wall_drain)を
+## 本番の順序どおりに組み上げた1本で、経緯は BattleResolver._wall_damaged_rps の注釈。
+##
+## ここへ出したのは、**発射前の見積もり(WallCostPreview)と本番(BattleResolver)が
+## 同じ式を通ること**を構造で保証するため。見積もりが本番と1ミリでも違う式を持つと、
+## それは「予告が嘘をつく」のと同じ罪になる(rendezvous_preview.gd の注釈と同じ約束)。
+##
+## gauge_rps は天井の基準になる回転ゲージ(=初期rps)で、道中で減った現在rpsではない。
+static func wall_damaged_rps(
+	rps: float, gauge_rps: float, mass: float, radius: float, wall_keep: float,
+	normal_speed: float, damping: float, impact_ref_speed: float,
+	absolute_share: float, violence: float, drain_cap_share: float
+) -> float:
+	var keep := clampf(wall_keep, 0.0, 1.0)
+	var proportional := rps * effective_wall_damping(
+		impact_scaled_wall_damping(damping, normal_speed, impact_ref_speed), keep
+	)
+	var share := clampf(absolute_share, 0.0, 1.0)
+	var damaged := proportional
+	if share > 0.0:
+		var absolute := maxf(
+			rps - absolute_wall_drain(normal_speed, mass, radius, violence) * (1.0 - keep),
+			0.0
+		)
+		damaged = lerpf(proportional, absolute, share)
+	return rps - capped_wall_drain(rps - damaged, gauge_rps, drain_cap_share)
+
+
 ## 攻め手のdrill(0..)のぶんだけ、相手の硬さに依存しない追加削りを上乗せする。
 ## 追加量は drill × pierce_drain(相手が攻め手自身と同じ硬さだったときの素の削り)。
 ##

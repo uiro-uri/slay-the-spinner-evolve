@@ -77,6 +77,15 @@ const BAR_ROW_H := 60.0
 ## 「壁に着くまでに噛み合うか」から先は見えない。
 @export_range(0.2, 4.0, 0.1) var lead_horizon: float = RendezvousPreview.DEFAULT_HORIZON
 
+## 相手に届くまでに自分が壁で失う回転を見積もって1行で言う(WallCostPreview)。
+## offで従来どおり「触れるか」だけ。
+@export var show_wall_cost: bool = true
+
+## その1行を出す敷居。回転ゲージのこの割合を超える見込みのときだけ言う。
+@export_range(0.0, 0.5, 0.01) var wall_cost_notable_share: float = (
+	WallCostPreview.DEFAULT_NOTABLE_SHARE
+)
+
 @export_group("")
 
 ## ステージの傾斜の強さ。
@@ -774,17 +783,50 @@ func _on_aim_changed(origin: Vector2, velocity: Vector2) -> void:
 	_launcher.set_lead(
 		results[index], _player.stats.radius, _enemies[index].stats.radius
 	)
-	_set_lead_hint(RendezvousPreview.hint_key(results[index]))
+	_set_lead_hint(_lead_hint_text(results[index], start, velocity))
 
 
-## 先読みの打ち切りの1行。決着まで空いている相手側の内訳行を借りる
+## 狙いの1行。「触れるか」(打ち切り)と「届くまでの壁の通行料」を並べる。
+##
+## 通行料の見積もりは**噛み合う時刻まで**で切る(噛み合わないなら地平まで)。
+## 触れた後の未来は先読みと同じ理由で嘘になるし、打ち手が知りたいのは
+## 「相手に届くまでに何を払うか」だから。
+##
+## 打ち切りの行と**両立させる**のが要。コールドプレイ2026-08-09深夜の一次証拠は
+## 「先読みが噛み合うと言った狙いで、壁に持っていかれて負ける」——つまり
+## 痛い狙いほど打ち切りは無言になる。片方が出たらもう片方を隠す作りにすると、
+## いちばん要る場面でいちばん要る行が消える。
+func _lead_hint_text(lead: Dictionary, origin: Vector2, velocity: Vector2) -> String:
+	var parts: PackedStringArray = []
+	var cut := RendezvousPreview.hint_key(lead)
+	if cut != "":
+		parts.append(tr(cut))
+	if show_wall_cost:
+		var until: float = float(lead["time"]) if bool(lead["contact"]) else lead_horizon
+		var cost := WallCostPreview.approach_cost(
+			origin, velocity, _player.stats,
+			_center(), _stage_strength(), _stage_shape(), _walls(), _obstacles(),
+			build_request(origin, velocity), until
+		)
+		var wall := WallCostPreview.hint_text(cost, wall_cost_notable_share)
+		if wall != "":
+			parts.append(wall)
+	return " ".join(parts)
+
+
+## 先読みの1行。決着まで空いている相手側の内訳行を借りる
 ## (土俵の名前が自分側の内訳行を借りているのと同じ理由・同じ寿命で、
 ## _begin() が発射の瞬間に消し、決着後は内訳が同じ行へ入る)。
-## 空文字なら行ごと消える。訳はControlの自動翻訳に任せるのでキーをそのまま入れる。
-func _set_lead_hint(key: String) -> void:
+## 空文字なら行ごと消える。
+##
+## 渡すのは**訳し終えた文**(空文字も可)。打ち切りの行だけだった頃は訳キーを
+## そのまま入れてControlの自動翻訳に任せていたが、通行料の行は数字を挿すので
+## 呼び手側で訳す必要がある。訳文を入れても自動翻訳は「そのキーが無い」で
+## 素通りするので、両方が同じ道を通る。
+func _set_lead_hint(text: String) -> void:
 	if _dealt_label == null:
 		return
-	_dealt_label.text = key
+	_dealt_label.text = text
 
 
 ## 土俵の傾斜。フィールドが入っていればそちら、無ければシーンの@export

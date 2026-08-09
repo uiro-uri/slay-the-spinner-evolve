@@ -531,29 +531,16 @@ static func _resolve_obstacles(
 ## wall_absolute_shareのぶんだけ、削り(spin_drain)と同じ絶対量の式へ寄せる:
 ## 壁を無限に重い相手と見なし、進入速度に比例・自分の硬さに反比例。
 ## 0で従来と厳密一致、1で完全に絶対量。wall_keep(Rage Reflection)は両方に効く。
+##
+## 式そのものは SpinnerPhysics.wall_damaged_rps にある。ここが State と
+## BattleRequest からその引数を並べるだけなのは、**発射前の見積もり
+## (WallCostPreview)が同じ1本を通る**ようにするため——見積もりが本番と違う式を
+## 持てば、それは予告が嘘をつくのと同じことになる。
 static func _wall_damaged_rps(s: State, normal_speed: float, req: BattleRequest) -> float:
-	var keep := clampf(s.stats.wall_keep, 0.0, 1.0)
-	var proportional := s.rps * SpinnerPhysics.effective_wall_damping(
-		SpinnerPhysics.impact_scaled_wall_damping(
-			req.wall_damping, normal_speed, req.wall_impact_ref_speed
-		),
-		keep
-	)
-	var share := clampf(req.wall_absolute_share, 0.0, 1.0)
-	var damaged := proportional
-	if share > 0.0:
-		var absolute := maxf(
-			s.rps - SpinnerPhysics.absolute_wall_drain(
-				normal_speed, s.stats.mass, s.stats.radius, req.wall_violence
-			) * (1.0 - keep),
-			0.0
-		)
-		damaged = lerpf(proportional, absolute, share)
-	# 1回の壁で失える量にも天井を置く。接触側のdrain_cap_shareと対で、
-	# 軽い相手が弾かれて壁で即死する迂回路を塞ぐ(capped_wall_drain参照)。
-	# ゲージは初期rps(stats.rps)で、道中で減った現在rpsではない。
-	return s.rps - SpinnerPhysics.capped_wall_drain(
-		s.rps - damaged, s.stats.rps, req.wall_drain_cap_share
+	return SpinnerPhysics.wall_damaged_rps(
+		s.rps, s.stats.rps, s.stats.mass, s.stats.radius, s.stats.wall_keep,
+		normal_speed, req.wall_damping, req.wall_impact_ref_speed,
+		req.wall_absolute_share, req.wall_violence, req.wall_drain_cap_share
 	)
 
 
