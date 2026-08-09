@@ -29,6 +29,11 @@ extends RefCounted
 ## 扱うのが要で、コールドプレイ2026-08-05の段1(FIELD_PILLARS)はまさに、
 ## 柱の縁で敵が弾かれて予告した交差が起きなかった形だった。
 ##
+## 打ち切りの敷居は**発射時のめり込みの深さ**に置く(_cut_gates)。発射位置は
+## 柱の縁へ密着クランプされうるので「触れているか」だけで切ると柱際の狙いが
+## 全部無言になり、逆に「離れるまで免除」だと**柱を貫いて「噛み合う」と嘘をつく**。
+## 深さで見れば、沿って滑る狙いは残り、突っ込む狙いだけが切れる。
+##
 ## 打ち切りは**どちら側が届いたのか**まで返す(cut_by)。ここが要る理由は
 ## コールドプレイ2026-08-06: 満引き(force=1.0)で段1〜6を勝ち上がったあと段7で
 ## 2連敗し、力を0.2へ落とした3回目で勝った。満引きの罰は「相手より先に壁へ着く」
@@ -53,6 +58,11 @@ const DEFAULT_HORIZON := 1.4
 ## 先読みと本番のリゾルバが別の軌道を歩き、予告した交差時刻が本番とずれる。
 ## tests/test_rendezvous_preview.gd が両者の一致を照合する。
 const DEFAULT_STEP := 1.0 / 60.0
+
+## 打ち切りの敷居(_cut_gates)に足す遊び。発射位置は柱の縁へ _NUDGE(=0.02)ぶんの
+## 余裕で寄せられるので、それより1桁細かく取れば「密着から沿って滑る」狙いを
+## 誤って切らずに、突っ込む狙い(1刻みで0.2ユニット深くなる)は取れる。
+const _GATE_EPS := 0.001
 
 
 ## 自由飛行の1ステップ。**BattleResolver._integrate と同じ順序・同じ式**
@@ -127,11 +137,12 @@ static func closest_approach(
 		"cut_short": false,
 		"cut_by": CutBy.NONE,
 	}
-	# 壁・柱は「入った瞬間」で打ち切る=**発射時に既に接しているものは数えない**。
-	# 発射位置は柱の縁へ寄せてクランプされる(FieldData.clamp_placement)ので、
-	# 素直に「触れているか」で切ると、柱際から撃った瞬間に先読みが消える。
-	var p_blocked := _blocked(pp, player_stats.radius, center, inradius, obstacles)
-	var e_blocked := _blocked(ep, enemy_stats.radius, center, inradius, obstacles)
+	# 壁・柱は「めり込みが発射時より深くなった瞬間」で打ち切る(_cut_gates)。
+	# 免除を「発射時の深さまで」に限るのが要。詳しくは _cut_gates の注釈。
+	var p_gates := _cut_gates(
+		_block_depths(pp, player_stats.radius, center, inradius, obstacles))
+	var e_gates := _cut_gates(
+		_block_depths(ep, enemy_stats.radius, center, inradius, obstacles))
 
 	# 発射の瞬間から噛み合っている場合(本番も1歩目で衝突する)。判定は下の刻みと
 	# 同じ述語で採る。
@@ -172,36 +183,85 @@ static func closest_approach(
 			best["contact"] = true
 			return best
 
-		var p_now := _blocked(pp, player_stats.radius, center, inradius, obstacles)
-		var e_now := _blocked(ep, enemy_stats.radius, center, inradius, obstacles)
+		var p_now := _block_depths(pp, player_stats.radius, center, inradius, obstacles)
+		var e_now := _block_depths(ep, enemy_stats.radius, center, inradius, obstacles)
 		# 同じ刻みで両者が届くこともあるので、片方を見つけた時点では抜けない。
 		var cut := int(CutBy.NONE)
-		if p_now and not p_blocked:
+		if _past_gates(p_now, p_gates):
 			cut |= int(CutBy.PLAYER)
-		if e_now and not e_blocked:
+		if _past_gates(e_now, e_gates):
 			cut |= int(CutBy.ENEMY)
 		if cut != int(CutBy.NONE):
 			best["cut_short"] = true
 			best["cut_by"] = cut
 			return best
-		p_blocked = p_now
-		e_blocked = e_now
+		# 抜け出した相手の免除は取り消す(離れたなら次は普通に打ち切る相手)。
+		p_gates = _tighten_gates(p_gates, p_now)
+		e_gates = _tighten_gates(e_gates, e_now)
 
 	return best
 
 
-## コマの縁が壁(内接円)か柱へ届いたか。inradiusが0以下なら壁を、obstaclesが
-## 空なら柱を見ない。
-static func _blocked(
+## コマの縁が壁(内接円)・柱それぞれへ**どれだけ食い込んでいるか**。
+## 正なら食い込み、0でちょうど接触、負なら離れている(その距離)。
+## 並びは [壁] + obstacles と同順。inradiusが0以下なら壁の要素そのものを置かず、
+## obstaclesが空なら柱の要素が無い(調整・テスト用の「見ない」がそのまま出る)。
+##
+## 「届いたか」のboolではなく深さを返すのは、_cut_gates が
+## 「発射時より深くなったか」を問うため。boolでは同じ答えしか出せない。
+static func _block_depths(
 	pos: Vector2, radius: float, center: Vector2, inradius: float,
 	obstacles: Array[Vector3]
-) -> bool:
-	if inradius > 0.0 and pos.distance_to(center) + radius >= inradius:
-		return true
+) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	if inradius > 0.0:
+		out.append(pos.distance_to(center) + radius - inradius)
 	for o in obstacles:
-		if pos.distance_to(Vector2(o.x, o.y)) <= o.z + radius:
+		out.append(o.z + radius - pos.distance_to(Vector2(o.x, o.y)))
+	return out
+
+
+## 打ち切りの敷居。壁・柱ごとに「この深さを超えたら打ち切る」を持つ。
+##
+## 発射位置は柱の縁へ寄せてクランプされる(FieldData.clamp_placement)ので、
+## 「触れているか」だけで切ると柱際からの狙いが1刻み目で全部無言になる。
+## そこで**発射時に既に食い込んでいる相手は、その深さまで免除する**。
+##
+## 免除を「離れるまで」にしてはいけない(2026-08-09のコールドプレイ、段3・
+## FIELD_PILLARS で1敗した形): 発射位置が柱(7,7)の縁へ密着クランプされたまま
+## 中央を狙うと、免除が柱を**通り抜け終わるまで**続き、先読みは柱の芯
+## (中心からの距離0.09ユニット)を素通りして「0.30秒で噛み合う」と予告した。
+## 本番はもちろん1歩目で柱に弾かれ、敵に一度も触れないまま壁で削られて敗北。
+## **「打ち切りが無言」ではなく「噛み合うと嘘をつく」**ので、輪の破線でも
+## 1行の文言でも救えない——嘘の側を直すしかない。
+##
+## 敷居を「発射時の深さ」に置くと、密着から離れる/沿って滑る狙いは今までどおり
+## 先読みが残り(深さは増えない)、突っ込む狙いだけが切れる。
+static func _cut_gates(depths: PackedFloat32Array) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	for d in depths:
+		out.append(maxf(d, 0.0))
+	return out
+
+
+## どれか1つでも敷居より深く食い込んだか。
+static func _past_gates(depths: PackedFloat32Array, gates: PackedFloat32Array) -> bool:
+	for i in depths.size():
+		if depths[i] > gates[i] + _GATE_EPS:
 			return true
 	return false
+
+
+## 抜け出した(食い込みが消えた)相手の免除を取り消す。従来の実装が
+## `p_blocked = p_now` で毎刻み更新していたのと同じ役目で、一度離れた柱へ
+## 戻ってきたときは普通に打ち切る。敷居は下がるだけ＝免除は緩まない。
+static func _tighten_gates(
+	gates: PackedFloat32Array, depths: PackedFloat32Array
+) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	for i in gates.size():
+		out.append(minf(gates[i], maxf(depths[i], 0.0)))
+	return out
 
 
 ## closest_approach の結果が「自分が先に壁か柱へ届いた」ぶんで打ち切られたか。
