@@ -678,7 +678,10 @@ func _reassign_field(coord: Vector2i, rng: RandomNumberGenerator) -> bool:
 			candidates.append(field)
 	if candidates.is_empty():
 		return false
-	node.field = candidates[rng.randi_range(0, candidates.size() - 1)]
+	# all() は設計値の表なので、段ぶんの間引き(柱の本数)を通してから載せる
+	# ——ここは pick_for_step を経由しない2つ目の入口。
+	node.field = FieldRoster.step_field(
+		candidates[rng.randi_range(0, candidates.size() - 1)], coord.x)
 	return true
 
 
