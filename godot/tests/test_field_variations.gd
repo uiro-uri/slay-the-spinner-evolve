@@ -23,6 +23,7 @@ func run(check: Callable) -> void:
 	_test_push_out_of_obstacles(check)
 	_test_clamp_placement(check)
 	_test_roster(check)
+	_test_step_obstacles(check)
 	_test_boss_octagon(check)
 	_test_localization(check)
 	_test_serialization(check)
@@ -241,6 +242,126 @@ func _test_roster(check: Callable) -> void:
 
 ## ボス段(レベル5)の土俵は必ず八角形闘技場で固定されること。決戦の特別感。
 ## ボス以外の段は従来どおりランダム(形が固定されない)ことも合わせて見る。
+## 柱の本数が段で間引かれる(FieldRoster.step_field)。位置・半径・壁・傾斜は不変。
+##
+## 見るのは「浅い段では減り、深い段では表のまま」という向きと、間引きが
+## **抽選の両方の入口**(pick_for_step と MapTree の引き直し)を通ること。
+## 本数そのものの値は手触りで動く定数なので、定数を読んで照合する。
+func _test_step_obstacles(check: Callable) -> void:
+	var listed: FieldData = null
+	for field in FieldRoster.all():
+		if field.obstacles.size() >= 2:
+			listed = field
+			break
+	check.call(listed != null, "段別の柱: 表に柱2本以上の土俵がある")
+	if listed == null:
+		return
+
+	# 浅い段(Lv1・Lv2)は間引かれ、深い段(Lv3以上)は表のまま。
+	var early_steps: Array[int] = []
+	var full_steps: Array[int] = []
+	for step in range(1, MapTree.STEP_GOAL):
+		if EnemyRoster.level_for_step(step) >= FieldRoster.OBSTACLE_FULL_LEVEL:
+			full_steps.append(step)
+		else:
+			early_steps.append(step)
+	check.call(
+		not early_steps.is_empty() and not full_steps.is_empty(),
+		"段別の柱: 間引く段と表のままの段が両方ある (浅%d 深%d)"
+			% [early_steps.size(), full_steps.size()]
+	)
+
+	var early_ok := true
+	for step in early_steps:
+		var f := FieldRoster.step_field(listed, step)
+		if f.obstacles.size() != FieldRoster.OBSTACLE_EARLY_COUNT:
+			early_ok = false
+	check.call(
+		early_ok,
+		"段別の柱: 浅い段は%d本に間引かれる" % FieldRoster.OBSTACLE_EARLY_COUNT
+	)
+	check.call(
+		FieldRoster.OBSTACLE_EARLY_COUNT < listed.obstacles.size(),
+		"段別の柱: 間引きが実際に本数を減らしている(表%d本)" % listed.obstacles.size()
+	)
+
+	var full_ok := true
+	for step in full_steps:
+		if FieldRoster.step_field(listed, step).obstacles.size() != listed.obstacles.size():
+			full_ok = false
+	check.call(full_ok, "段別の柱: 深い段は表の本数のまま")
+
+	# 深い段では複製せず同一インスタンスを返す＝従来と厳密に一致。
+	check.call(
+		FieldRoster.step_field(listed, full_steps[0]) == listed,
+		"段別の柱: 間引くものが無い段は土俵をそのまま返す"
+	)
+
+	# 柱の無い土俵はどの段でも0本のまま(間引きが余計なことをしない)。
+	var plain_ok := true
+	for field in FieldRoster.all():
+		if not field.obstacles.is_empty():
+			continue
+		for step in range(1, MapTree.STEP_GOAL):
+			if not FieldRoster.step_field(field, step).obstacles.is_empty():
+				plain_ok = false
+	check.call(plain_ok, "段別の柱: 柱の無い土俵はどの段でも0本")
+
+	# 残った柱は表の先頭そのまま(位置も半径も作り変えない)。
+	var trimmed := FieldRoster.step_field(listed, early_steps[0])
+	check.call(
+		not trimmed.obstacles.is_empty()
+			and trimmed.obstacles[0].is_equal_approx(listed.obstacles[0]),
+		"段別の柱: 残る柱は表の先頭と同じ位置・半径"
+	)
+	check.call(
+		trimmed.title_key == listed.title_key
+			and trimmed.wall_shape == listed.wall_shape
+			and trimmed.stage_shape == listed.stage_shape
+			and is_equal_approx(trimmed.stage_strength, listed.stage_strength)
+			and trimmed.arena_bounds == listed.arena_bounds,
+		"段別の柱: 間引いても土俵の他の性質は変わらない"
+	)
+	check.call(
+		listed.obstacles.size() >= 2,
+		"段別の柱: 間引きが表そのものを書き換えていない(表は%d本)" % listed.obstacles.size()
+	)
+
+	# 入口1: 抽選。浅い段では、どの土俵を引いても柱は上限本数を超えない。
+	var picked_ok := true
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260810
+	for i in 400:
+		var step: int = early_steps[i % early_steps.size()]
+		var f := FieldRoster.pick_for_step(step, rng)
+		if f != null and f.obstacles.size() > FieldRoster.OBSTACLE_EARLY_COUNT:
+			picked_ok = false
+	check.call(picked_ok, "段別の柱: pick_for_step が浅い段で間引きを通す")
+
+	# 入口2: マップ生成。引き直し(_ensure_distinct_field)を通った盤面でも同じ。
+	var map_ok := true
+	var saw_early_pillar := false
+	for seed_i in 40:
+		var map_rng := RandomNumberGenerator.new()
+		map_rng.seed = seed_i
+		var tree := MapTree.generate(map_rng)
+		for coord: Vector2i in tree.nodes:
+			var node: MapTree.MapNode = tree.nodes[coord]
+			if node == null or node.field == null:
+				continue
+			# その段に許される上限は「表の最大本数」を投げ込んで引き出す。
+			var cap := FieldRoster.obstacle_count_for_step(coord.x, listed.obstacles.size())
+			if node.field.obstacles.size() > cap:
+				map_ok = false
+			if (
+				EnemyRoster.level_for_step(coord.x) < FieldRoster.OBSTACLE_FULL_LEVEL
+				and not node.field.obstacles.is_empty()
+			):
+				saw_early_pillar = true
+	check.call(map_ok, "段別の柱: 生成された地図のどのノードも段の上限を超えない")
+	check.call(saw_early_pillar, "段別の柱: 浅い段にも柱は残る(0本にはしない)")
+
+
 func _test_boss_octagon(check: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
 	var all_octa := true
