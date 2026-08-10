@@ -62,17 +62,30 @@ func _test_rule_shape(check: Callable) -> void:
 	)
 
 
-## 自機側の回帰: 長さを「引き量」から「初速」経由に変えても、底辺はカーソル位置の
-## まま=スリングショットの手触りが変わっていないこと。引き量比→初速比→長さ比 が
-## 素通しなので、length_for_speed(from_pull(p)) は p に戻るのが正しい。
+## 自機側: 三角形の長さは**初速**を語る。だから自機に下限(LaunchSpeed.PLAYER_MIN)が
+## 入った 2026-08-10 以降、底辺はもうカーソル位置には来ない——僅かに引いただけでも
+## 実際に速度 PLAYER_MIN が出るので、三角形もその長さでなければ嘘になる。
+## 縛るのは「full pull で底辺がカーソル」「少しでも引けば下限ぶんの長さがある」
+## 「引くほど伸びる」。長さの絶対値そのものは縛らない(@exportの調整対象)。
 func _test_player_base_stays_at_cursor(check: Callable) -> void:
-	for pull in [0.0, 0.5, 1.3, 2.0, 3.7, FULL]:
-		var speed := LaunchSpeed.from_pull(pull, FULL)
-		var length := AimTriangle.length_for_speed(speed, FULL)
+	var floor_length := AimTriangle.length_for_speed(LaunchSpeed.PLAYER_MIN, FULL)
+	check.call(
+		absf(AimTriangle.length_for_speed(LaunchSpeed.from_pull(FULL, FULL), FULL) - FULL) < EPS,
+		"自機: full pullで底辺がカーソル位置"
+	)
+	check.call(
+		absf(AimTriangle.length_for_speed(LaunchSpeed.from_pull(0.0, FULL), FULL)) < EPS,
+		"自機: 引き量0は長さ0(向きが決まっていないので三角形を出さない)"
+	)
+	var prev := 0.0
+	for pull in [0.01, 0.5, 1.3, 2.0, 3.7, FULL]:
+		var length := AimTriangle.length_for_speed(LaunchSpeed.from_pull(pull, FULL), FULL)
 		check.call(
-			absf(length - pull) < EPS,
-			"自機: 引き量%.2f → 長さ%.2f (底辺がカーソル位置のまま)" % [pull, length]
+			length >= floor_length - EPS,
+			"自機: 引き量%.2f → 長さ%.2f (下限%.2fを割らない)" % [pull, length, floor_length]
 		)
+		check.call(length > prev - EPS, "自機: 引き量%.2fで伸びている(単調)" % pull)
+		prev = length
 	# 上限を超えて引いても伸びない(既存の頭打ちが生きている)。
 	var over := AimTriangle.length_for_speed(LaunchSpeed.from_pull(FULL * 2.0, FULL), FULL)
 	check.call(absf(over - FULL) < EPS, "自機: max_pull超は伸びない (%.2f)" % over)
@@ -94,10 +107,13 @@ func _test_player_and_enemy_agree(check: Callable) -> void:
 	for speed in [LaunchSpeed.ENEMY_MIN, 4.0, 6.0, 8.5, LaunchSpeed.MAX]:
 		telegraph.show_plan(Vector2(5, 5), Vector2.DOWN * speed)
 		var enemy_length := telegraph.telegraph_length()
-		# 自機が同じ初速を出すのに要る引き量。
-		var pull: float = speed / LaunchSpeed.MAX * FULL
+		# 自機が同じ初速を出すのに要る引き量。マップが[PLAYER_MIN,MAX]になったので
+		# 逆写像も下限ぶんをずらす(素の speed/MAX ではもう同じ速度にならない)。
+		var span: float = LaunchSpeed.MAX - LaunchSpeed.PLAYER_MIN
+		var pull: float = (speed - LaunchSpeed.PLAYER_MIN) / span * FULL
+		# 下限ちょうどは引き量0(=速度0の「向き未定」)へ落ちるので、僅かに引いた扱いにする。
 		var player_length := AimTriangle.length_for_speed(
-			LaunchSpeed.from_pull(pull, FULL), FULL
+			LaunchSpeed.from_pull(maxf(pull, 1e-6), FULL), FULL
 		)
 		check.call(
 			absf(enemy_length - player_length) < EPS,

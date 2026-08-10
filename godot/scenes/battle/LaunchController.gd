@@ -120,8 +120,7 @@ func _effective_pull() -> Vector2:
 ## 発射(_release)と狙いの通知(aim_changed)が**同じものを使うための1箇所**。
 ## 2つに分かれると、先読みが実際には撃たない弾道を描いても誰も気づかない。
 func _launch_velocity() -> Vector2:
-	var pull := _effective_pull()
-	return pull.normalized() * LaunchSpeed.from_pull(pull.length(), max_pull)
+	return LaunchSpeed.velocity_from_pull(_effective_pull(), max_pull)
 
 
 func _release() -> void:

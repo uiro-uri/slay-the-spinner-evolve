@@ -104,9 +104,10 @@ static func stance_by_name(name: String) -> Stance:
 ## 実UI(Battle)と同じく、位置を決めて間合いへ寄せてから向きを計算する。
 ## 逆順にすると「間合いで動かされた位置から古い向きで撃つ」ズレが出る。
 ##
-## force_scaleは引き量(=実UIのフォース)に相当する初速の倍率。既定1.0で満引き
-## (=従来と厳密一致)。ボットの狙う方針はどれも満引き固定なので、これを振らないと
-## 「フォースをいくつで撃つか」という実プレイヤーの選択が統計に現れない。
+## force_scaleは実UIの引き量比。既定1.0で満引き(=速度MAX)。ボットの狙う方針は
+## どれも満引き固定なので、これを振らないと「どれだけ引くか」という実プレイヤーの
+## 選択が統計に現れない。初速への変換は LaunchSpeed.from_pull(=実UIと同じ経路)で、
+## 0でも下限 PLAYER_MIN を割らない。
 ##
 ## stanceは立ち位置の**向き**(Stance参照)、ring_scaleは立ち位置の**中心からの距離**
 ## (外周リングを1.0とした比。0で中心)。どちらも既定で従来と厳密一致。
@@ -129,7 +130,11 @@ static func decide(
 	var spawn_points := PackedVector2Array()
 	for plan in plans:
 		spawn_points.append(plan.position)
-	var speed := MAX_SPEED * clampf(force_scale, 0.0, 1.0)
+	# 実UI(LaunchController)と同じ経路で初速にする。かつてここは MAX_SPEED*force の
+	# 素の掛け算で、自機の下限(LaunchSpeed.PLAYER_MIN)が入った後もボットだけが
+	# 下限より遅く撃てた——つまり**実プレイでは選べない発射を統計に混ぜていた**。
+	# force_scaleは引き量比なので、from_pullを通すのが定義どおり。
+	var speed := LaunchSpeed.from_pull(clampf(force_scale, 0.0, 1.0), 1.0)
 
 	match kind:
 		Kind.RANDOM:
@@ -140,7 +145,11 @@ static func decide(
 			), spawn_points, enemy_radii, player_radius)
 			var dir := Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
 			# RANDOMは引き量もランダムなので、force_scaleは抽選の上限を動かす。
-			return Launch.new(pos, dir * rng.randf_range(0.0, speed))
+			# 抽選するのは**引き量**で、初速への変換は他の方針と同じ from_pull。
+			# 速度を直に[0,speed]から引くと自機の下限を割った発射が混ざり、
+			# 「下手の下界」が実プレイでは選べないところまで下がってしまう。
+			var pull := rng.randf_range(0.0, clampf(force_scale, 0.0, 1.0))
+			return Launch.new(pos, dir * LaunchSpeed.from_pull(pull, 1.0))
 
 		Kind.AIM_CENTER:
 			var pos := _ring_position(

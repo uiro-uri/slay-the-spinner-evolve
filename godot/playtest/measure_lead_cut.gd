@@ -120,7 +120,7 @@ func _row(step: int, force: float, count: int, seed_base: int, policy: LaunchPol
 
 	var n := float(count)
 	print("| %d | %.2f | %.2f | %.1f | %.1f%% | %.1f%% | %.1f%% | %.1f%% | %.1f%% |" % [
-		step, prad, force, LaunchSpeed.MAX * force,
+		step, prad, force, LaunchSpeed.from_pull(force, 1.0),
 		100.0 * contact / n, 100.0 * cut / n,
 		100.0 * cut_mine / n, 100.0 * cut_theirs / n, 100.0 * cut_both / n,
 	])
