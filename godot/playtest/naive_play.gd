@@ -40,8 +40,12 @@ const SPAWN_SWIRL_DEG := EnemySpawn.DEFAULT_SWIRL_DEG
 ## かつて旧仕様(引き量×pull_to_speedで0〜20)時代の上限20.0がここに残り、CLIだけ
 ## 実ゲームでは出せない1.67倍速で発射できていた(コールドプレイの一次証拠を汚す嘘)。
 ## 共通レンジ(LaunchSpeed)への参照で再発を防ぐ。
+##
+## forceは引き量比なので、実UIと同じ from_pull を通す(素の MAX*force ではない)。
+## 掛け算のままだと自機の下限(LaunchSpeed.PLAYER_MIN)を割った初速で撃ててしまい、
+## CLIのコールドプレイが**実プレイでは選べない発射**を一次証拠にしてしまう。
 static func launch_velocity(pos: Vector2, tgt: Vector2, force: float) -> Vector2:
-	return (tgt - pos).normalized() * clampf(force, 0.0, 1.0) * LaunchSpeed.MAX
+	return (tgt - pos).normalized() * LaunchSpeed.from_pull(clampf(force, 0.0, 1.0), 1.0)
 
 
 func _init() -> void:

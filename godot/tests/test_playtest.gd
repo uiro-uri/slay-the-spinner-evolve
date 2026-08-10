@@ -555,10 +555,23 @@ func _test_naive_play_launch_speed(check: Callable) -> void:
 		absf(over.length() - LaunchSpeed.MAX) < EPS,
 		"naive_play: force>1でも実ゲームの上限を超えない"
 	)
+	# forceは引き量比。実UI(LaunchController)と同じ from_pull を通るので、
+	# 速度は[PLAYER_MIN, MAX]への線形写像であって MAX*force ではない。
+	# ここが MAX*force に戻ると、CLIのコールドプレイだけが実プレイでは選べない
+	# 置きコマ速度で撃ててしまい、一次証拠が嘘になる(2026-08-10までそうだった)。
 	var half: Vector2 = NaivePlay.launch_velocity(pos, tgt, 0.5)
 	check.call(
-		absf(half.length() - LaunchSpeed.MAX * 0.5) < EPS,
-		"naive_play: forceは速度に線形(0.5で半分)"
+		absf(half.length() - LaunchSpeed.from_pull(0.5, 1.0)) < EPS,
+		"naive_play: forceは実UIと同じ引き量比(from_pull)で速度になる (%.2f)" % half.length()
+	)
+	check.call(
+		half.length() >= LaunchSpeed.PLAYER_MIN - EPS,
+		"naive_play: 半引きでも自機の下限を割らない (%.2f)" % half.length()
+	)
+	var faint: Vector2 = NaivePlay.launch_velocity(pos, tgt, 0.01)
+	check.call(
+		faint.length() >= LaunchSpeed.PLAYER_MIN - EPS,
+		"naive_play: ごく僅かな引きでも置きコマ速度には落ちない (%.2f)" % faint.length()
 	)
 
 
